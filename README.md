@@ -26,6 +26,17 @@ Aufrufen unter `http://<IP-des-Geräts>:8501`
 Läuft auf Synology, QNAP, Unraid, Raspberry Pi und jedem System mit Docker.
 Abbilder für `amd64` und `arm64`.
 
+**Auf einer Synology oder QNAP** genügt die eingebaute Suche: Im Container
+Manager beziehungsweise in der Container Station nach `charge-at-home`
+suchen, herunterladen, starten.
+
+Das Abbild liegt in beiden Registries:
+
+```
+docker.io/l0ewe/charge-at-home:latest      Docker Hub
+ghcr.io/stl2020/charge-at-home:latest      GitHub
+```
+
 ---
 
 ## Was es kann

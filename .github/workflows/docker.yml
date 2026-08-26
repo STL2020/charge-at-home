@@ -5,12 +5,27 @@
 #   - jedem Tag der Form v1.2.3    -> Marken '1.2.3', '1.2', 'latest'
 #   - von Hand ueber die Actions-Oberflaeche
 #
-# Ergebnis:
-#   ghcr.io/stl2020/charge-at-home:latest
+# Ergebnis (zwei Ziele):
+#   ghcr.io/stl2020/charge-at-home:latest      GitHub Container Registry
+#   l0ewe/charge-at-home:latest                Docker Hub
 #
-# Einmalig einzurichten: Unter Settings -> Actions -> General muss
-# "Read and write permissions" gesetzt sein. Ein Zugangsschluessel ist
-# nicht noetig — GITHUB_TOKEN reicht.
+# Docker Hub ist noetig, weil der Synology Container Manager und die QNAP
+# Container Station bei der Suche ausschliesslich dort nachsehen. Ueber
+# ghcr.io laesst sich zwar ziehen, aber nur mit vollstaendiger Adresse.
+#
+# Einmalig einzurichten:
+#
+#   1. Settings -> Actions -> General -> "Read and write permissions"
+#      (fuer ghcr.io; ein Schluessel ist nicht noetig, GITHUB_TOKEN reicht)
+#
+#   2. Settings -> Secrets and variables -> Actions -> New repository secret
+#      DOCKERHUB_USERNAME   der Docker-Hub-Benutzername
+#      DOCKERHUB_TOKEN      ein Access Token aus hub.docker.com
+#                           (Account Settings -> Personal access tokens,
+#                            Berechtigung "Read & Write")
+#
+# Fehlen die beiden Secrets, wird nur nach ghcr.io veroeffentlicht — der
+# Durchlauf schlaegt deswegen nicht fehl.
 
 name: Docker-Abbild bauen
 
@@ -22,9 +37,6 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  # Aus dem Repository abgeleitet: So stimmt der Name auch, wenn das
-  # Repository später umbenannt wird.
-  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
   bauen:
@@ -44,18 +56,47 @@ jobs:
       - name: Buildx einrichten
         uses: docker/setup-buildx-action@v3
 
-      - name: An der Registry anmelden
+      - name: An der GitHub-Registry anmelden
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Namen und Ziele ermitteln
+        id: hub
+        run: |
+          # Beide Registries verlangen Kleinbuchstaben; github.repository
+          # liefert den Namen in der Schreibweise des Kontos.
+          echo "klein=$(echo '${{ github.repository }}' | tr 'A-Z' 'a-z')" >> "$GITHUB_OUTPUT"
+          # Nur der Paketname, ohne Konto — auf Docker Hub gehoert er unter
+          # den dortigen Benutzernamen, der abweichen kann.
+          echo "paket=$(echo '${{ github.event.repository.name }}' | tr 'A-Z' 'a-z')" >> "$GITHUB_OUTPUT"
+          if [ -n "${{ secrets.DOCKERHUB_TOKEN }}" ]; then
+            echo "aktiv=ja" >> "$GITHUB_OUTPUT"
+          else
+            echo "aktiv=nein" >> "$GITHUB_OUTPUT"
+            echo "Kein DOCKERHUB_TOKEN hinterlegt — es wird nur nach ghcr.io veroeffentlicht."
+          fi
+
+      # Uebersprungen, wenn keine Zugangsdaten hinterlegt sind — der
+      # Durchlauf soll ohne Docker-Hub-Konto nicht scheitern.
+      - name: An Docker Hub anmelden
+        if: steps.hub.outputs.aktiv == 'ja'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
       - name: Marken und Beschriftung ermitteln
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          # Beide Ziele: Die Marken werden fuer jedes erzeugt, sodass ein
+          # einziger Bauvorgang genuegt.
+          images: |
+            ${{ env.REGISTRY }}/${{ steps.hub.outputs.klein }}
+            ${{ steps.hub.outputs.aktiv == 'ja' && format('docker.io/{0}/{1}', secrets.DOCKERHUB_USERNAME, steps.hub.outputs.paket) || '' }}
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
