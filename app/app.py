@@ -60,7 +60,7 @@ def handle_404(exc):
     # Für nicht-API-Routen: normale 404-Seite oder zur App weiterleiten
     return jsonify({"error": "not_found"}), 404
 
-PFLICHTENHEFT_VERSION = "12.27"
+PFLICHTENHEFT_VERSION = "12.28"
 
 # Fassung, die dem Anwender gezeigt wird. Die Pflichtenheft-Nummer daneben ist
 # die interne Baunummer — beide zusammen machen Rückfragen eindeutig.
@@ -3671,7 +3671,13 @@ def api_adressen_aufloesen():
                 except ValueError:
                     continue
                 aufgeloest = geocoding_service.adresse_aus_koordinaten(lat, lon)
-                if aufgeloest and not muster.match(aufgeloest):
+                # Nur uebernehmen wenn die Aufloesung eine echte Adresse
+                # geliefert hat — nicht nochmal dieselbe Koordinate.
+                # Frueher stand hier ein Mustervergleich, der den Rückfall-
+                # wert (dieselbe Koordinate) ebenfalls ablehnte, weil er
+                # wie eine Koordinate aussah. Damit blieb geaendert=0 und
+                # die Meldung lautete "keine Koordinaten gefunden".
+                if aufgeloest and aufgeloest.strip() != str(wert).strip():
                     if feld == "start":
                         neu_start = aufgeloest
                     else:

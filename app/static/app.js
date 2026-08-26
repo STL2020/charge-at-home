@@ -906,9 +906,7 @@ async function estimateTripDistance() {
 // Koordinaten in lesbare Adressen umwandeln. Betrifft nur Einträge, die
 // wie "50.57940, 7.22690" aussehen — von Hand eingetragene Orte bleiben.
 async function adressenAufloesen() {
-  if (!confirm('Koordinaten in Adressen umwandeln?\n\n'
-             + 'Betrifft nur Fahrten, bei denen statt eines Ortsnamens '
-             + 'Zahlen stehen. Je nach Anzahl dauert es einen Moment.')) return;
+  // Kein Confirm — der Knopf liegt direkt beim Formular, der Kontext ist klar
   _toast('Adressen werden nachgetragen …');
   try {
     const d = await (await fetch('/api/fahrten/adressen-aufloesen',
