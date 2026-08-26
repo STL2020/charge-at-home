@@ -17,7 +17,7 @@ Finanzamt.
 
 ```bash
 mkdir -p ~/echarge && cd ~/echarge
-curl -O https://raw.githubusercontent.com/STL2020/echarge-at-home/main/docker-compose.ghcr.yml
+curl -O https://raw.githubusercontent.com/STL2020/charge-at-home/main/docker-compose.ghcr.yml
 docker compose -f docker-compose.ghcr.yml up -d
 ```
 

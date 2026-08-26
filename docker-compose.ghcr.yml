@@ -5,14 +5,14 @@
 # noetig, kein Bauen, ein Befehl.
 #
 #   mkdir -p ~/echarge && cd ~/echarge
-#   curl -O https://raw.githubusercontent.com/STL2020/echarge-at-home/main/docker-compose.ghcr.yml
+#   curl -O https://raw.githubusercontent.com/STL2020/charge-at-home/main/docker-compose.ghcr.yml
 #   docker compose -f docker-compose.ghcr.yml up -d
 #
 # Aufrufen unter http://<IP-des-Geraets>:8501
 
 services:
   echarge:
-    image: ghcr.io/stl2020/echarge-at-home:latest
+    image: ghcr.io/stl2020/charge-at-home:latest
     container_name: echarge
     restart: unless-stopped
 

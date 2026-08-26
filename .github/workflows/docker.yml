@@ -6,7 +6,7 @@
 #   - von Hand ueber die Actions-Oberflaeche
 #
 # Ergebnis:
-#   ghcr.io/stl2020/echarge-at-home:latest
+#   ghcr.io/stl2020/charge-at-home:latest
 #
 # Einmalig einzurichten: Unter Settings -> Actions -> General muss
 # "Read and write permissions" gesetzt sein. Ein Zugangsschluessel ist
@@ -22,7 +22,9 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository_owner }}/echarge-at-home
+  # Aus dem Repository abgeleitet: So stimmt der Name auch, wenn das
+  # Repository später umbenannt wird.
+  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
   bauen:
