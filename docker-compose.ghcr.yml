@@ -1,0 +1,68 @@
+# eCharge@Home — Betrieb mit fertigem Abbild
+#
+# Diese Fassung baut nichts, sondern holt das fertige Abbild aus der
+# GitHub Container Registry. Das ist der schnellste Weg: kein Quellcode
+# noetig, kein Bauen, ein Befehl.
+#
+#   mkdir -p ~/echarge && cd ~/echarge
+#   curl -O https://raw.githubusercontent.com/STL2020/echarge-at-home/main/docker-compose.ghcr.yml
+#   docker compose -f docker-compose.ghcr.yml up -d
+#
+# Aufrufen unter http://<IP-des-Geraets>:8501
+
+services:
+  echarge:
+    image: ghcr.io/stl2020/echarge-at-home:latest
+    container_name: echarge
+    restart: unless-stopped
+
+    ports:
+      - "8501:8501"     # Weboberflaeche
+      # - "9000:9000"   # OCPP 1.6-J — nur bei direkt angebundener Wallbox
+
+    volumes:
+      # Datenbank, Belege und Einstellungen. Dieses Verzeichnis sichern.
+      - ./data:/srv/data
+
+    environment:
+      - TZ=Europe/Berlin
+
+    healthcheck:
+      test: ["CMD", "python3", "-c",
+             "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8501/', timeout=5)"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+# ─────────────────────────────────────────────────────────────────────────
+#  Mit Zugangsschutz
+#
+#  Die Anwendung hat keine eigene Anmeldung. Soll sie ueber das Internet
+#  erreichbar sein, ist ein vorgeschalteter Schutz zwingend. Dazu die
+#  Zeilen unten einkommentieren, bei 'echarge' oben 'ports' durch 'expose'
+#  ersetzen und ein Caddyfile anlegen:
+#
+#      :80 {
+#          basic_auth {
+#              admin <HASH>
+#          }
+#          reverse_proxy echarge:8501
+#      }
+#
+#  Den Hash erzeugt:
+#      docker run --rm caddy:2-alpine caddy hash-password --plaintext 'IhrPasswort'
+# ─────────────────────────────────────────────────────────────────────────
+#
+#  caddy:
+#    image: caddy:2-alpine
+#    container_name: echarge-proxy
+#    restart: unless-stopped
+#    depends_on: [echarge]
+#    ports:
+#      - "8501:80"
+#      - "443:443"
+#    volumes:
+#      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+#      - ./caddy-daten:/data
+#      - ./caddy-konfig:/config

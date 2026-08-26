@@ -1,0 +1,78 @@
+# Baut das Docker-Abbild und legt es in der GitHub Container Registry ab.
+#
+# Ausgeloest bei:
+#   - jedem Push auf main          -> Marke 'latest'
+#   - jedem Tag der Form v1.2.3    -> Marken '1.2.3', '1.2', 'latest'
+#   - von Hand ueber die Actions-Oberflaeche
+#
+# Ergebnis:
+#   ghcr.io/stl2020/echarge-at-home:latest
+#
+# Einmalig einzurichten: Unter Settings -> Actions -> General muss
+# "Read and write permissions" gesetzt sein. Ein Zugangsschluessel ist
+# nicht noetig — GITHUB_TOKEN reicht.
+
+name: Docker-Abbild bauen
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*.*.*']
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository_owner }}/echarge-at-home
+
+jobs:
+  bauen:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Quellcode holen
+        uses: actions/checkout@v4
+
+      # Fuer ARM-Abbilder (Raspberry Pi, Synology mit ARM-Prozessor)
+      - name: QEMU einrichten
+        uses: docker/setup-qemu-action@v3
+
+      - name: Buildx einrichten
+        uses: docker/setup-buildx-action@v3
+
+      - name: An der Registry anmelden
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Marken und Beschriftung ermitteln
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable={{is_default_branch}}
+          labels: |
+            org.opencontainers.image.title=eCharge@Home
+            org.opencontainers.image.description=Ladeabrechnung und Fahrtenbuch für Dienstfahrten
+            org.opencontainers.image.vendor=Löwemann IT Consulting
+            org.opencontainers.image.url=https://www.loewemann.com
+
+      - name: Bauen und ablegen
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          # amd64 fuer NAS und PC, arm64 fuer Raspberry Pi und Apple Silicon
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # Zwischenspeicher: spart bei jedem weiteren Bauen mehrere Minuten
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

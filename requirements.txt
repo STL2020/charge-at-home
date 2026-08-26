@@ -1,0 +1,9 @@
+Flask>=3.0
+reportlab>=4.0
+cryptography>=42.0
+# Ab Sprint 3: OCPP-Central-System (app/ocpp/server.py). Konnte in der
+# Entwicklungsumgebung nicht installiert/getestet werden (siehe Pflichtenheft-
+# Changelog) - sollte bei normalem Internetzugang (Docker/lokal) problemlos
+# installierbar sein.
+ocpp>=0.26
+websockets>=12.0
