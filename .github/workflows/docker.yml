@@ -65,6 +65,11 @@ jobs:
 
       - name: Namen und Ziele ermitteln
         id: hub
+        # Secrets ueber env statt direkt in der Shell-Zeile: Ein Token mit
+        # Sonderzeichen wuerde die Zeile sonst zerreissen.
+        env:
+          HUB_USER: ${{ secrets.DOCKERHUB_USERNAME }}
+          HUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
         run: |
           # Beide Registries verlangen Kleinbuchstaben; github.repository
           # liefert den Namen in der Schreibweise des Kontos.
@@ -72,11 +77,15 @@ jobs:
           # Nur der Paketname, ohne Konto — auf Docker Hub gehoert er unter
           # den dortigen Benutzernamen, der abweichen kann.
           echo "paket=$(echo '${{ github.event.repository.name }}' | tr 'A-Z' 'a-z')" >> "$GITHUB_OUTPUT"
-          if [ -n "${{ secrets.DOCKERHUB_TOKEN }}" ]; then
+
+          if [ -n "$HUB_TOKEN" ] && [ -n "$HUB_USER" ]; then
             echo "aktiv=ja" >> "$GITHUB_OUTPUT"
+            echo "Docker Hub: eingerichtet, Benutzer gesetzt."
           else
             echo "aktiv=nein" >> "$GITHUB_OUTPUT"
-            echo "Kein DOCKERHUB_TOKEN hinterlegt — es wird nur nach ghcr.io veroeffentlicht."
+            echo "Docker Hub wird uebersprungen."
+            [ -z "$HUB_USER" ]  && echo "  DOCKERHUB_USERNAME fehlt oder ist leer."
+            [ -z "$HUB_TOKEN" ] && echo "  DOCKERHUB_TOKEN fehlt oder ist leer."
           fi
 
       # Uebersprungen, wenn keine Zugangsdaten hinterlegt sind — der
