@@ -59,7 +59,7 @@ def handle_404(exc):
     # Für nicht-API-Routen: normale 404-Seite oder zur App weiterleiten
     return jsonify({"error": "not_found"}), 404
 
-PFLICHTENHEFT_VERSION = "12.18"
+PFLICHTENHEFT_VERSION = "12.19"
 
 # Fassung, die dem Anwender gezeigt wird. Die Pflichtenheft-Nummer daneben ist
 # die interne Baunummer — beide zusammen machen Rückfragen eindeutig.
@@ -1369,6 +1369,51 @@ def api_ocpp_raw_log():
     return jsonify({"lines": lines, "count": len(lines), "file_info": info})
 
 
+@app.route("/api/ocpp/port", methods=["POST"])
+def api_ocpp_port():
+    """Port des eingebauten OCPP-Servers aendern.
+
+    9000 ist haeufig belegt — Portainer nutzt ihn standardmaessig. Ohne
+    Wahlmoeglichkeit muesste der Anwender den anderen Dienst umziehen.
+    """
+    daten = request.get_json(force=True, silent=True) or {}
+    try:
+        port = int(daten.get("port", 0))
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "fehler": "Ungültige Portangabe."}), 400
+    if not (1024 <= port <= 65535):
+        return jsonify({"ok": False,
+                        "fehler": "Der Port muss zwischen 1024 und 65535 liegen."}), 400
+
+    # Belegt? Dann gar nicht erst uebernehmen — sonst startet der Dienst
+    # nicht mehr und der Anwender sucht die Ursache woanders.
+    import socket as _s
+    pruef = _s.socket(_s.AF_INET, _s.SOCK_STREAM)
+    pruef.setsockopt(_s.SOL_SOCKET, _s.SO_REUSEADDR, 1)
+    try:
+        pruef.bind(("0.0.0.0", port))
+    except OSError:
+        # Der eigene Dienst darf den Port natuerlich schon halten
+        from ocpp_server.server import ocpp_port as _op
+        if port != _op():
+            return jsonify({"ok": False,
+                            "fehler": f"Port {port} ist bereits belegt."}), 409
+    finally:
+        pruef.close()
+
+    settings_repository.set_setting("ocpp_port", str(port))
+    event_log_service.log_event("system", "info", f"OCPP-Port auf {port} geändert.")
+    # Der OCPP-Server laeuft in einem eigenen Vorgang und liest den Port beim
+    # Start. Ist er gerade aktiv, muss er einmal aus- und wieder eingeschaltet
+    # werden — darauf weist die Antwort hin.
+    lief = False
+    try:
+        lief = bool(settings_repository.get_setting("ocpp_server_enabled") == "1")
+    except Exception:
+        pass
+    return jsonify({"ok": True, "port": port, "neustart_noetig": lief})
+
+
 @app.route("/api/ocpp/diagnose", methods=["GET"])
 def api_ocpp_diagnose():
     """OCPP-Diagnose (Ruecksprache Auftraggeber: 'wir brauchen eine Logdatei,
@@ -2495,7 +2540,9 @@ def api_server_info():
             lan_ip = s.getsockname()[0]
     except Exception:
         lan_ip = socket.gethostbyname(socket.gethostname())
-    return jsonify({"lan_ip": lan_ip, "ocpp_port": 9000})
+    # Port aus den Einstellungen — 9000 ist haeufig belegt (Portainer)
+    from ocpp_server.server import ocpp_port
+    return jsonify({"lan_ip": lan_ip, "ocpp_port": ocpp_port()})
 
 
 @app.route("/api/ocpp/status", methods=["GET"])
@@ -2513,7 +2560,8 @@ def api_ocpp_status():
                         "meldung": "Der OCPP-Server ist der Vollversion vorbehalten."})
     enabled = (settings_repository.get_setting("ocpp_server_enabled") or "1") == "1"
     try:
-        with socket.create_connection(("127.0.0.1", 9000), timeout=1.0):
+        from ocpp_server.server import ocpp_port as _op
+        with socket.create_connection(("127.0.0.1", _op()), timeout=1.0):
             return jsonify({"online": True, "enabled": enabled})
     except OSError:
         return jsonify({"online": False, "enabled": enabled})

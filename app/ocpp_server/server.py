@@ -34,6 +34,31 @@ from ocpp.v16.enums import RegistrationStatus, AuthorizationStatus
 from services import ocpp_service, event_log_service, ocpp_log_service
 from repositories import settings_repository
 
+def ocpp_port() -> int:
+    """Port des eingebauten OCPP-Servers.
+
+    Einstellbar, weil 9000 haeufig belegt ist — Portainer nutzt ihn
+    standardmaessig. Reihenfolge: gespeicherte Einstellung, dann
+    Umgebungsvariable, sonst der Standard.
+    """
+    try:
+        wert = settings_repository.get_setting("ocpp_port")
+        if wert and str(wert).strip().isdigit():
+            p = int(str(wert).strip())
+            if 1024 <= p <= 65535:
+                return p
+    except Exception:
+        pass
+    try:
+        p = int(os.environ.get("CHARGE_OCPP_PORT", "9000"))
+        if 1024 <= p <= 65535:
+            return p
+    except (TypeError, ValueError):
+        pass
+    return 9000
+
+
+# Rueckwaertskompatibel: aeltere Aufrufe erwarten die Konstante
 OCPP_PORT = 9000
 
 
@@ -400,9 +425,9 @@ async def on_connect(websocket, path=None):
 async def main():
     print(f"websockets-Version: {getattr(websockets, '__version__', 'unbekannt')}")
     server = await websockets.serve(
-        on_connect, "0.0.0.0", OCPP_PORT, subprotocols=["ocpp1.6"]
+        on_connect, "0.0.0.0", ocpp_port(), subprotocols=["ocpp1.6"]
     )
-    print(f"OCPP-Central-System hoert auf Port {OCPP_PORT} (ws://0.0.0.0:{OCPP_PORT}/ocpp/<ChargePointId>)")
+    print(f"OCPP-Central-System hoert auf Port {ocpp_port()} (ws://0.0.0.0:{ocpp_port()}/ocpp/<ChargePointId>)")
     await server.wait_closed()
 
 

@@ -3410,6 +3410,31 @@ async function checkOcppStatus() {
   }
 }
 
+// Port des eingebauten OCPP-Servers ändern. 9000 ist häufig belegt.
+async function ocppPortSpeichern() {
+  const feld = document.getElementById('ocpp-port-feld');
+  const wert = parseInt((feld?.value || '').trim(), 10);
+  if (!wert || wert < 1024 || wert > 65535) {
+    _toast('Bitte einen Port zwischen 1024 und 65535 angeben');
+    return;
+  }
+  try {
+    const r = await fetch('/api/ocpp/port', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ port: wert })
+    });
+    const d = await r.json();
+    if (d.ok) {
+      _toast(`Port auf ${wert} gesetzt — der Dienst startet neu`);
+      setTimeout(() => location.reload(), 1600);
+    } else {
+      _toast(d.fehler || 'Port konnte nicht gesetzt werden');
+    }
+  } catch (e) {
+    _toast('Speichern fehlgeschlagen');
+  }
+}
+
 async function setOcppServerEnabled(enabled) {
   try {
     await fetch('/api/ocpp/toggle', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ enabled }) });
@@ -3431,6 +3456,15 @@ async function refreshOcppToggleUi() {
     }
     const hint = document.getElementById('ocpp-disabled-hint');
     if (hint) hint.style.display = d.enabled ? 'none' : 'block';
+
+    // Eingestellten Port ins Feld übernehmen, damit man sieht, was gilt
+    const portFeld = document.getElementById('ocpp-port-feld');
+    if (portFeld && !portFeld.value) {
+      try {
+        const n = await (await hole('/api/server-info')).json();
+        if (n.ocpp_port) portFeld.value = n.ocpp_port;
+      } catch (e) { /* Feld bleibt leer, Platzhalter zeigt 9000 */ }
+    }
     const statusEl = document.getElementById('ocpp-status-title-settings');
     if (statusEl) {
       statusEl.textContent = !d.enabled ? 'Deaktiviert'
