@@ -1,0 +1,200 @@
+eCharge@Home OCPP — LoxBerry-Plugin
+====================================
+
+WOZU
+----
+  Nimmt Ladevorgaenge von Wallboxen per OCPP 1.6-J entgegen und stellt sie
+  ueber eine HTTP-Schnittstelle bereit. Mehr nicht — bewusst.
+
+  Der Grund: Ein OCPP-Server muss erreichbar sein, WENN geladen wird. Das
+  ist meist nachts, wenn Arbeitsplatzrechner aus sind. Der LoxBerry laeuft
+  durch, also geht nichts verloren.
+
+  Fuer Loxone-Wallboxen wird dieses Plugin nicht gebraucht — deren Daten
+  liest eCharge@Home unmittelbar ueber den Miniserver.
+
+
+BEDIENUNG
+---------
+  Alles ueber die Weboberflaeche des Plugins, in drei Reitern:
+
+    Uebersicht      Zustand, Terminal, erfasste Ladevorgaenge
+                    Knoepfe: Starten, Neu starten, Anhalten
+    Einstellungen   Ports und Strompreis
+    Hilfe           Einrichtung der Wallbox, Anbindung an eCharge@Home
+
+  Eine Konsole wird nicht benoetigt.
+
+
+PORTS
+-----
+  9000   OCPP — hier melden sich die Wallboxen
+  8042   HTTP — hier holen Anwendungen die Daten ab
+
+  Sind diese Ports belegt, lassen sie sich unter Einstellungen aendern.
+  Der Dienst weicht NICHT selbsttaetig aus: Sonst muesste man erst merken,
+  dass sich der Port geaendert hat, und die Wallbox nachziehen.
+
+
+DATEN
+-----
+  <LBHOME>/data/plugins/<plugin>/ocpp.db
+  <LBHOME>/log/plugins/<plugin>/ocpp.log
+
+  Gespeichert werden Beginn, Ende, Zaehlerstand vorher und nachher sowie
+  die Energiemenge. Die Zaehlerstaende sind der belastbare Nachweis
+  gegenueber Arbeitgeber und Finanzamt — eine blosse Mengenangabe ist eine
+  Behauptung.
+
+  Beim Entfernen des Plugins bleiben die Daten erhalten.
+
+
+DIENST BEDIENEN
+---------------
+  Alles ueber die Weboberflaeche des Plugins:
+
+      Dienst starten  ·  Neu starten  ·  Anhalten
+
+  Eine Konsole wird nicht benoetigt.
+
+  Der Dienst startet ausserdem:
+    - beim Hochfahren des LoxBerry
+    - nach der Installation
+    - alle fuenf Minuten, falls er nicht laeuft (automatische Pruefung)
+
+  Ein Eingriff ist damit im Regelfall nie noetig.
+
+
+MQTT-AUSGABE
+------------
+  Einzuschalten unter Einstellungen. Ist auf diesem LoxBerry das
+  MQTT-Gateway eingerichtet, bleibt das Feld "Broker" LEER — die
+  Zugangsdaten werden von dort uebernommen.
+
+  Veroeffentlicht wird alles, was die Wallbox meldet:
+
+    echargeocpp/status                     Zustand des Dienstes
+    echargeocpp/<punkt>/online             Wallbox verbunden
+    echargeocpp/<punkt>/laedt              Ladung laeuft
+    echargeocpp/<punkt>/leistung_kw        aktuelle Ladeleistung
+    echargeocpp/<punkt>/zaehler_wh         Zaehlerstand
+    echargeocpp/<punkt>/strom_a_l1         Ladestrom je Phase
+    echargeocpp/<punkt>/spannung_v         Spannung
+    echargeocpp/<punkt>/ladestand_prozent  Ladestand des Fahrzeugs
+    echargeocpp/<punkt>/benutzer           RFID-Kennung
+    echargeocpp/<punkt>/hersteller         Hersteller und Modell
+    echargeocpp/<punkt>/ereignis           letzte Statusmeldung
+    echargeocpp/<punkt>/ladung             abgeschlossene Ladung als JSON
+    echargeocpp/<punkt>/letzte_ladung/...  dieselben Werte einzeln
+
+  <punkt> ist die Kennung der Wallbox, etwa WB1 oder Easee-01.
+
+  Meldet die Wallbox weitere Groessen, werden auch diese durchgereicht —
+  der Themenname leitet sich dann aus der OCPP-Bezeichnung ab.
+
+  Die Werte werden mit "retain" gesendet: Ein spaeter hinzukommender
+  Empfaenger sieht den Zustand sofort, statt auf die naechste Aenderung
+  zu warten.
+
+
+SCHNITTSTELLE
+-------------
+  GET  /api/status              Betriebszustand und letzte Meldungen
+  GET  /api/sessions            Ladevorgaenge
+  GET  /api/sessions?seit=…     nur ab Zeitpunkt
+  GET  /api/log                 Protokoll
+  POST /api/config              Preis je kWh setzen
+
+  Gewoehnliches JSON — auch andere Anwendungen koennen es lesen.
+
+
+TERMINAL
+--------
+  Die Weboberflaeche des Plugins zeigt ein mitlaufendes Protokoll. Dort ist
+  sofort zu sehen, ob sich eine Wallbox meldet — wichtig beim Einrichten,
+  weil man sonst bis zum naechsten Ladevorgang warten muesste.
+
+
+VORAUSSETZUNGEN
+---------------
+  Python 3 (auf jedem LoxBerry vorhanden).
+  Keine zusaetzlichen Pakete: Das Plugin nutzt ausschliesslich die
+  Standardbibliothek. Auf aelteren Raspberry-Systemen scheitert
+  'pip install' haeufig — diese Fehlerquelle entfaellt damit.
+
+
+PORTS
+-----
+  9000   OCPP — hier melden sich die Wallboxen
+  8042   HTTP — hier holen Anwendungen die Daten ab
+
+
+DATEN
+-----
+  <LBHOME>/data/plugins/<plugin>/ocpp.db
+  <LBHOME>/log/plugins/<plugin>/ocpp.log
+
+  Gespeichert werden Beginn, Ende, Zaehlerstand vorher und nachher sowie
+  die Energiemenge. Die Zaehlerstaende sind der belastbare Nachweis
+  gegenueber Arbeitgeber und Finanzamt — eine blosse Mengenangabe ist eine
+  Behauptung.
+
+  Beim Entfernen des Plugins bleiben die Daten erhalten.
+
+
+NACH DER INSTALLATION
+---------------------
+  Der Dienst startet automatisch. Meldet die Weboberflaeche dennoch
+  "antwortet nicht", hilft ein Neustart des LoxBerry.
+
+  Ohne Neustart geht es auch:
+
+      cd /opt/loxberry/bin/plugins/echargeocpp
+      setsid python3 echargeocpp.py < /dev/null >> \
+          /opt/loxberry/log/plugins/echargeocpp/start.log 2>&1 &
+
+
+DIENST LAEUFT NICHT?
+--------------------
+  Das mitgelieferte Pruefskript nennt die Ursache:
+
+      cd /opt/loxberry/bin/plugins/echargeocpp
+      ./pruefen.sh
+
+  Es prueft Prozess, Ports, Schnittstelle, Python und zeigt die letzten
+  Protokollzeilen.
+
+  Von Hand starten:
+
+      cd /opt/loxberry/bin/plugins/echargeocpp
+      nohup python3 echargeocpp.py &
+
+  Fehler unmittelbar sehen (Dienst im Vordergrund):
+
+      python3 echargeocpp.py
+
+  Der Dienst startet ausserdem automatisch beim Hochfahren des LoxBerry.
+
+
+HAFTUNG UND GRENZEN
+-------------------
+  Keine eigene Messung  Das Plugin uebernimmt die Zaehlerstaende der
+                        Wallbox. Ob diese eichrechtskonform misst, haengt
+                        allein vom Geraet ab.
+
+  Keine Steuerberatung  Ob Nachweise anerkannt werden, entscheidet das
+                        Finanzamt bzw. der Arbeitgeber.
+
+  Keine Steuerung       Das Plugin liest ausschliesslich und greift nicht
+                        in die Elektroinstallation ein.
+
+  Ohne Gewaehr          Unentgeltliche Ueberlassung, Haftung nur bei
+                        Vorsatz und grober Fahrlaessigkeit.
+
+  Einzelheiten in LIZENZ.txt.
+
+
+KONTAKT
+-------
+  Loewemann IT Consulting
+  https://www.loewemann.com/

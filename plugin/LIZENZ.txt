@@ -1,0 +1,143 @@
+eCharge@Home OCPP — LoxBerry-Plugin
+===================================
+
+Copyright (c) 2026 Loewemann IT Consulting
+https://www.loewemann.com/
+
+Diese Hinweise sind im Plugin unter dem Reiter "Rechtliches"
+vollstaendig abgebildet.
+
+
+WAS DIESE SOFTWARE IST — UND WAS NICHT
+--------------------------------------
+
+Der Dienst nimmt Messwerte einer Wallbox entgegen und stellt sie bereit.
+Er wertet nicht aus, erstellt keine Dokumente und trifft keine Aussagen
+ueber die Verwendbarkeit der Daten fuer irgendeinen Zweck.
+
+Was mit den Daten geschieht, entscheidet die Anwendung, die sie abholt —
+nicht dieser Dienst.
+
+
+1. NUTZUNGSRECHT
+----------------
+
+Unentgeltliche Ueberlassung zur privaten und gewerblichen Nutzung.
+Gestattet sind Installation, Betrieb und Weitergabe in unveraenderter
+Form einschliesslich dieser Datei.
+
+Nicht gestattet: Veraenderung, Rueckentwicklung, Weitergabe unter anderem
+Namen, entgeltliche Weitergabe oder Aufnahme in kostenpflichtige Angebote
+ohne vorherige schriftliche Zustimmung.
+
+Alle nicht ausdruecklich eingeraeumten Rechte verbleiben beim
+Rechteinhaber.
+
+
+2. MESSWERTE
+------------
+
+Der Dienst uebernimmt die Zaehlerstaende, die die Wallbox meldet. Er
+misst nicht selbst und kann die Werte weder pruefen noch korrigieren.
+
+Ob eine Wallbox eichrechtskonform misst, haengt allein vom Geraet und
+dessen Zulassung ab. Fuer Abrechnungen gegenueber Dritten gelten die
+Anforderungen des Mess- und Eichgesetzes; ob sie erfuellt sind, ist am
+Geraet zu klaeren, nicht an dieser Software.
+
+
+3. ELEKTRISCHE SICHERHEIT
+-------------------------
+
+Der Dienst LIEST AUSSCHLIESSLICH. Er schaltet die Wallbox nicht,
+veraendert keine Ladeleistung, unterbricht keine Ladung und greift in
+keiner Weise in die Elektroinstallation ein.
+
+Die einzigen gesendeten Befehle betreffen das Messintervall und die
+Auswahl der zu uebermittelnden Messgroessen. Beides hat keinen Einfluss
+auf den Ladevorgang.
+
+Fuer Errichtung, Anschluss, Betrieb und Sicherheit der Ladeeinrichtung
+ist ausschliesslich deren Betreiber verantwortlich. Arbeiten an der
+Elektroinstallation gehoeren in die Hand einer Elektrofachkraft.
+
+
+4. DATENVERARBEITUNG
+--------------------
+
+Die Software arbeitet vollstaendig lokal:
+
+  - Keine Verbindung zu Servern Dritter
+  - Keine Uebermittlung von Nutzungs- oder Diagnosedaten
+  - Keine Registrierung, kein Konto, kein Schluessel
+  - Keine eingebetteten Schriften, Skripte oder Bilder von fremden Servern
+
+Alle Daten verbleiben in
+  /opt/loxberry/data/plugins/echargeocpp/ocpp.db
+
+Werden Ladevorgaenge einzelnen Personen zugeordnet — etwa ueber
+RFID-Kennungen —, obliegt die datenschutzrechtliche Einordnung dem
+Betreiber.
+
+Wird die MQTT-Ausgabe eingeschaltet, verlassen die Werte diesen Dienst in
+Richtung des angegebenen Brokers. Wer darauf Zugriff hat, bestimmt dessen
+Konfiguration.
+
+
+5. GEWAEHRLEISTUNG UND HAFTUNG
+------------------------------
+
+Die Software wird unentgeltlich und ohne Gewaehrleistung ueberlassen.
+Keine Zusicherung der Fehlerfreiheit, ununterbrochenen Verfuegbarkeit,
+Vollstaendigkeit erfasster Werte oder Kompatibilitaet mit einer
+bestimmten Wallbox.
+
+Da die Ueberlassung unentgeltlich erfolgt, richtet sich die Haftung nach
+den Grundsaetzen der Schenkung (§§ 521, 523, 524 BGB). Eine Haftung
+besteht nur bei VORSATZ UND GROBER FAHRLAESSIGKEIT.
+
+Eine Haftung fuer mittelbare Schaeden, Folgeschaeden, entgangenen Gewinn,
+Datenverlust oder Betriebsunterbrechung ist ausgeschlossen, soweit
+gesetzlich zulaessig.
+
+Unberuehrt bleibt die gesetzlich zwingende Haftung bei Verletzung von
+Leben, Koerper oder Gesundheit, nach dem Produkthaftungsgesetz sowie bei
+arglistig verschwiegenen Maengeln.
+
+
+6. VERWENDETE BESTANDTEILE
+--------------------------
+
+Ausschliesslich die Python-Standardbibliothek. Keine Fremdbibliotheken,
+weder zur Installation noch zur Laufzeit. Insbesondere nicht:
+
+  'ocpp'         — nicht verwendet, OCPP eigenstaendig umgesetzt
+  'websockets'   — nicht verwendet, WebSocket eigenstaendig
+  'paho-mqtt'    — nicht verwendet, MQTT eigenstaendig
+
+Damit bestehen keine Lizenzverpflichtungen gegenueber Dritten.
+
+Die verwendeten Perl-Module gehoeren zum LoxBerry-Kern.
+
+Zugrunde liegende Standards:
+
+  OCPP 1.6-J   Open Charge Alliance — offen, lizenzfrei implementierbar,
+               keine Mitgliedschaft erforderlich
+  RFC 6455     WebSocket, offener IETF-Standard
+  MQTT 3.1.1   OASIS-Standard, offen und lizenzfrei
+
+Die Nennung von Herstellernamen dient ausschliesslich der Beschreibung
+der Kompatibilitaet. Alle Marken sind Eigentum der jeweiligen Inhaber;
+eine Verbindung zu diesen Unternehmen besteht nicht.
+
+
+7. ANWENDBARES RECHT
+--------------------
+
+Recht der Bundesrepublik Deutschland unter Ausschluss des UN-Kaufrechts.
+
+Sollte eine Bestimmung unwirksam sein, bleibt die Wirksamkeit der
+uebrigen unberuehrt.
+
+
+Stand: 2026
