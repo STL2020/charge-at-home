@@ -47,9 +47,13 @@ def _verify(license_key: str) -> dict:
     'erreichbar' unterscheidet eine echte Ablehnung von einem Netzproblem —
     nur im zweiten Fall greift die Kulanzregel."""
     url = f"{VERIFY_URL}?{urllib.parse.urlencode({'license_key': license_key})}"
+    # User-Agent ausdruecklich setzen: Payhip laeuft hinter Cloudflare, und
+    # Cloudflare weist die Standardkennung 'Python-urllib/3.x' mit HTTP 403
+    # ab. Mit einer eigenen Kennung geht dieselbe Anfrage durch.
     req = urllib.request.Request(url, headers={
         "product-secret-key": PRODUKT_SECRET,
         "Accept": "application/json",
+        "User-Agent": "eCharge-at-Home/1.0 (+https://www.loewemann.com)",
     })
     try:
         with urllib.request.urlopen(req, timeout=10) as resp:
@@ -58,10 +62,15 @@ def _verify(license_key: str) -> dict:
         if e.code == 404:
             return {"gueltig": False, "erreichbar": True,
                     "meldung": "Dieser Lizenzschlüssel ist unbekannt."}
-        if e.code in (401, 403):
+        if e.code == 401:
             return {"gueltig": False, "erreichbar": False,
-                    "meldung": ("Zugriff auf Payhip abgelehnt. Prüfe, ob ein Proxy "
-                                "die Verbindung blockiert.")}
+                    "meldung": ("Payhip weist die Anmeldung ab. Bitte den "
+                                "Anbieter benachrichtigen.")}
+        if e.code == 403:
+            return {"gueltig": False, "erreichbar": False,
+                    "meldung": ("Zugriff auf Payhip abgelehnt. Ein Filter im "
+                                "Netzwerk oder ein DNS-Blocker verhindert die "
+                                "Verbindung.")}
         return {"gueltig": False, "erreichbar": False,
                 "meldung": f"Payhip antwortet nicht wie erwartet (HTTP {e.code})."}
     except Exception as e:

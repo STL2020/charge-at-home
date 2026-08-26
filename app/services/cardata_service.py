@@ -94,6 +94,7 @@ def _request(methode: str, pfad: str, token: str,
         url += "?" + urllib.parse.urlencode(params)
     daten = json.dumps(body).encode("utf-8") if body is not None else None
     req = urllib.request.Request(url, data=daten, method=methode, headers={
+        "User-Agent": "eCharge-at-Home/1.0 (+https://www.loewemann.com)",
         "Authorization": f"Bearer {token}",
         "Accept": "application/json",
         "Content-Type": "application/json",

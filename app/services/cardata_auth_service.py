@@ -86,6 +86,7 @@ def _post_form(url: str, daten: dict) -> dict:
     damit ein Ausfall der BMW-Server nie die Anwendung mitreisst."""
     body = urllib.parse.urlencode(daten).encode("utf-8")
     req = urllib.request.Request(url, data=body, headers={
+        "User-Agent": "eCharge-at-Home/1.0 (+https://www.loewemann.com)",
         "Content-Type": "application/x-www-form-urlencoded",
         "Accept": "application/json",
     })
