@@ -6616,10 +6616,17 @@ async function ladeKosten100km() {
     const kwh = d.kwh_this_month || 0;
     const kosten = d.cost_this_month || 0;
 
-    if (km > 0 && kosten > 0) {
+    // Unter 100 km ist der Wert mathematisch korrekt aber irreführend —
+    // wenige Kilometer mit vielen kWh ergeben absurde Zahlen. Erst ab
+    // 100 km ist die Basis aussagekräftig.
+    if (km >= 100 && kosten > 0) {
       wert.textContent = fmtDe(kosten / km * 100, 2) + ' €';
       const v = document.getElementById('dash-verbrauch-100km');
       if (v) v.textContent = kwh > 0 ? fmtDe(kwh / km * 100, 1) + ' kWh/100 km' : '–';
+    } else if (km > 0 && km < 100) {
+      wert.textContent = '–';
+      const v = document.getElementById('dash-verbrauch-100km');
+      if (v) v.textContent = 'noch zu wenig Fahrten';
     } else {
       wert.textContent = '–';
       const v = document.getElementById('dash-verbrauch-100km');
