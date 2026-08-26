@@ -18,7 +18,13 @@ DB_PATH = os.environ.get(
     "CHARGE_DB_PATH",
     os.path.join(os.path.dirname(__file__), "..", "..", "data", "charging.db"),
 )
-SCHEMA_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "data", "schema.sql")
+# Ort des Schemas. Im Container liegt es unter /srv/schema, weil /srv/data
+# vom Anwender ueberlagert wird — ein dort abgelegtes Schema waere nach dem
+# Einhaengen eines Volumes verschwunden. Bei lokaler Installation gilt der
+# Pfad neben der Anwendung.
+SCHEMA_PATH = os.environ.get(
+    "CHARGE_SCHEMA_PATH",
+    os.path.join(os.path.dirname(__file__), "..", "..", "data", "schema.sql"))
 
 
 def get_connection() -> sqlite3.Connection:

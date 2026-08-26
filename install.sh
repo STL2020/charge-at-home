@@ -113,14 +113,7 @@ ok "System erkannt: ${SYSTEM}"
 
 # Quellverzeichnis — dort liegt dieses Skript
 QUELLE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-if [ ! -d "$QUELLE/app" ] || [ ! -f "$QUELLE/Dockerfile" ]; then
-    fehler "Die Anwendungsdateien fehlen."
-    info "Erwartet werden 'app/' und 'Dockerfile' neben diesem Skript."
-    info "Aktuelles Verzeichnis: $QUELLE"
-    printf '\n'
-    abbruch "Bitte das Paket vollstaendig entpacken."
-fi
-ok "Anwendungsdateien gefunden"
+ok "Bereit — das Abbild wird aus der Registry geladen"
 
 # ── 2. Fragen ────────────────────────────────────────────────────────────────
 titel "2. Einstellungen"
@@ -245,13 +238,10 @@ mkdir -p "$ZIEL/data" "$ZIEL/app"
 ok "Verzeichnisse angelegt"
 
 # Dateien kopieren — nur was gebraucht wird
-cp -r "$QUELLE/app/." "$ZIEL/app/"
-cp "$QUELLE/Dockerfile" "$ZIEL/"
-[ -f "$QUELLE/requirements.txt" ] && cp "$QUELLE/requirements.txt" "$ZIEL/"
-[ -f "$QUELLE/entrypoint.sh" ] && cp "$QUELLE/entrypoint.sh" "$ZIEL/"
-[ -d "$QUELLE/data" ] && cp -rn "$QUELLE/data/." "$ZIEL/data/" 2>/dev/null || true
+# Der Quellcode wird nicht mehr gebraucht — das Abbild bringt alles mit.
+# Kopiert werden nur die Anleitungen.
 [ -d "$QUELLE/doku" ] && cp -r "$QUELLE/doku" "$ZIEL/" 2>/dev/null || true
-ok "Anwendungsdateien kopiert"
+ok "Anleitungen kopiert"
 
 # docker-compose.yml erzeugen
 {
@@ -261,7 +251,10 @@ ok "Anwendungsdateien kopiert"
     echo ""
     echo "services:"
     echo "  echarge:"
-    echo "    build: ."
+    # Fertiges Abbild aus der GitHub Container Registry statt selbst zu
+    # bauen. Das spart auf einem Raspberry Pi mehrere Minuten und braucht
+    # keine Bauwerkzeuge auf dem Geraet.
+    echo "    image: ghcr.io/stl2020/charge-at-home:latest"
     echo "    container_name: echarge"
     echo "    restart: unless-stopped"
     echo "    volumes:"
@@ -355,9 +348,9 @@ cd "$(dirname "$0")" || exit 1
 echo "Sichere Datenbank …"
 mkdir -p sicherungen
 tar czf "sicherungen/vor-update-$(date +%Y%m%d-%H%M).tar.gz" data/ 2>/dev/null
-echo "Baue neu …"
-docker compose down
-docker compose up -d --build
+echo "Hole neue Fassung …"
+docker compose pull
+docker compose up -d
 echo "Fertig."
 UPDATE
 
@@ -376,11 +369,11 @@ ok "Hilfsskripte angelegt (start, stop, update, sichern)"
 # ── 6. Starten ───────────────────────────────────────────────────────────────
 titel "6. Erster Start"
 
-printf '\n  Das Abbild wird gebaut. Beim ersten Mal dauert das\n'
-printf '  einige Minuten — bitte warten.\n\n'
+printf '\n  Das Abbild wird geladen — das dauert beim ersten Mal\n'
+printf '  ein bis zwei Minuten.\n\n'
 
 cd "$ZIEL"
-if ! $COMPOSE up -d --build; then
+if ! $COMPOSE pull || ! $COMPOSE up -d; then
     printf '\n'
     fehler "Der Start ist fehlgeschlagen."
     info "Meldungen ansehen mit:  cd $ZIEL && $COMPOSE logs"

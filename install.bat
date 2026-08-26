@@ -196,9 +196,18 @@ exit /b 0
 echo.
 echo   2. Mit Docker einrichten
 echo   --------------------------------------------------------------
-echo    Baue das Abbild — beim ersten Mal dauert das einige Minuten ...
+
+echo    Hole das Abbild aus der Registry ...
 echo.
-docker compose up -d --build
+docker compose -f docker-compose.ghcr.yml pull
+if %ERRORLEVEL% NEQ 0 (
+    echo.
+    echo    [X]  Das Abbild konnte nicht geladen werden.
+    echo         Besteht eine Internetverbindung?
+    pause
+    exit /b 1
+)
+docker compose -f docker-compose.ghcr.yml up -d
 if %ERRORLEVEL% NEQ 0 (
     echo.
     echo    [X]  Der Start ist fehlgeschlagen.
@@ -215,7 +224,7 @@ echo    bei jedem Neustart des Rechners von selbst.
 echo.
 echo    Aufrufen unter:  http://localhost:8501
 echo.
-echo    Anhalten mit:    docker compose down
+echo    Anhalten mit:    docker compose -f docker-compose.ghcr.yml down
 echo.
 pause
 start "" http://localhost:8501

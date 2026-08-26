@@ -6,7 +6,11 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app/ ./app/
-COPY data/schema.sql ./data/schema.sql
+
+# Das Schema gehoert NICHT nach /srv/data — dort haengt der Anwender sein
+# Datenverzeichnis ein und ueberdeckt damit alles, was im Abbild liegt.
+# Deshalb ein eigener Ort, den kein Volume trifft.
+COPY data/schema.sql /srv/schema/schema.sql
 COPY entrypoint.sh .
 RUN chmod +x entrypoint.sh
 
@@ -20,5 +24,6 @@ USER chargeapp
 EXPOSE 8501 9000
 
 ENV CHARGE_DB_PATH=/srv/data/charging.db
+ENV CHARGE_SCHEMA_PATH=/srv/schema/schema.sql
 
 ENTRYPOINT ["./entrypoint.sh"]
