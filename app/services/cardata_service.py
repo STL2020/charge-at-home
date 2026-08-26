@@ -381,11 +381,22 @@ def _als_dbzeit(iso: str | None) -> str:
 
 
 def _koordinaten_text(lat, lon) -> str:
-    """Platzhalter-Adresse aus Koordinaten. Die Aufloesung in eine echte
-    Adresse uebernimmt der bestehende Geocoding-Dienst beim Zuordnen."""
+    """Koordinaten in eine lesbare Adresse aufloesen.
+
+    BMW liefert nur Laengen- und Breitengrad. Frueher stand deshalb
+    '50.57912, 7.22698' im Fahrtenbuch — auf einem Beleg unbrauchbar, weil
+    daran niemand den Zweck der Fahrt erkennt.
+
+    Schlaegt die Aufloesung fehl, bleibt die Koordinate stehen: eine Fahrt
+    mit unschoener Ortsangabe ist besser als gar keine.
+    """
     if lat is None or lon is None:
         return ""
-    return f"{lat:.5f}, {lon:.5f}"
+    try:
+        from services import geocoding_service
+        return geocoding_service.adresse_aus_koordinaten(lat, lon)
+    except Exception:
+        return f"{lat:.5f}, {lon:.5f}"
 
 
 def status() -> dict:

@@ -60,7 +60,7 @@ def handle_404(exc):
     # Für nicht-API-Routen: normale 404-Seite oder zur App weiterleiten
     return jsonify({"error": "not_found"}), 404
 
-PFLICHTENHEFT_VERSION = "12.24"
+PFLICHTENHEFT_VERSION = "12.27"
 
 # Fassung, die dem Anwender gezeigt wird. Die Pflichtenheft-Nummer daneben ist
 # die interne Baunummer — beide zusammen machen Rückfragen eindeutig.
@@ -3588,6 +3588,107 @@ def api_compliance_aktion(session_id):
 # ═══════════════════════════════════════════════════════════════════════════
 # BMW CARDATA — Anmeldung und Fahrtenabruf (offizielle BMW-Schnittstelle)
 # ═══════════════════════════════════════════════════════════════════════════
+
+# Voreinstellung fuer den Anlass. Wird beim ersten Aufruf gespeichert und
+# ist danach frei bearbeitbar — jede Branche hat eigene Begriffe.
+ANLASS_STANDARD = ['Kundentermin', 'Partnergespräch', 'Projektbesprechung', 'Schulung / Training', 'Meeting intern', 'Außendienstbesuch', 'Messebesuch', 'Lieferantenbesuch']
+
+
+@app.route("/api/anlaesse", methods=["GET"])
+def api_anlaesse_lesen():
+    """Katalog der Fahrtanlaesse."""
+    roh = settings_repository.get_setting("fahrt_anlaesse")
+    if not roh:   # None oder leer — beides heisst: Vorschlaege verwenden
+        return jsonify({"anlaesse": ANLASS_STANDARD})
+    try:
+        liste = json.loads(roh)
+        if isinstance(liste, list):
+            return jsonify({"anlaesse": [str(x) for x in liste if str(x).strip()]})
+    except Exception:
+        pass
+    return jsonify({"anlaesse": ANLASS_STANDARD})
+
+
+@app.route("/api/anlaesse", methods=["POST"])
+def api_anlaesse_speichern():
+    """Katalog ersetzen. Leere Eintraege und Dubletten fallen weg."""
+    daten = request.get_json(force=True, silent=True) or {}
+    roh = daten.get("anlaesse")
+    if not isinstance(roh, list):
+        return jsonify({"ok": False, "fehler": "Ungültige Liste."}), 400
+
+    # Reihenfolge erhalten, Dubletten entfernen — dict.fromkeys statt set,
+    # damit die vom Anwender gewaehlte Sortierung bestehen bleibt.
+    sauber = list(dict.fromkeys(
+        s.strip() for s in (str(x) for x in roh) if s.strip()))
+    if len(sauber) > 60:
+        return jsonify({"ok": False,
+                        "fehler": "Höchstens 60 Einträge."}), 400
+
+    if not sauber:
+        # Leere Liste heisst: zurueck zu den Vorschlaegen. Waere sie als
+        # leeres Feld gespeichert, bliebe die Auswahl dauerhaft leer.
+        settings_repository.set_setting("fahrt_anlaesse", "")
+        return jsonify({"ok": True, "anzahl": len(ANLASS_STANDARD),
+                        "zurueckgesetzt": True})
+
+    settings_repository.set_setting("fahrt_anlaesse", json.dumps(sauber, ensure_ascii=False))
+    return jsonify({"ok": True, "anzahl": len(sauber)})
+
+
+@app.route("/api/fahrten/adressen-aufloesen", methods=["POST"])
+def api_adressen_aufloesen():
+    """Koordinaten in bereits gespeicherten Fahrten nachtraeglich aufloesen.
+
+    Fahrten, die vor dem Einbau der Rueckwaertssuche importiert wurden,
+    tragen als Adresse nur die Koordinate. Das laesst sich nachholen, ohne
+    den Import zu wiederholen.
+    """
+    user = _current_user()
+    if user is None:
+        return jsonify({"error": "no_user"}), 400
+
+    import re as _re
+    from services import geocoding_service
+    # Eine Adresse, die nur aus zwei Zahlen besteht — nichts anderes wird
+    # angefasst, damit von Hand eingetragene Orte unberuehrt bleiben.
+    muster = _re.compile(r"^\s*-?\d{1,3}\.\d+\s*,\s*-?\d{1,3}\.\d+\s*$")
+
+    conn = get_connection()
+    geaendert = 0
+    try:
+        zeilen = conn.execute(
+            """SELECT id, start_address, end_address FROM trips
+               WHERE user_id = ?""", (user["id"],)).fetchall()
+        for z in zeilen:
+            neu_start, neu_ende = z["start_address"], z["end_address"]
+            for feld, wert in (("start", z["start_address"]),
+                               ("ende", z["end_address"])):
+                if not wert or not muster.match(str(wert)):
+                    continue
+                try:
+                    lat, lon = [float(x.strip()) for x in str(wert).split(",")]
+                except ValueError:
+                    continue
+                aufgeloest = geocoding_service.adresse_aus_koordinaten(lat, lon)
+                if aufgeloest and not muster.match(aufgeloest):
+                    if feld == "start":
+                        neu_start = aufgeloest
+                    else:
+                        neu_ende = aufgeloest
+            if neu_start != z["start_address"] or neu_ende != z["end_address"]:
+                conn.execute(
+                    "UPDATE trips SET start_address = ?, end_address = ? WHERE id = ?",
+                    (neu_start, neu_ende, z["id"]))
+                geaendert += 1
+        conn.commit()
+    finally:
+        conn.close()
+
+    event_log_service.log_event("system", "info",
+        f"Adressen nachgetragen: {geaendert} Fahrten.")
+    return jsonify({"ok": True, "geaendert": geaendert})
+
 
 @app.route("/api/cardata/status", methods=["GET"])
 def api_cardata_status():

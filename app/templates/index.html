@@ -659,6 +659,13 @@
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:5px; vertical-align:middle;"><path d="M5 17h14M5 17a2 2 0 0 1-2-2v-3l2-5h12l2 5v3a2 2 0 0 1-2 2M7 17v2M17 17v2"/></svg>
           BMW holen
         </button>
+        <!-- Adressen nachtragen: Fahrten aus dem Fahrzeug tragen nur
+             Koordinaten. Wer vor dem Einbau der Auflösung importiert hat,
+             holt es damit nach. -->
+        <button class="btn btn-sm" onclick="adressenAufloesen()"
+                title="Koordinaten in lesbare Adressen umwandeln">
+          Adressen nachtragen
+        </button>
         <button class="btn btn-primary" onclick="toggleNewTrip()">+ Fahrt erfassen</button>
       </div>
     </div>
@@ -768,16 +775,9 @@
               <input type="text" id="trip-purpose" style="width:100%"
                 list="purpose-presets"
                 placeholder="z. B. Kundentermin — auswählen oder eintippen">
-              <datalist id="purpose-presets">
-                <option value="Kundentermin">
-                <option value="Partnergespräch">
-                <option value="Projektbesprechung">
-                <option value="Schulung / Training">
-                <option value="Meeting intern">
-                <option value="Außendienstbesuch">
-                <option value="Messebesuch">
-                <option value="Lieferantenbesuch">
-              </datalist>
+              <!-- Wird aus den Einstellungen gefüllt (ladeAnlaesse) —
+                   der Katalog ist dort bearbeitbar. -->
+              <datalist id="purpose-presets"></datalist>
             </div>
             <!-- Wer und womit — steht bewusst unter der Strecke: Person und
                  Fahrzeug sind im Alltag fast immer dieselben und werden
@@ -2155,6 +2155,11 @@
               leer, wird die Wohnanschrift der hinterlegten Person genutzt — und falls
               auch die fehlt, der häufigste Ladeort.
               <span id="heim-erkannt" style="color:var(--text-tertiary);"></span>
+              <br><br>
+              <b>Verglichen wird nur die Straße, nicht die Hausnummer.</b> GPS ist auf
+              wenige Meter genau — das reicht nicht, um Ihr Grundstück vom Nachbarn zu
+              unterscheiden. Fahrten und Ladungen in Ihrer Straße gelten deshalb als
+              „zuhause" und tragen im Fahrtenbuch die hier eingetragene Adresse.
             </div>
           </div>
 
@@ -2210,6 +2215,29 @@
 
         <!-- Sicherheit zuerst: Der Punkt, an dem ein Anwender sich am
              ehesten selbst schadet. -->
+        <div class="card" style="margin-bottom:16px;">
+          <div class="section-title">Anlässe für Fahrten</div>
+          <div class="hint" style="margin-bottom:14px;">
+            Diese Einträge erscheinen beim Erfassen einer Fahrt zur Auswahl.
+            Eigene Begriffe lassen sich ergänzen — ein Anlass pro Zeile.
+            Die Reihenfolge bleibt erhalten.
+          </div>
+          <textarea id="anlass-liste" rows="9"
+                    style="width:100%; font-family:var(--font-mono); font-size:13px;
+                           line-height:1.7; resize:vertical;"
+                    placeholder="Kundentermin&#10;Projektbesprechung&#10;…"></textarea>
+          <div style="display:flex; gap:9px; flex-wrap:wrap; align-items:center;
+               margin-top:12px;">
+            <button class="btn btn-sm btn-primary" onclick="anlaesseSpeichern()">
+              Speichern
+            </button>
+            <button class="btn btn-sm" onclick="anlaesseZuruecksetzen()">
+              Vorschläge wiederherstellen
+            </button>
+            <span class="feld-hinweis" id="anlass-meldung"></span>
+          </div>
+        </div>
+
         <div class="card" style="margin-bottom:16px; border-left:3px solid var(--danger);">
           <div class="section-title" style="color:var(--danger);">
             Betriebssicherheit und Zugriffsschutz</div>

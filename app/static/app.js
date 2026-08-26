@@ -134,12 +134,14 @@ function showView(name) {
   } else if (name === 'fahrten') {
     pruefeBmwImportBereich();
     loadTrips();
+    ladeAnlaesse();          // Auswahlliste für den Anlass füllen
   } else if (name === 'fahrzeuge') {
     loadVehiclesView();
   } else if (name === 'einstellungen') {
     loadHomeAddress();
     loadBmfReference();
     loadVehicleDescription();
+    ladeAnlaesseInFeld();    // Katalog zum Bearbeiten laden
     // Allgemein-Tab als Standard aktivieren
     setTimeout(() => showSettingsTab('allgemein', document.querySelector('.settings-tab')), 0);
   } else if (name === 'wallbox') {
@@ -899,6 +901,95 @@ async function estimateTripDistance() {
     hintEl.textContent = 'Dienst nicht erreichbar — bitte km manuell eingeben.';
     hintEl.style.color = 'var(--warning)';
   }
+}
+
+// Koordinaten in lesbare Adressen umwandeln. Betrifft nur Einträge, die
+// wie "50.57940, 7.22690" aussehen — von Hand eingetragene Orte bleiben.
+async function adressenAufloesen() {
+  if (!confirm('Koordinaten in Adressen umwandeln?\n\n'
+             + 'Betrifft nur Fahrten, bei denen statt eines Ortsnamens '
+             + 'Zahlen stehen. Je nach Anzahl dauert es einen Moment.')) return;
+  _toast('Adressen werden nachgetragen …');
+  try {
+    const d = await (await fetch('/api/fahrten/adressen-aufloesen',
+                                 { method: 'POST' })).json();
+    if (d.ok) {
+      _toast(d.geaendert
+        ? `${d.geaendert} Fahrten ergänzt`
+        : 'Keine Fahrt mit Koordinaten gefunden');
+      if (d.geaendert) loadTrips();
+    } else {
+      _toast('Nachtragen fehlgeschlagen');
+    }
+  } catch (e) {
+    _toast('Nachtragen fehlgeschlagen');
+  }
+}
+
+// ── Anlässe für Fahrten ───────────────────────────────────────────────────
+// Der Katalog steht in den Einstellungen und füllt die Auswahlliste im
+// Fahrtenformular. Fest verdrahtet war er nicht brauchbar — jede Branche
+// hat eigene Begriffe.
+
+async function ladeAnlaesse() {
+  const liste = document.getElementById('purpose-presets');
+  if (!liste) return;
+  try {
+    const d = await (await hole('/api/anlaesse')).json();
+    liste.innerHTML = (d.anlaesse || [])
+      .map(a => `<option value="${a.replace(/"/g, '&quot;')}">`).join('');
+  } catch (e) { /* Liste bleibt leer, Eintippen geht trotzdem */ }
+}
+
+async function ladeAnlaesseInFeld() {
+  const feld = document.getElementById('anlass-liste');
+  if (!feld) return;
+  try {
+    const d = await (await hole('/api/anlaesse')).json();
+    feld.value = (d.anlaesse || []).join('\n');
+  } catch (e) {
+    feld.placeholder = 'Konnte nicht geladen werden';
+  }
+}
+
+async function anlaesseSpeichern() {
+  const feld = document.getElementById('anlass-liste');
+  const meldung = document.getElementById('anlass-meldung');
+  if (!feld) return;
+  const anlaesse = feld.value.split('\n').map(z => z.trim()).filter(Boolean);
+  try {
+    const d = await (await fetch('/api/anlaesse', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ anlaesse })
+    })).json();
+    if (d.ok) {
+      if (meldung) meldung.textContent = `${d.anzahl} Anlässe gespeichert`;
+      _toast('Anlässe gespeichert');
+      ladeAnlaesse();          // Auswahlliste sofort mitziehen
+      ladeAnlaesseInFeld();    // Dubletten sind jetzt weg — Feld angleichen
+    } else {
+      if (meldung) meldung.textContent = d.fehler || 'Fehlgeschlagen';
+    }
+  } catch (e) {
+    if (meldung) meldung.textContent = 'Speichern fehlgeschlagen';
+  }
+}
+
+async function anlaesseZuruecksetzen() {
+  if (!confirm('Die Vorschläge wiederherstellen?\n\n'
+             + 'Eigene Einträge gehen dabei verloren.')) return;
+  const feld = document.getElementById('anlass-liste');
+  if (feld) feld.value = '';
+  try {
+    await fetch('/api/anlaesse', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ anlaesse: [] })
+    });
+  } catch (e) { /* egal — der Server liefert danach die Vorschläge */ }
+  // Ohne gespeicherte Liste greifen wieder die Standardwerte
+  await ladeAnlaesseInFeld();
+  await ladeAnlaesse();
+  _toast('Vorschläge wiederhergestellt');
 }
 
 function toggleNewTrip() {
