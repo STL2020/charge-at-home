@@ -164,9 +164,26 @@ def wallbox_limit_erreicht(anzahl_vorhanden: int) -> bool:
 
 
 def limit_info(sessions_im_monat: int = 0, fahrten_im_monat: int = 0) -> dict:
-    """Uebersicht fuer die Oberflaeche."""
+    """Uebersicht fuer die Oberflaeche.
+
+    Der Funktionsumfang kann auf zwei Wegen freigeschaltet sein:
+
+      1. edition.json im Paket — fuer Auslieferungen mit fester Ausgabe
+      2. ein eingeloester Payhip-Lizenzschluessel
+
+    Frueher zaehlte nur der erste Weg. Wer eine Lizenz eingab, bekam die
+    Bestaetigung, aber die Sperren blieben bestehen — die beiden Systeme
+    wussten nichts voneinander.
+    """
     e = edition()
-    voll = e["voll"]
+    # ist_vollversion() kennt beide Wege — Paketdatei und Lizenzschluessel.
+    # Frueher stand hier e["voll"], das nur die Datei auswertete: Wer eine
+    # Lizenz eingab, bekam die Bestaetigung, aber die Sperren blieben.
+    voll = ist_vollversion()
+    if voll and not e["voll"]:
+        e = dict(e)
+        e["bezeichnung"] = "Vollversion"
+        e["kaeufer"] = _lizenz_kaeufer() or e.get("kaeufer", "")
     return {
         "voll": voll,
         "bezeichnung": e["bezeichnung"],
