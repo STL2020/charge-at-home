@@ -860,30 +860,6 @@
 
         <!-- Auswahl-Bar Fahrten (identisch zu Ladesessions) -->
         <!-- BMW-Import: nur sichtbar, wenn die CarData-Verbindung steht -->
-        <div class="card" id="trips-bmw-import" style="display:none; margin-bottom:12px;">
-          <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
-            <div style="flex:1; min-width:200px;">
-              <div style="font-size:13px; font-weight:600;">Fahrten aus dem BMW importieren</div>
-              <div class="hint" style="margin:2px 0 0;">
-                <b>Abrufen</b> holt neue Fahrten seit dem letzten Mal.
-                <b>Archiv</b> liest die Vergangenheit aus dem ZIP des BMW-Portals ein.
-              </div>
-            </div>
-            <input type="file" id="trips-archiv-datei" accept=".zip" style="max-width:210px;">
-            <button class="btn btn-sm" onclick="cardataArchivImport(true)" id="trips-archiv-btn">Archiv einlesen</button>
-            <!-- Ausblenden: Das Archiv braucht man einmal beim Erstimport.
-                 Danach steht der Bereich nur im Weg. -->
-            <button class="icon-btn" onclick="archivBereichAusblenden()"
-                    title="Ausblenden — wieder einblenden unter Einstellungen → BMW"
-                    style="color:var(--text-tertiary);">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-                   stroke="currentColor" stroke-width="2" stroke-linecap="round">
-                <path d="M18 6L6 18M6 6l12 12"/>
-              </svg>
-            </button>
-          </div>
-          <div id="trips-import-ergebnis" style="margin-top:8px;"></div>
-        </div>
 
         <div id="trips-selection-bar" style="display:none; background:var(--accent-soft); border:1px solid var(--accent); border-radius:var(--radius-sm); padding:10px 14px; margin-bottom:12px; align-items:center; gap:12px; flex-wrap:wrap;">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
@@ -2185,15 +2161,61 @@
               </div>
               <div id="cardata-vin-liste" style="display:none; margin-top:6px;"></div>
             </div>
+            <div style="grid-column:1/-1; margin-bottom:14px; padding:14px 16px;
+                 background:var(--amber-soft); border:1px solid var(--amber);
+                 border-radius:8px;">
+              <label style="display:flex; align-items:center; gap:9px;
+                     font-size:13.5px; font-weight:600; cursor:pointer;">
+                <input type="checkbox" id="cardata-stream" style="width:auto;margin:0;"
+                       onchange="cardataStreamSchalten(this)">
+                Datenstrom nutzen statt abzurufen — empfohlen
+              </label>
+              <div class="hint" style="margin-top:8px;">
+                BMW schickt Änderungen von sich aus, sobald sie eintreten.
+                <b>Kein Tageskontingent</b>, und jede Fahrt wird erfasst — auch
+                kurze und solche zu ungewöhnlichen Zeiten. Der regelmäßige
+                Abruf wird damit überflüssig.
+                <br><br>
+                <b>Voraussetzung:</b> Im BMW-Portal unter CarData einen
+                <b>Client anlegen</b> und das Fahrzeug als Hauptnutzer zuordnen.
+                Ohne diesen Schritt gibt es keinen Datenstrom.
+              </div>
+              <div id="stream-zustand" style="margin-top:10px; font-size:12.5px;
+                   display:none;"></div>
+            </div>
+
             <div>
               <label class="field-label">Automatischer Abruf</label>
               <div style="display:flex; gap:6px; align-items:center;">
                 <select id="cardata-intervall" style="flex:1;" onchange="cardataAutomatikSpeichern()">
                   <option value="0">aus</option>
-                  <option value="30">alle 30 Minuten (48 Abrufe/Tag)</option>
+                  <option value="30" selected>alle 30 Minuten (48 Abrufe/Tag) — empfohlen</option>
                   <option value="60">stündlich (24 Abrufe/Tag)</option>
                   <option value="120">alle 2 Stunden (12 Abrufe/Tag)</option>
                 </select>
+              </div>
+              <div class="hint" style="margin-top:6px;">
+                Aus Position und Kilometerstand entstehen Fahrten: Steht das
+                Fahrzeug beim nächsten Abruf woanders, war eine Fahrt dazwischen.
+                Je kürzer der Abstand, desto genauer — 30 Minuten ist das
+                Maximum, das BMWs Tageskontingent hergibt.
+              </div>
+              <!-- Kontingent: BMW erlaubt 50 Abrufe am Tag. Wer das Limit
+                   erreicht, bekommt bis Mitternacht keine Daten mehr — das
+                   sollte man sehen, bevor es passiert. -->
+              <div id="cardata-kontingent" style="margin-top:10px; font-size:12px;
+                   display:none;">
+                <div style="display:flex; justify-content:space-between;
+                     margin-bottom:4px;">
+                  <span style="color:var(--text-tertiary);">Abrufe heute</span>
+                  <span id="kont-text" style="font-family:var(--font-mono);"></span>
+                </div>
+                <div style="height:5px; background:var(--bg-input);
+                     border-radius:3px; overflow:hidden;">
+                  <div id="kont-balken" style="height:100%; width:0%;
+                       background:var(--accent); transition:width .3s;"></div>
+                </div>
+                <div id="kont-hinweis" class="hint" style="margin-top:4px;"></div>
               </div>
             </div>
           </div>

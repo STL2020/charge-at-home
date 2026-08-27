@@ -44,6 +44,9 @@ API_BASIS = "https://api-cardata.bmwgroup.com"
 # Datenpunkte, die fuer die Fahrterkennung noetig sind. Die Namen stammen aus
 # dem Telematikdatenkatalog; sie muessen im Portal unter "Configure data
 # stream" ausgewaehlt sein, sonst liefert BMW keine Werte.
+# Abrufe pro Tag laut CarData-Bedingungen
+TAGESLIMIT = 50
+
 DESCRIPTOR_KM = "vehicle.vehicle.travelledDistance"
 DESCRIPTOR_LAT = "vehicle.cabin.infotainment.navigation.currentLocation.latitude"
 DESCRIPTOR_LON = "vehicle.cabin.infotainment.navigation.currentLocation.longitude"
@@ -113,8 +116,18 @@ def _request(methode: str, pfad: str, token: str,
     try:
         with urllib.request.urlopen(req, timeout=20) as resp:
             roh = resp.read().decode("utf-8")
+            # Kontingent aus den Kopfzeilen lesen, falls BMW eines meldet.
+            # Die Namen sind nicht dokumentiert — deshalb mehrere Varianten.
+            # Fehlen sie, greift der eigene Zaehler.
+            _merke_kontingent(resp.headers)
+            _zaehle_abruf()
             return {"ok": True, "daten": json.loads(roh) if roh else {}}
     except urllib.error.HTTPError as e:
+        _zaehle_abruf()          # auch abgelehnte Aufrufe zaehlen beim Limit
+        try:
+            _merke_kontingent(e.headers)
+        except Exception:
+            pass
         try:
             fehler = json.loads(e.read().decode("utf-8"))
         except Exception:
@@ -132,6 +145,81 @@ def _request(methode: str, pfad: str, token: str,
     except Exception as e:
         return {"ok": False, "status": None, "fehler": {},
                 "meldung": f"CarData nicht erreichbar ({type(e).__name__})."}
+
+
+def _merke_kontingent(headers) -> None:
+    """Liest das verbleibende Kontingent aus den Antwort-Kopfzeilen.
+
+    BMW dokumentiert nicht, ob und unter welchem Namen ein Rest gemeldet
+    wird. Deshalb werden die ueblichen Schreibweisen geprueft. Findet sich
+    nichts, bleibt es beim eigenen Zaehler — der ist ohnehin die
+    verlaesslichere Grundlage, weil er auch Aufrufe mitzaehlt, die gar
+    nicht erst beim Server ankamen.
+    """
+    if not headers:
+        return
+    kandidaten = ("x-ratelimit-remaining", "ratelimit-remaining",
+                  "x-rate-limit-remaining", "x-quota-remaining")
+    for name in kandidaten:
+        wert = headers.get(name)
+        if wert is None:
+            continue
+        try:
+            settings_repository.set_setting("cardata_rest_gemeldet", str(int(wert)))
+            settings_repository.set_setting(
+                "cardata_rest_gemeldet_am",
+                datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+            return
+        except (TypeError, ValueError):
+            continue
+
+
+def _zaehle_abruf() -> None:
+    """Zaehlt einen verbrauchten Abruf fuer den laufenden Tag.
+
+    BMW setzt das Kontingent zur Tagesmitte zurueck (UTC). Hier wird nach
+    lokalem Datum gezaehlt — das weicht hoechstens um wenige Stunden ab und
+    ist fuer eine Anzeige genau genug.
+    """
+    heute = datetime.now().strftime("%Y-%m-%d")
+    try:
+        tag = settings_repository.get_setting("cardata_zaehler_tag") or ""
+        stand = int(settings_repository.get_setting("cardata_zaehler") or 0)
+    except (TypeError, ValueError):
+        tag, stand = "", 0
+    if tag != heute:
+        tag, stand = heute, 0
+    settings_repository.set_setting("cardata_zaehler_tag", tag)
+    settings_repository.set_setting("cardata_zaehler", str(stand + 1))
+
+
+def kontingent() -> dict:
+    """Verbrauch und Rest fuer die Anzeige."""
+    heute = datetime.now().strftime("%Y-%m-%d")
+    try:
+        tag = settings_repository.get_setting("cardata_zaehler_tag") or ""
+        verbraucht = int(settings_repository.get_setting("cardata_zaehler") or 0)
+    except (TypeError, ValueError):
+        tag, verbraucht = "", 0
+    if tag != heute:
+        verbraucht = 0
+
+    gemeldet = None
+    try:
+        roh = settings_repository.get_setting("cardata_rest_gemeldet")
+        am = settings_repository.get_setting("cardata_rest_gemeldet_am") or ""
+        # Nur verwenden, wenn die Meldung von heute stammt
+        if roh not in (None, "") and am[:10] == heute:
+            gemeldet = int(roh)
+    except (TypeError, ValueError):
+        pass
+
+    return {
+        "limit": TAGESLIMIT,
+        "verbraucht": verbraucht,
+        "rest": gemeldet if gemeldet is not None else max(0, TAGESLIMIT - verbraucht),
+        "von_bmw_gemeldet": gemeldet is not None,
+    }
 
 
 def _fehlertext(status: int, fehler: dict) -> str:

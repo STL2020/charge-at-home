@@ -141,7 +141,19 @@ def _zieltext(start: str, ziel: str, km: float) -> str:
 
 
 def rekonstruiere_fahrten(eintraege: list, vin: str = "") -> list[dict]:
-    """Bildet aus den Ladepunkten Fahrten.
+    """NICHT MEHR VERWENDEN — bildet aus Ladepunkten vermeintliche Fahrten.
+
+    Diese Funktion war ein Irrweg. Zwischen zwei Ladevorgaengen kann
+    beliebig viel passiert sein: 100 km zum Kunden und danach 20 km
+    einkaufen ergeben hier eine einzige "Fahrt" ueber 120 km. Als
+    Dienstreise waere das eine unrichtige Angabe.
+
+    Die Ladehistorie kennt nur Ladeorte, keine Fahrten. Fahrten entstehen
+    stattdessen aus dem regelmaessigen Abruf von Position und
+    Kilometerstand (services/cardata_service.py).
+
+    Bleibt vorerst erhalten, weil aeltere Datenbanken noch Referenzen
+    darauf haben koennen.
 
     Die Fahrt-ID enthaelt beide Kilometerstaende und ist damit stabil: Ein
     erneuter Import derselben Daten erzeugt keine Doppeleintraege."""

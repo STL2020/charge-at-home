@@ -60,7 +60,7 @@ def handle_404(exc):
     # Für nicht-API-Routen: normale 404-Seite oder zur App weiterleiten
     return jsonify({"error": "not_found"}), 404
 
-PFLICHTENHEFT_VERSION = "12.43"
+PFLICHTENHEFT_VERSION = "12.46"
 
 # Fassung, die dem Anwender gezeigt wird. Die Pflichtenheft-Nummer daneben ist
 # die interne Baunummer — beide zusammen machen Rückfragen eindeutig.
@@ -3928,6 +3928,37 @@ def api_wallboxen_zusammenfuehren():
                     "entfernt": geloescht, "ziel": ziel["name"]})
 
 
+@app.route("/api/cardata/stream", methods=["GET"])
+def api_cardata_stream_status():
+    """Zustand des MQTT-Streams."""
+    from services import cardata_stream_service
+    return jsonify(cardata_stream_service.status())
+
+
+@app.route("/api/cardata/stream", methods=["POST"])
+def api_cardata_stream_setzen():
+    """Stream ein- oder ausschalten.
+
+    Der Stream ersetzt den regelmaessigen Abruf: BMW schickt Aenderungen
+    von sich aus, ohne Tageskontingent. Damit wird jede Fahrt erfasst,
+    auch kurze und solche zu ungewoehnlichen Zeiten.
+    """
+    if not edition_service.funktion_verfuegbar("bmw"):
+        return jsonify(edition_service.gesperrt_hinweis("bmw")), 402
+
+    from services import cardata_stream_service
+    daten = request.get_json(force=True, silent=True) or {}
+    an = bool(daten.get("aktiv"))
+    cardata_stream_service.setze_aktiv(an)
+    return jsonify({"ok": True, **cardata_stream_service.status()})
+
+
+@app.route("/api/cardata/kontingent", methods=["GET"])
+def api_cardata_kontingent():
+    """Verbrauchte und verbleibende Abrufe des Tages."""
+    return jsonify(cardata_service.kontingent())
+
+
 @app.route("/api/cardata/status", methods=["GET"])
 def api_cardata_status():
     if not edition_service.funktion_verfuegbar("bmw"):
@@ -4005,7 +4036,24 @@ def api_cardata_vin():
     return jsonify({"ok": True})
 
 
+# ENTFERNT: Der Archiv-Import erzeugte Fahrten aus Ladepunkten. Zwischen
+# zwei Ladungen kann beliebig viel liegen — 100 km zum Kunden und danach
+# 20 km einkaufen wurden zu einer "Fahrt" ueber 120 km. Fahrten entstehen
+# jetzt ausschliesslich aus dem regelmaessigen Abruf von Position und
+# Kilometerstand. Die Route antwortet mit einer Erklaerung statt zu
+# verschwinden, damit aeltere Lesezeichen nicht ins Leere laufen.
 @app.route("/api/cardata/archiv-import", methods=["POST"])
+def api_cardata_archiv_import_entfernt():
+    return jsonify({
+        "ok": False,
+        "fehler": ("Der Archiv-Import für Fahrten wurde entfernt. Die "
+                   "Ladehistorie kennt nur Ladeorte — was zwischen zwei "
+                   "Ladungen passiert ist, steht dort nicht. Fahrten "
+                   "entstehen jetzt aus dem automatischen Abruf; "
+                   "einzustellen unter Einstellungen → BMW.")}), 410
+
+
+@app.route("/api/cardata/archiv-import-alt", methods=["POST"])
 def api_cardata_archiv_import():
     """Importiert Fahrten aus dem BMW-CarData-Datenarchiv (ZIP).
 

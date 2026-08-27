@@ -2146,7 +2146,7 @@ function showSettingsTab(tab, btn) {
   if (tab === 'person') {
     loadPersons();
   }
-  if (tab === 'bmw') { cardataStatusLaden(); cardataFahrzeugdatenLaden(); loadLadepreise(); loadHeimadresse(); loadBmwDuplikate(); loadBmwHeimladungen(); loadArchivBereich(); }
+  if (tab === 'bmw') { cardataStatusLaden(); cardataFahrzeugdatenLaden(); loadLadepreise(); loadHeimadresse(); loadBmwDuplikate(); loadBmwHeimladungen(); loadKontingent(); loadStreamZustand(); }
   if (tab === 'lizenz') editionAnzeigen();
   if (tab === 'system') { backupStatusLaden(); demodatenStatus(); }
   if (tab === 'hilfe') hilfeLaden();
@@ -6739,71 +6739,14 @@ async function cardataFahrzeugdatenLaden() {
 //   Vollversion, nicht verbunden → sichtbar, führt zur Einrichtung
 //   Demo                         → sichtbar mit Pro-Abzeichen, erklärt beim Klick
 //
-// Ausgeblendet wird nur noch der Dateiauswahl-Bereich für das ZIP-Archiv:
 // Ein Dateifeld ohne Verbindung ist keine Werbung, sondern eine Sackgasse.
 async function pruefeBmwImportBereich() {
-  const knoepfe = ['bmw-lade-btn', 'bmw-fahrt-btn', 'bmw-reset-btn']
-    .map(id => document.getElementById(id)).filter(Boolean);
-  // Alle drei gleich behandeln: sichtbar mit Pro-Abzeichen. Zuvor war
-  // 'BMW holen' bei den Fahrten ausgeblendet, die beiden anderen sichtbar.
-  const bereich = document.getElementById('trips-bmw-import');
-
-  let verbunden = false;
-  try {
-    const d = await (await hole('/api/cardata/status')).json();
-    verbunden = !!(d.angemeldet && d.vin);
-  } catch (e) { /* ohne Antwort gilt: nicht verbunden */ }
-
-  knoepfe.forEach(el => { el.style.display = 'inline-flex'; });
-
-  // Ausgeblendet bleibt ausgeblendet — das Archiv braucht man einmal
-  // beim Erstimport, danach nicht mehr.
-  let versteckt = false;
-  try {
-    const s = await (await hole('/api/settings/archiv-bereich')).json();
-    versteckt = !!s.versteckt;
-  } catch (e) { /* im Zweifel anzeigen */ }
-
-  if (bereich) {
-    bereich.style.display = (verbunden && !versteckt) ? 'block' : 'none';
-  }
-}
-
-// Bereich ausblenden. Wieder einblenden geht über die Einstellungen.
-async function archivBereichAusblenden() {
-  const bereich = document.getElementById('trips-bmw-import');
-  if (bereich) bereich.style.display = 'none';
-  try {
-    await fetch('/api/settings/archiv-bereich', {
-      method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ versteckt: true })
-    });
-    _toast('Ausgeblendet — wieder einblenden unter Einstellungen → BMW');
-  } catch (e) { /* die Anzeige ist trotzdem weg */ }
-}
-
-async function saveArchivBereich(cb) {
-  await fetch('/api/settings/archiv-bereich', {
-    method: 'POST', headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ versteckt: !cb.checked })
-  });
-  _toast(cb.checked ? 'Archiv-Import wird angezeigt' : 'Archiv-Import ausgeblendet');
-}
-
-async function loadArchivBereich() {
-  try {
-    const d = await (await hole('/api/settings/archiv-bereich')).json();
-    const cb = document.getElementById('bmw-archiv-zeigen');
-    if (cb) cb.checked = !d.versteckt;
-  } catch (e) {}
-}
-
-async function archivBereichEinblenden() {
-  await fetch('/api/settings/archiv-bereich', {
-    method: 'POST', headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ versteckt: false })
-  });
-  _toast('Der Archiv-Bereich erscheint wieder bei den Fahrten');
+  // Alle BMW-Knöpfe bleiben sichtbar, in der Demo mit Pro-Abzeichen.
+  // Ein ausgeblendeter Knopf wirft die Frage auf, wo die Funktion ist.
+  ['bmw-lade-btn', 'bmw-fahrt-btn', 'bmw-reset-btn']
+    .map(id => document.getElementById(id))
+    .filter(Boolean)
+    .forEach(el => { el.style.display = 'inline-flex'; });
 }
 
 // Ladevorgänge der letzten 30 Tage übernehmen
@@ -7141,6 +7084,87 @@ function _zeigeDuplikatSchalter() {
   const an = document.getElementById('bmw-heimladungen')?.checked;
   const zeile = document.getElementById('bmw-dupl-zeile');
   if (zeile) zeile.style.display = an ? 'flex' : 'none';
+}
+
+// MQTT-Datenstrom ein- und ausschalten. Ersetzt den regelmäßigen Abruf.
+async function cardataStreamSchalten(cb) {
+  try {
+    const d = await (await fetch('/api/cardata/stream', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ aktiv: cb.checked })
+    })).json();
+    if (d.gesperrt) {
+      cb.checked = false;
+      _toast('Datenstrom nur in der Vollversion');
+      return;
+    }
+    _toast(cb.checked ? 'Datenstrom wird aufgebaut …' : 'Datenstrom angehalten');
+    setTimeout(loadStreamZustand, 2500);
+  } catch (e) {
+    _toast('Umschalten fehlgeschlagen');
+  }
+}
+
+async function loadStreamZustand() {
+  const box = document.getElementById('stream-zustand');
+  const cb = document.getElementById('cardata-stream');
+  if (!box) return;
+  try {
+    const d = await (await hole('/api/cardata/stream')).json();
+    if (cb) cb.checked = !!d.aktiv;
+
+    if (!d.aktiv) { box.style.display = 'none'; return; }
+    box.style.display = 'block';
+
+    if (d.verbunden) {
+      box.innerHTML = '<b style="color:var(--success,#16a34a);">Verbunden</b>'
+        + ` — ${d.nachrichten} Meldungen empfangen`
+        + (d.letzte_nachricht ? `, zuletzt ${d.letzte_nachricht.slice(11,16)} Uhr` : '');
+    } else if (d.fehler) {
+      box.innerHTML = `<b style="color:var(--danger);">Nicht verbunden</b><br>`
+        + `<span style="color:var(--text-tertiary);">${d.fehler}</span>`;
+    } else {
+      box.innerHTML = '<span style="color:var(--text-tertiary);">'
+        + 'Verbindung wird aufgebaut …</span>';
+    }
+  } catch (e) {
+    box.style.display = 'none';
+  }
+}
+
+// Tageskontingent anzeigen. BMW erlaubt 50 Abrufe; ist das Limit erreicht,
+// kommen bis Mitternacht keine Daten mehr.
+async function loadKontingent() {
+  const box = document.getElementById('cardata-kontingent');
+  if (!box) return;
+  try {
+    const d = await (await hole('/api/cardata/kontingent')).json();
+    const anteil = Math.min(100, Math.round(d.verbraucht / d.limit * 100));
+    box.style.display = 'block';
+    document.getElementById('kont-text').textContent =
+      `${d.verbraucht} von ${d.limit}`;
+
+    const balken = document.getElementById('kont-balken');
+    balken.style.width = anteil + '%';
+    // Ab 80 % wird es eng, ab 95 % kritisch
+    balken.style.background = anteil >= 95 ? 'var(--danger)'
+                            : anteil >= 80 ? 'var(--amber)'
+                            : 'var(--accent)';
+
+    const hinweis = document.getElementById('kont-hinweis');
+    if (d.rest <= 0) {
+      hinweis.innerHTML = '<b style="color:var(--danger);">Kontingent '
+        + 'aufgebraucht</b> — bis Mitternacht keine weiteren Abrufe möglich.';
+    } else if (d.rest <= 5) {
+      hinweis.innerHTML = `<b style="color:var(--amber);">Noch ${d.rest} Abrufe</b> `
+        + 'heute — manuelles Abrufen jetzt sparsam einsetzen.';
+    } else {
+      hinweis.textContent = `Noch ${d.rest} Abrufe verfügbar.`
+        + (d.von_bmw_gemeldet ? ' (von BMW gemeldet)' : '');
+    }
+  } catch (e) {
+    box.style.display = 'none';
+  }
 }
 
 // Doppelerfassungs-Prüfung ein-/ausschalten
