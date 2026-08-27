@@ -88,6 +88,7 @@ TOKEN_PUFFER_S = 600
 _zustand = {
     "laeuft": False,
     "verbunden": False,
+    "abonniert": None,   # None = noch keine Rückmeldung, True/False danach
     "letzte_nachricht": None,
     "fehler": "",
     "nachrichten": 0,
@@ -119,10 +120,19 @@ def status() -> dict:
                       "gekommen. Meist Netzwerk (Port 9000 ausgehend "
                       "blockiert?) oder ein abgelaufener Token — im "
                       "Zweifel Haken entfernen und neu setzen.")
+    # Verbunden, aber BMW hat das Abonnement abgelehnt: sieht sonst identisch
+    # aus wie "verbunden und wartet auf Daten" — genau der Unterschied, der
+    # bisher nirgends sichtbar war.
+    if _zustand["verbunden"] and _zustand.get("abonniert") is False and not fehler:
+        fehler = ("Verbunden, aber BMW hat das Abonnement des Themas "
+                  "abgelehnt (siehe Protokoll für den genauen Code). Meist "
+                  "falsche GCID/VIN-Kombination oder das Fahrzeug ist nicht "
+                  "als Hauptnutzer zugeordnet.")
     return {
         "aktiv": aktiviert(),
         "laeuft": _zustand["laeuft"],
         "verbunden": _zustand["verbunden"],
+        "abonniert": _zustand.get("abonniert"),
         "letzte_nachricht": _zustand["letzte_nachricht"],
         "nachrichten": _zustand["nachrichten"],
         "verbindungen": _zustand.get("verbindungen", 0),
@@ -242,6 +252,7 @@ def _schleife(gcid: str, vin: str) -> None:
             def bei_verbindung(c, userdata, flags, rc, props=None):
                 if rc == 0:
                     _zustand["verbunden"] = True
+                    _zustand["abonniert"] = None   # zuruecksetzen, Antwort steht noch aus
                     _zustand["fehler"] = ""
                     _zustand["verbindungen"] = _zustand.get("verbindungen", 0) + 1
                     c.subscribe(thema, qos=1)
@@ -252,6 +263,27 @@ def _schleife(gcid: str, vin: str) -> None:
                 else:
                     _zustand["verbunden"] = False
                     _zustand["fehler"] = f"Verbindung abgelehnt (Code {rc})"
+
+            def bei_abonnement(c, userdata, mid, reason_codes, properties=None):
+                # BUG BEHOBEN (28.08.): Frueher wurde subscribe() aufgerufen,
+                # ohne je die SUBACK-Antwort zu pruefen. "Verbunden" konnte
+                # also true sein, waehrend BMW das Thema im Stillen ablehnt —
+                # ohne dass das irgendwo sichtbar wurde. Reason-Code >= 128
+                # bedeutet abgelehnt (siehe MQTTv5-Spezifikation).
+                abgelehnt = any(getattr(code, "value", code) is not None
+                               and getattr(code, "value", code) >= 128
+                               for code in reason_codes)
+                _zustand["abonniert"] = not abgelehnt
+                if abgelehnt:
+                    codes = [getattr(code, "value", code) for code in reason_codes]
+                    event_log_service.log_event("bmw", "warning",
+                        f"Stream: Abonnement von Thema '{thema}' abgelehnt "
+                        f"(Code {codes}). Vermutlich GCID/VIN-Kombination "
+                        f"falsch oder Fahrzeug nicht als Hauptnutzer "
+                        f"zugeordnet.")
+                else:
+                    event_log_service.log_event("bmw", "info",
+                        f"Stream: Abonnement von Thema '{thema}' bestätigt.")
 
             def bei_trennung(c, userdata, flags, rc, props=None):
                 _zustand["verbunden"] = False
@@ -264,6 +296,7 @@ def _schleife(gcid: str, vin: str) -> None:
                         f"Stream-Nachricht nicht verarbeitet: {type(e).__name__}")
 
             client.on_connect = bei_verbindung
+            client.on_subscribe = bei_abonnement
             client.on_disconnect = bei_trennung
             client.on_message = bei_nachricht
 

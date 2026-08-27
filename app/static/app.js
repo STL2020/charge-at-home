@@ -7244,8 +7244,16 @@ async function loadStreamZustand() {
     if (!d.aktiv) { box.style.display = 'none'; return; }
     box.style.display = 'block';
 
-    if (d.verbunden) {
+    if (d.verbunden && d.abonniert === false) {
+      // Verbindung steht, aber BMW hat das Thema abgelehnt — sah bisher
+      // identisch aus wie "läuft normal", weil niemand die SUBACK prüfte.
+      box.innerHTML = `<b style="color:var(--danger);">Verbunden, Abonnement abgelehnt</b><br>`
+        + `<span style="color:var(--text-tertiary);">${d.fehler || 'BMW hat das Thema nicht akzeptiert.'}</span>`;
+    } else if (d.verbunden) {
+      const abonnementHinweis = d.abonniert === true ? ''
+        : ' <span style="color:var(--text-tertiary);">(Abonnement noch unbestätigt)</span>';
       box.innerHTML = '<b style="color:var(--success,#16a34a);">Verbunden</b>'
+        + abonnementHinweis
         + ` — ${d.nachrichten} Meldungen empfangen`
         + (d.letzte_nachricht ? `, zuletzt ${d.letzte_nachricht.slice(11,16)} Uhr` : '');
     } else if (d.fehler) {

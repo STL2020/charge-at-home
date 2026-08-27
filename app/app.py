@@ -60,7 +60,7 @@ def handle_404(exc):
     # Für nicht-API-Routen: normale 404-Seite oder zur App weiterleiten
     return jsonify({"error": "not_found"}), 404
 
-PFLICHTENHEFT_VERSION = "12.51"
+PFLICHTENHEFT_VERSION = "12.52"
 
 # Fassung, die dem Anwender gezeigt wird. Die Pflichtenheft-Nummer daneben ist
 # die interne Baunummer — beide zusammen machen Rückfragen eindeutig.
@@ -142,6 +142,7 @@ PROJECT_STATUS = [
     {"sprint": 8, "id": "S8-01", "modul": "BMW Telematik", "text": "CarData-Stream: Wiederaufnahme nach Container-Neustart (fehlte bisher — Einstellung blieb 'an', Hintergrund-Thread lief nach Neustart aber nicht mehr)", "status": "fertig", "view": None},
     {"sprint": 8, "id": "S8-02", "modul": "BMW Telematik", "text": "CarData-Stream: Host/Port einstellbar statt fest im Code (Streaming-Zugangsdaten aus dem BMW-Portal), Statusanzeige meldet nach 45s ohne Verbindung einen echten Fehler statt endlos 'wird aufgebaut'", "status": "fertig", "view": "einstellungen"},
     {"sprint": 8, "id": "S8-03", "modul": "Diagnose", "text": "Eigenstaendiges Diagnose-Werkzeug mqtt_diagnose.py: separate Anmeldung mit explizit angefordertem Streaming-Scope, protokolliert jede Verbindungsstufe (Connect/Subscribe/Nachricht) einzeln in Datei und auf dem Bildschirm", "status": "fertig", "view": None},
+    {"sprint": 8, "id": "S8-04", "modul": "BMW Telematik", "text": "CarData-Stream: SUBACK-Pruefung nachgeruestet — subscribe() wurde aufgerufen, ohne je die Antwort von BMW auszuwerten; 'Verbunden' konnte also bei im Stillen abgelehntem Thema-Abonnement stehen bleiben, ohne dass Fahrten je ankamen. Status unterscheidet jetzt 'verbunden, Abonnement offen/bestaetigt/abgelehnt'", "status": "fertig", "view": "einstellungen"},
 
 ]
 
