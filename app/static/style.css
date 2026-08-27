@@ -1284,7 +1284,8 @@ input.feld-fehler { border-color: var(--danger); }
 }
 .trips-liste { flex: 1 1 auto; min-width: 0; }
 
-.trips-detail {
+.trips-detail,
+.sessions-detail {
   flex: 0 0 400px;
   position: sticky;
   top: 16px;
@@ -1296,7 +1297,8 @@ input.feld-fehler { border-color: var(--danger); }
    gebraucht, sobald es sichtbar ist. */
 @media (max-width: 1200px) {
   .trips-split { flex-direction: column-reverse; }
-  .trips-detail {
+  .trips-detail,
+.sessions-detail {
     flex: 1 1 auto; width: 100%; position: static;
     max-height: none; margin-bottom: 16px;
   }

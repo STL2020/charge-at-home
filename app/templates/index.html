@@ -511,7 +511,23 @@
       </div>
       <div id="import-result" style="margin-bottom:14px; font-size:13px;"></div>
 
-      <div class="card" id="new-session-form" style="display:none; margin-bottom:20px;">
+
+      <!-- Zweispaltig wie bei den Fahrten: Liste links, Bearbeitung rechts.
+           Gleiches Verhalten in beiden Ansichten — wer eine kennt, kennt beide. -->
+      <div class="trips-split">
+      <div class="card trips-liste">
+        <table>
+          <thead id="sessions-thead"><tr>
+            <th style="width:32px;"><input type="checkbox" id="sess-select-all" onchange="toggleSelectAllSessions(this)" title="Alle aus-/abwählen"></th>
+            <th>#</th><th>Datum</th><th>Zeit</th><th>Wallbox</th><th>kWh</th><th>Preis/kWh</th><th>Betrag</th><th class="th-klass">Klassifizierung</th><th>Ladeort</th><th>Quelle</th><th>Status</th><th>Aktionen</th>
+          </tr></thead>
+          <tbody id="sessions-tbody">
+            <tr><td colspan="11" class="hint">Lade Sessions …</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="card sessions-detail" id="new-session-form" style="display:none;">
         <div class="section-title" id="session-form-title">Ladevorgang erfassen</div>
 
         <!-- Denkablauf: Wann → Wie viel → Wo → Ergebnis.
@@ -633,17 +649,6 @@
           <button class="btn btn-primary" onclick="saveManualSession()">Ladevorgang speichern</button>
         </div>
       </div>
-
-      <div class="card">
-        <table>
-          <thead id="sessions-thead"><tr>
-            <th style="width:32px;"><input type="checkbox" id="sess-select-all" onchange="toggleSelectAllSessions(this)" title="Alle aus-/abwählen"></th>
-            <th>#</th><th>Datum</th><th>Zeit</th><th>Wallbox</th><th>kWh</th><th>Preis/kWh</th><th>Betrag</th><th class="th-klass">Klassifizierung</th><th>Ladeort</th><th>Quelle</th><th>Status</th><th>Aktionen</th>
-          </tr></thead>
-          <tbody id="sessions-tbody">
-            <tr><td colspan="11" class="hint">Lade Sessions …</td></tr>
-          </tbody>
-        </table>
       </div>
     </div>
   </section>

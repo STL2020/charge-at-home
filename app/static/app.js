@@ -570,15 +570,24 @@ async function editSession(sessionId) {
   }
   loadSessionFormSuggestions();
 
-  // Zum Formular scrollen statt an den Seitenanfang — bei langen Listen
-  // hätte man sonst suchen müssen, wohin der Klick geführt hat.
+  // Bei zweispaltiger Ansicht steht das Formular schon im Blick — dann
+  // genügt ein kurzes Hervorheben. Schmale Bildschirme scrollen hin.
   const form = document.getElementById('new-session-form');
   if (form) {
-    form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (window.innerWidth <= 1200) {
+      form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
     form.style.transition = 'box-shadow .3s';
     form.style.boxShadow = '0 0 0 2px var(--amber)';
-    setTimeout(() => { form.style.boxShadow = ''; }, 1200);
+    setTimeout(() => { form.style.boxShadow = ''; }, 1000);
   }
+
+  // Bearbeitete Zeile kennzeichnen — wie bei den Fahrten
+  document.querySelectorAll('#sessions-tbody tr').forEach(tr =>
+    tr.classList.remove('zeile-aktiv'));
+  const zeile = document.querySelector(`#sessions-tbody input[data-id="${sessionId}"]`)
+                        ?.closest('tr');
+  if (zeile) zeile.classList.add('zeile-aktiv');
 }
 
 async function deleteSession(sessionId) {
