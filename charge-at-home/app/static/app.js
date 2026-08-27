@@ -7142,8 +7142,25 @@ async function cardataStreamSchalten(cb) {
       _toast('Datenstrom nur in der Vollversion');
       return;
     }
-    _toast(cb.checked ? 'Datenstrom wird aufgebaut …' : 'Datenstrom angehalten');
+    if (cb.checked) {
+      // Der Abruf wird überflüssig: Der Strom liefert Position und
+      // Kilometerstand in der Meldung mit — ohne Kontingentverbrauch.
+      const sel = document.getElementById('cardata-intervall');
+      if (sel && sel.value !== '0') {
+        sel.value = '0';
+        await fetch('/api/cardata/automatik', {
+          method: 'POST', headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ aktiv: false, intervall_min: 0 })
+        });
+        _toast('Datenstrom aktiv — der regelmäßige Abruf wurde abgeschaltet');
+      } else {
+        _toast('Datenstrom wird aufgebaut …');
+      }
+    } else {
+      _toast('Datenstrom angehalten — regelmäßigen Abruf nicht vergessen');
+    }
     setTimeout(loadStreamZustand, 2500);
+    setTimeout(loadKontingent, 2600);
   } catch (e) {
     _toast('Umschalten fehlgeschlagen');
   }
@@ -7156,6 +7173,12 @@ async function loadStreamZustand() {
   try {
     const d = await (await hole('/api/cardata/stream')).json();
     if (cb) cb.checked = !!d.aktiv;
+
+    // Beim Abrufintervall vermerken, dass es nicht mehr gebraucht wird
+    const intervallHinweis = document.getElementById('intervall-ueberfluessig');
+    if (intervallHinweis) {
+      intervallHinweis.style.display = d.aktiv ? 'block' : 'none';
+    }
 
     if (!d.aktiv) { box.style.display = 'none'; return; }
     box.style.display = 'block';
