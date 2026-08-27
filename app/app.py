@@ -60,7 +60,7 @@ def handle_404(exc):
     # Für nicht-API-Routen: normale 404-Seite oder zur App weiterleiten
     return jsonify({"error": "not_found"}), 404
 
-PFLICHTENHEFT_VERSION = "13.0"
+PFLICHTENHEFT_VERSION = "13.1"
 
 # Fassung, die dem Anwender gezeigt wird. Die Pflichtenheft-Nummer daneben ist
 # die interne Baunummer — beide zusammen machen Rückfragen eindeutig.
@@ -152,6 +152,8 @@ PROJECT_STATUS = [
     {"sprint": 9, "id": "S9-03", "modul": "Dashboard", "text": "Fahrzeugstatus-Kachel: Reichweite, Ladestand, Kilometerstand, Standort-Link je verbundenem Fahrzeug, mit gezieltem Aktualisieren-Knopf (ein Abruf vom Tageskontingent statt automatischem Dauerabruf).", "status": "fertig", "view": "dashboard"},
     {"sprint": 9, "id": "S9-04", "modul": "Aufraeumen", "text": "Alte globale BMW-Einstellungsseite, Automatik-Fahrten-Ableitung (API-basiert) und toter Code (pruefe_fahrt, rekonstruiere_fahrten, importiere_archiv, Automatik-Timer) vollstaendig entfernt.", "status": "fertig", "view": "einstellungen"},
     {"sprint": 9, "id": "S9-05", "modul": "BMW Telematik", "text": "Archiv-Import (ZIP, Ladehistorie als Ladesessions) mit echter Kundendatei end-to-end getestet: 49 Eintraege gelesen, 35 Heimladungen korrekt uebersprungen, 4 externe Schnellladungen mit plausiblen Werten importiert.", "status": "fertig", "view": "fahrzeuge"},
+    {"sprint": 9, "id": "S9-06", "modul": "Fahrzeuge", "text": "BUG BEHOBEN: closeVehicleModal() raeumte die Protokoll- und Anmelde-Timer nicht auf. Bei mehrfachem Oeffnen/Anzeigen des Protokolls liefen mehrere 5-Sekunden-Timer gleichzeitig, jeder schrieb wachsende Textmengen ins DOM — nach ein paar Testlaeufen liess das die Seite spuerbar haengen, bis hin zum nicht mehr reagierenden Schliessen-Knopf. Timer werden jetzt beim Oeffnen UND Schliessen bereinigt, Protokollanzeige zusaetzlich auf die letzten 40 Zeilen begrenzt.", "status": "fertig", "view": "fahrzeuge"},
+    {"sprint": 9, "id": "S9-07", "modul": "Fahrzeuge", "text": "Link zur BMW-Portal-Anmeldung im Fahrzeug-Dialog korrigiert auf https://www.bmw.de/de-de/mybmw/vehicle-overview (Fahrzeug waehlen -> BMW CarData -> Technical Access) statt des alten CarData-Direktlinks.", "status": "fertig", "view": "fahrzeuge"},
 
 ]
 

@@ -5078,6 +5078,14 @@ async function openVehicleModal() {
 
 function closeVehicleModal() {
   document.getElementById('vehicle-modal').style.display = 'none';
+  // BUG BEHOBEN (28.08.): Timer liefen nach dem Schließen weiter — jedes
+  // erneute Öffnen/Anzeigen des Protokolls legte einen ZUSAETZLICHEN,
+  // nie beendeten 5-Sekunden-Timer an. Nach ein paar Testläufen liefen
+  // mehrere gleichzeitig, jeder schrieb wachsende Textmengen ins DOM —
+  // das hat die Seite spuerbar haengen lassen, bis hin zum nicht mehr
+  // reagierenden Schliessen-Knopf.
+  if (_vehicleBmwPolling) { clearInterval(_vehicleBmwPolling); _vehicleBmwPolling = null; }
+  if (_vehicleBmwProtokollTimer) { clearInterval(_vehicleBmwProtokollTimer); _vehicleBmwProtokollTimer = null; }
 }
 
 async function editVehicle(id) {
@@ -5369,6 +5377,9 @@ function vehicleBmwProtokollToggle() {
   const pre = document.getElementById('vehicle-bmw-protokoll');
   const btn = document.getElementById('vehicle-bmw-protokoll-toggle-btn');
   const show = pre.style.display === 'none';
+  // Sicherheitsnetz: vor dem Start immer erst einen evtl. noch laufenden
+  // Timer beenden, statt einen zweiten daneben zu haengen.
+  if (_vehicleBmwProtokollTimer) { clearInterval(_vehicleBmwProtokollTimer); _vehicleBmwProtokollTimer = null; }
   if (show) {
     pre.style.display = 'block';
     btn.textContent = 'Protokoll ausblenden';
@@ -5377,7 +5388,6 @@ function vehicleBmwProtokollToggle() {
   } else {
     pre.style.display = 'none';
     btn.textContent = 'Protokoll anzeigen';
-    if (_vehicleBmwProtokollTimer) { clearInterval(_vehicleBmwProtokollTimer); _vehicleBmwProtokollTimer = null; }
   }
 }
 
@@ -5387,7 +5397,12 @@ async function _vehicleBmwProtokollAktualisieren() {
   if (!vid || !pre) return;
   try {
     const d = await (await fetch(`/api/vehicles/${vid}/cardata/stream/protokoll`)).json();
-    pre.textContent = (d.log_tail || []).join('\n') || 'Noch keine Einträge.';
+    // Nur die letzten 40 Zeilen anzeigen — bei viel Fahrzeugverkehr kann
+    // das Protokoll schnell auf hunderte Zeilen anwachsen; die Anzeige
+    // wuerde sonst bei jeder Aktualisierung eine wachsende Textmenge neu
+    // rendern und die Seite spuerbar traege machen.
+    const zeilen = (d.log_tail || []).slice(-40);
+    pre.textContent = zeilen.length ? zeilen.join('\n') : 'Noch keine Einträge.';
   } catch (e) {}
 }
 
