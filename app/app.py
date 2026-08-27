@@ -60,7 +60,7 @@ def handle_404(exc):
     # Für nicht-API-Routen: normale 404-Seite oder zur App weiterleiten
     return jsonify({"error": "not_found"}), 404
 
-PFLICHTENHEFT_VERSION = "12.55"
+PFLICHTENHEFT_VERSION = "13.0"
 
 # Fassung, die dem Anwender gezeigt wird. Die Pflichtenheft-Nummer daneben ist
 # die interne Baunummer — beide zusammen machen Rückfragen eindeutig.
@@ -146,6 +146,12 @@ PROJECT_STATUS = [
     {"sprint": 8, "id": "S8-05", "modul": "Diagnose", "text": "Live-Protokoll der Stream-Verbindung direkt in der App (Einstellungen -> BMW), kein Terminal/Putty mehr noetig: jede Verbindungsstufe (Connect/Subscribe/Nachricht/Fehler) im Ringpuffer, automatische Aktualisierung alle 5s nach Muster der bestehenden OCPP-Rohdaten-Anzeige", "status": "fertig", "view": "einstellungen"},
     {"sprint": 8, "id": "S8-06", "modul": "BMW Telematik", "text": "CarData-Stream: erzwungene Token-Erneuerung nach wiederholten Verbindungsfehlschlaegen — beobachtet in Produktion (echtes Protokoll): nach 'Normal disconnection' (vermutlich zweite Sitzung mit gleichem Konto) wurden alle Rekonnektversuche mit dem als 'noch gueltig' gebuchten, tatsaechlich aber toten Token wiederholt, endlos 'Bad user name or password'. Ab dem 2. Fehlschlag in Folge wird jetzt zwangsweise erneuert.", "status": "fertig", "view": "einstellungen"},
     {"sprint": 8, "id": "S8-07", "modul": "BMW Telematik", "text": "Server-seitige Ausschliesslichkeit Stream vs. periodischer Abruf — bisher nur im Frontend beim Anklicken der Checkbox hergestellt. War 'cardata_auto' aus einer Zeit vor dem Umstieg auf den Stream noch auf '1' gespeichert, liefen nach jedem Neustart BEIDE Mechanismen gleichzeitig: der periodische Abruf erneuert ueber denselben Login regelmaessig Access- und ID-Token und kappt damit vermutlich die laufende Stream-Sitzung (Ursache fuer den in S8-06 behobenen Fehlerfall). Jetzt bei setze_aktiv() UND beim Neustart hart erzwungen.", "status": "fertig", "view": "einstellungen"},
+
+    {"sprint": 9, "id": "S9-01", "modul": "BMW Telematik", "text": "Umbau: BMW-CarData-Verbindung (Client-ID, GCID, Token, Stream) von anwendungsweiten Einstellungen auf je-Fahrzeug-Datensaetze umgestellt (neue Tabelle vehicle_bmw_connections). Mehrere Fahrzeuge koennen jetzt gleichzeitig eigene, unabhaengige BMW-Konten nutzen — cardata_auth_service, cardata_stream_service (mehrere parallele MQTT-Verbindungen), cardata_service und alle Routen (/api/vehicles/<id>/cardata/...) vollstaendig umgeschrieben, mit zwei simulierten Fahrzeugen end-to-end getestet.", "status": "fertig", "view": "fahrzeuge"},
+    {"sprint": 9, "id": "S9-02", "modul": "BMW Telematik", "text": "Fahrzeug-Dialog: Umschalter 'Manuell' / 'Aus BMW-Konto importieren' mit vollstaendigem Anmeldefluss (Client-ID -> Geraetecode-Bestaetigung -> Fahrzeugauswahl vom Konto -> Verbindung), Stream-Schalter, Ladehistorie-Import (API + Archiv-ZIP), Live-Protokoll und Verbindung-trennen direkt im Dialog je Fahrzeug.", "status": "fertig", "view": "fahrzeuge"},
+    {"sprint": 9, "id": "S9-03", "modul": "Dashboard", "text": "Fahrzeugstatus-Kachel: Reichweite, Ladestand, Kilometerstand, Standort-Link je verbundenem Fahrzeug, mit gezieltem Aktualisieren-Knopf (ein Abruf vom Tageskontingent statt automatischem Dauerabruf).", "status": "fertig", "view": "dashboard"},
+    {"sprint": 9, "id": "S9-04", "modul": "Aufraeumen", "text": "Alte globale BMW-Einstellungsseite, Automatik-Fahrten-Ableitung (API-basiert) und toter Code (pruefe_fahrt, rekonstruiere_fahrten, importiere_archiv, Automatik-Timer) vollstaendig entfernt.", "status": "fertig", "view": "einstellungen"},
+    {"sprint": 9, "id": "S9-05", "modul": "BMW Telematik", "text": "Archiv-Import (ZIP, Ladehistorie als Ladesessions) mit echter Kundendatei end-to-end getestet: 49 Eintraege gelesen, 35 Heimladungen korrekt uebersprungen, 4 externe Schnellladungen mit plausiblen Werten importiert.", "status": "fertig", "view": "fahrzeuge"},
 
 ]
 
@@ -1994,52 +2000,6 @@ def api_vehicles_list():
     person_id = request.args.get("person_id", type=int)
     vehicles = vehicle_repository.list_vehicles(person_id)
     return jsonify({"vehicles": vehicles})
-
-
-@app.route("/api/vehicles/aus-bmw", methods=["POST"])
-def api_vehicle_aus_bmw():
-    """Legt das Fahrzeug aus den zuletzt abgerufenen CarData-Werten an.
-
-    Braucht keine Fahrzeugliste vom Konto: Die Fahrgestellnummer steht in
-    den Einstellungen, die Werte im letzten Telematik-Abruf. Damit
-    funktioniert es auch, wenn BMW die Fahrzeugliste verweigert — was bei
-    Zweitnutzern regelmaessig vorkommt.
-    """
-    if not edition_service.funktion_verfuegbar("bmw"):
-        return jsonify(edition_service.gesperrt_hinweis("bmw")), 402
-
-    vin = (settings_repository.get_setting("cardata_vin") or "").strip()
-    if not vin:
-        return jsonify({"ok": False,
-                        "fehler": "Keine Fahrgestellnummer hinterlegt. Bitte "
-                                  "zuerst unter Einstellungen → BMW eintragen."}), 400
-
-    daten = cardata_service.fahrzeugdaten(vin) or {}
-    wartung = daten.get("wartung") or {}
-
-    werte = {
-        "vin": vin,
-        "bezeichnung": "BMW",
-        "km_stand": int(daten["km"]) if daten.get("km") else None,
-        "km_stand_datum": (daten.get("zeitpunkt") or "")[:10] or None,
-        "hu_faellig": wartung.get("hu_faellig"),
-        "service_faellig": wartung.get("service_faellig"),
-        "bremsfluessigkeit": wartung.get("bremsfluessigkeit"),
-    }
-    werte = {k: v for k, v in werte.items() if v is not None}
-
-    vorher = vehicle_repository.list_vehicles()
-    bekannt = any(v.get("vin") == vin for v in vorher)
-    vid = vehicle_repository.anlegen_aus_bmw(werte)
-
-    event_log_service.log_event("bmw", "info",
-        f"Fahrzeug {'aktualisiert' if bekannt else 'angelegt'}: {vin}")
-
-    # Hinweis, wenn ausser der Nummer nichts bekannt ist
-    duenn = len(werte) <= 2
-    return jsonify({"ok": True, "neu": not bekannt, "vehicle_id": vid,
-                    "duenn": duenn,
-                    **{k: v for k, v in werte.items() if k != "bezeichnung"}})
 
 
 @app.route("/api/vehicles/aus-archiv", methods=["POST"])
@@ -3982,16 +3942,16 @@ def api_wallboxen_zusammenfuehren():
                     "entfernt": geloescht, "ziel": ziel["name"]})
 
 
-@app.route("/api/cardata/stream", methods=["GET"])
-def api_cardata_stream_status():
-    """Zustand des MQTT-Streams."""
+@app.route("/api/vehicles/<int:vehicle_id>/cardata/stream", methods=["GET"])
+def api_vehicle_cardata_stream_status(vehicle_id):
+    """Zustand des MQTT-Streams dieses Fahrzeugs."""
     from services import cardata_stream_service
-    return jsonify(cardata_stream_service.status())
+    return jsonify(cardata_stream_service.status(vehicle_id))
 
 
-@app.route("/api/cardata/stream-verbindung", methods=["GET", "POST"])
-def api_cardata_stream_verbindung():
-    """Host und Port fuer die Stream-Verbindung.
+@app.route("/api/vehicles/<int:vehicle_id>/cardata/stream-verbindung", methods=["GET", "POST"])
+def api_vehicle_cardata_stream_verbindung(vehicle_id):
+    """Host und Port fuer die Stream-Verbindung dieses Fahrzeugs.
 
     Beide stehen im BMW-Portal als Teil der individuellen
     Streaming-Zugangsdaten (nicht als App-Geheimnis) und sollen deshalb
@@ -4000,8 +3960,8 @@ def api_cardata_stream_verbindung():
     from services import cardata_stream_service
     if request.method == "GET":
         return jsonify({
-            "host": cardata_stream_service.mqtt_host(),
-            "port": cardata_stream_service.mqtt_port(),
+            "host": cardata_stream_service.mqtt_host(vehicle_id),
+            "port": cardata_stream_service.mqtt_port(vehicle_id),
             "host_standard": cardata_stream_service.MQTT_HOST_STANDARD,
             "port_standard": cardata_stream_service.MQTT_PORT_STANDARD,
         })
@@ -4011,32 +3971,32 @@ def api_cardata_stream_verbindung():
         port = int(daten.get("port") or 0)
     except (TypeError, ValueError):
         return jsonify({"ok": False, "meldung": "Port muss eine Zahl sein."}), 400
-    cardata_stream_service.setze_verbindung(host, port)
+    cardata_stream_service.setze_verbindung(vehicle_id, host, port)
     return jsonify({"ok": True,
-                    "host": cardata_stream_service.mqtt_host(),
-                    "port": cardata_stream_service.mqtt_port()})
+                    "host": cardata_stream_service.mqtt_host(vehicle_id),
+                    "port": cardata_stream_service.mqtt_port(vehicle_id)})
 
 
-@app.route("/api/cardata/stream/protokoll", methods=["GET"])
-def api_cardata_stream_protokoll():
-    """Live-Protokoll der Stream-Verbindung — direkt in der App statt im
-    Terminal. Jede Verbindungsstufe (Connect, Subscribe, Nachricht, Fehler)
-    landet hier, nicht nur die spärlichen Einträge im allgemeinen
-    Ereignisprotokoll."""
+@app.route("/api/vehicles/<int:vehicle_id>/cardata/stream/protokoll", methods=["GET"])
+def api_vehicle_cardata_stream_protokoll(vehicle_id):
+    """Live-Protokoll der Stream-Verbindung dieses Fahrzeugs — direkt in
+    der App statt im Terminal. Jede Verbindungsstufe (Connect, Subscribe,
+    Nachricht, Fehler) landet hier, nicht nur die spärlichen Einträge im
+    allgemeinen Ereignisprotokoll."""
     from services import cardata_stream_service
-    return jsonify({"log_tail": cardata_stream_service.protokoll_lesen()})
+    return jsonify({"log_tail": cardata_stream_service.protokoll_lesen(vehicle_id)})
 
 
-@app.route("/api/cardata/stream/protokoll", methods=["DELETE"])
-def api_cardata_stream_protokoll_leeren():
+@app.route("/api/vehicles/<int:vehicle_id>/cardata/stream/protokoll", methods=["DELETE"])
+def api_vehicle_cardata_stream_protokoll_leeren(vehicle_id):
     from services import cardata_stream_service
-    cardata_stream_service.protokoll_leeren()
+    cardata_stream_service.protokoll_leeren(vehicle_id)
     return jsonify({"ok": True})
 
 
-@app.route("/api/cardata/stream", methods=["POST"])
-def api_cardata_stream_setzen():
-    """Stream ein- oder ausschalten.
+@app.route("/api/vehicles/<int:vehicle_id>/cardata/stream", methods=["POST"])
+def api_vehicle_cardata_stream_setzen(vehicle_id):
+    """Stream dieses Fahrzeugs ein- oder ausschalten.
 
     Der Stream ersetzt den regelmaessigen Abruf: BMW schickt Aenderungen
     von sich aus, ohne Tageskontingent. Damit wird jede Fahrt erfasst,
@@ -4048,48 +4008,47 @@ def api_cardata_stream_setzen():
     from services import cardata_stream_service
     daten = request.get_json(force=True, silent=True) or {}
     an = bool(daten.get("aktiv"))
-    cardata_stream_service.setze_aktiv(an)
-    return jsonify({"ok": True, **cardata_stream_service.status()})
+    cardata_stream_service.setze_aktiv(vehicle_id, an)
+    return jsonify({"ok": True, **cardata_stream_service.status(vehicle_id)})
 
 
-@app.route("/api/cardata/kontingent", methods=["GET"])
-def api_cardata_kontingent():
-    """Verbrauchte und verbleibende Abrufe des Tages."""
-    return jsonify(cardata_service.kontingent())
+@app.route("/api/vehicles/<int:vehicle_id>/cardata/kontingent", methods=["GET"])
+def api_vehicle_cardata_kontingent(vehicle_id):
+    """Verbrauchte und verbleibende Abrufe des Tages fuer dieses Fahrzeug."""
+    return jsonify(cardata_service.kontingent(vehicle_id))
 
 
-@app.route("/api/cardata/status", methods=["GET"])
-def api_cardata_status():
+@app.route("/api/vehicles/<int:vehicle_id>/cardata/status", methods=["GET"])
+def api_vehicle_cardata_status(vehicle_id):
     if not edition_service.funktion_verfuegbar("bmw"):
         return jsonify(edition_service.gesperrt_hinweis("bmw")), 402
-    st = cardata_service.status()
-    st["auto"] = (settings_repository.get_setting("cardata_auto") or "0") == "1"
-    st["intervall_min"] = cardata_service._intervall_minuten()
-    st["letzter_abruf"] = settings_repository.get_setting("cardata_letzter_abruf") or ""
-    st["abrufe_pro_tag"] = (24 * 60 // st["intervall_min"]) if st["intervall_min"] else 0
+    from repositories import vehicle_bmw_repository as bmw_repo
+    st = cardata_service.status(vehicle_id)
+    st["letzter_abruf"] = bmw_repo.get(vehicle_id)["letzter_abruf"]
     return jsonify(st)
 
 
-@app.route("/api/cardata/anmelden", methods=["POST"])
-def api_cardata_anmelden():
-    """Schritt 1: Geraetecode anfordern. Der Nutzer bestaetigt danach im Browser."""
+@app.route("/api/vehicles/<int:vehicle_id>/cardata/anmelden", methods=["POST"])
+def api_vehicle_cardata_anmelden(vehicle_id):
+    """Schritt 1: Geraetecode fuer dieses Fahrzeug anfordern. Der Nutzer
+    bestaetigt danach im Browser."""
     if not edition_service.funktion_verfuegbar("bmw"):
         return jsonify(edition_service.gesperrt_hinweis("bmw")), 402
     data = request.get_json(force=True) or {}
     return jsonify(cardata_auth_service.starte_geraeteanmeldung(
-        str(data.get("client_id") or "").strip(),
+        vehicle_id, str(data.get("client_id") or "").strip(),
         mit_streaming=bool(data.get("mit_streaming"))))
 
 
-@app.route("/api/cardata/tokens", methods=["POST"])
-def api_cardata_tokens():
-    """Schritt 2: Nach der Bestaetigung die Token abholen.
+@app.route("/api/vehicles/<int:vehicle_id>/cardata/tokens", methods=["POST"])
+def api_vehicle_cardata_tokens(vehicle_id):
+    """Schritt 2: Nach der Bestaetigung die Token fuer dieses Fahrzeug abholen.
 
     Solange die Bestaetigung aussteht, meldet BMW 'authorization_pending' —
     das Frontend fragt dann in Abstaenden erneut."""
     if not edition_service.funktion_verfuegbar("bmw"):
         return jsonify(edition_service.gesperrt_hinweis("bmw")), 402
-    ergebnis = cardata_auth_service.hole_tokens()
+    ergebnis = cardata_auth_service.hole_tokens(vehicle_id)
     if ergebnis.get("ok"):
         event_log_service.log_event("bmw", "info",
             f"CarData-Anmeldung erfolgreich (Konto-ID {ergebnis.get('gcid','—')}). "
@@ -4100,64 +4059,54 @@ def api_cardata_tokens():
     return jsonify(ergebnis)
 
 
-@app.route("/api/cardata/abmelden", methods=["POST"])
-def api_cardata_abmelden():
+@app.route("/api/vehicles/<int:vehicle_id>/cardata/abmelden", methods=["POST"])
+def api_vehicle_cardata_abmelden(vehicle_id):
     if not edition_service.funktion_verfuegbar("bmw"):
         return jsonify(edition_service.gesperrt_hinweis("bmw")), 402
-    cardata_auth_service.abmelden()
-    settings_repository.set_setting("cardata_container_id", "")
+    from services import cardata_stream_service
+    cardata_stream_service.stoppe(vehicle_id)
+    cardata_auth_service.abmelden(vehicle_id)
     return jsonify({"ok": True})
 
 
-@app.route("/api/cardata/fahrzeuge", methods=["GET"])
-def api_cardata_fahrzeuge():
-    """Fahrzeuge des Kontos (verbraucht einen Abruf vom Tageslimit).
+@app.route("/api/vehicles/<int:vehicle_id>/cardata/fahrzeuge", methods=["GET"])
+def api_vehicle_cardata_fahrzeuge(vehicle_id):
+    """Fahrzeuge des BMW-Kontos, das an dieses App-Fahrzeug angemeldet ist
+    (verbraucht einen Abruf vom Tageslimit).
 
-    Optionaler Komfort — die VIN laesst sich auch von Hand eintragen. Fehler
-    landen im Protokoll, damit die Ursache nachvollziehbar bleibt."""
+    Dient dazu, beim Anlegen 'aus BMW-Konto importieren' die passende VIN
+    auszuwaehlen — die manuelle Eingabe bleibt daneben immer moeglich."""
     if not edition_service.funktion_verfuegbar("bmw"):
         return jsonify(edition_service.gesperrt_hinweis("bmw")), 402
-    ergebnis = cardata_service.hole_fahrzeuge()
+    ergebnis = cardata_service.hole_fahrzeuge(vehicle_id)
     if not ergebnis.get("ok"):
         event_log_service.log_event("bmw", "warning",
             f"CarData Fahrzeugliste: {ergebnis.get('meldung', 'unbekannter Fehler')}")
     return jsonify(ergebnis)
 
 
-@app.route("/api/cardata/vin", methods=["POST"])
-def api_cardata_vin():
-    """Fahrgestellnummer festlegen, die abgerufen werden soll."""
+@app.route("/api/vehicles/<int:vehicle_id>/cardata/vin", methods=["POST"])
+def api_vehicle_cardata_vin(vehicle_id):
+    """Fahrgestellnummer dieses Fahrzeugs festlegen (nach Auswahl aus der
+    BMW-Kontoliste oder von Hand eingetragen)."""
     if not edition_service.funktion_verfuegbar("bmw"):
         return jsonify(edition_service.gesperrt_hinweis("bmw")), 402
     data = request.get_json(force=True) or {}
-    settings_repository.set_setting("cardata_vin",
-                                    str(data.get("vin") or "").strip().upper())
-    return jsonify({"ok": True})
+    vin = str(data.get("vin") or "").strip().upper()
+    vehicle_repository.setze_stammdaten(vehicle_id, {"vin": vin})
+    return jsonify({"ok": True, "vin": vin})
 
 
-# ENTFERNT: Der Archiv-Import erzeugte Fahrten aus Ladepunkten. Zwischen
-# zwei Ladungen kann beliebig viel liegen — 100 km zum Kunden und danach
-# 20 km einkaufen wurden zu einer "Fahrt" ueber 120 km. Fahrten entstehen
-# jetzt ausschliesslich aus dem regelmaessigen Abruf von Position und
-# Kilometerstand. Die Route antwortet mit einer Erklaerung statt zu
-# verschwinden, damit aeltere Lesezeichen nicht ins Leere laufen.
-@app.route("/api/cardata/archiv-import", methods=["POST"])
-def api_cardata_archiv_import_entfernt():
-    return jsonify({
-        "ok": False,
-        "fehler": ("Der Archiv-Import für Fahrten wurde entfernt. Die "
-                   "Ladehistorie kennt nur Ladeorte — was zwischen zwei "
-                   "Ladungen passiert ist, steht dort nicht. Fahrten "
-                   "entstehen jetzt aus dem automatischen Abruf; "
-                   "einzustellen unter Einstellungen → BMW.")}), 410
+@app.route("/api/vehicles/<int:vehicle_id>/cardata/archiv-ladesessions", methods=["POST"])
+def api_vehicle_cardata_archiv_ladesessions(vehicle_id):
+    """Importiert die Ladehistorie aus dem BMW-Datenarchiv (ZIP) fuer
+    dieses Fahrzeug als Ladesessions — einmaliger Vorgang fuer Zeitraeume
+    vor den letzten 30 Tagen. Die laufende Verbindung (Datenstrom) deckt
+    danach alles Weitere ab; das Archiv wird dafuer nicht mehr gebraucht.
 
-
-@app.route("/api/cardata/archiv-import-alt", methods=["POST"])
-def api_cardata_archiv_import():
-    """Importiert Fahrten aus dem BMW-CarData-Datenarchiv (ZIP).
-
-    Ergaenzt die laufende Erfassung um die Vergangenheit: Die API kennt nur den
-    aktuellen Kilometerstand, das Archiv reicht Wochen zurueck."""
+    Ersetzt den frueheren Archiv-Import, der stattdessen Fahrten aus
+    Ladepunkten rekonstruierte (entfernt: zwischen zwei Ladungen kann
+    beliebig viel liegen, siehe cardata_archiv_service)."""
     if not edition_service.funktion_verfuegbar("bmw"):
         return jsonify(edition_service.gesperrt_hinweis("bmw")), 402
     user = _current_user()
@@ -4171,79 +4120,99 @@ def api_cardata_archiv_import():
         return jsonify({"ok": False,
                         "meldung": "Bitte das ZIP-Archiv aus dem BMW-Portal hochladen."}), 400
 
-    vehicle_id = None
-    try:
-        vehs = vehicle_repository.list_vehicles()
-        std = next((v for v in vehs if v.get("ist_standard")), (vehs[0] if vehs else None))
-        vehicle_id = std["id"] if std else None
-    except Exception:
-        pass
-
-    # Temporaer ablegen: zipfile braucht einen Dateipfad
+    fahrzeug = vehicle_repository.get_vehicle(vehicle_id) or {}
     import tempfile
     with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as tmp:
         datei.save(tmp.name)
         pfad = tmp.name
     try:
-        ergebnis = cardata_archiv_service.importiere_archiv(
-            pfad, user["id"],
-            vin=settings_repository.get_setting("cardata_vin") or "",
-            vehicle_id=vehicle_id)
+        ergebnis = cardata_archiv_service.importiere_ladehistorie_datei(
+            vehicle_id, pfad, user["id"], vin=fahrzeug.get("vin") or "")
     finally:
         try:
             os.unlink(pfad)
         except Exception:
             pass
+    if ergebnis.get("ok") and ergebnis.get("neu"):
+        event_log_service.log_event("bmw", "info",
+            f"Archiv-Import: {ergebnis['neu']} Ladevorgänge übernommen.")
     return jsonify(ergebnis)
 
 
-@app.route("/api/cardata/automatik", methods=["POST"])
-def api_cardata_automatik():
-    """Automatischen Abruf ein-/ausschalten und Intervall festlegen."""
-    if not edition_service.funktion_verfuegbar("bmw"):
-        return jsonify(edition_service.gesperrt_hinweis("bmw")), 402
-    data = request.get_json(force=True) or {}
-    aktiv = bool(data.get("aktiv"))
-    settings_repository.set_setting("cardata_auto", "1" if aktiv else "0")
-    if data.get("intervall_min") is not None:
-        settings_repository.set_setting("cardata_intervall_min",
-                                        str(int(data.get("intervall_min"))))
-    if aktiv:
-        cardata_service.starte_automatik()
-    else:
-        cardata_service.stoppe_automatik()
-    return jsonify({"ok": True, "aktiv": aktiv,
-                    "intervall_min": cardata_service._intervall_minuten()})
+@app.route("/api/vehicles/<int:vehicle_id>/cardata/ladesessions", methods=["POST"])
+def api_vehicle_cardata_ladesessions(vehicle_id):
+    """Importiert die Ladehistorie der letzten 30 Tage dieses Fahrzeugs als
+    Ladesessions.
 
-
-@app.route("/api/cardata/abrufen", methods=["POST"])
-def api_cardata_abrufen():
-    """Einmaliger Abruf: prueft, ob seit dem letzten Mal gefahren wurde."""
+    Der Ladeort wird mitgefuehrt: Nur zuhause geladener Strom faellt unter den
+    steuerfreien Auslagenersatz (§ 3 Nr. 50 EStG)."""
     if not edition_service.funktion_verfuegbar("bmw"):
         return jsonify(edition_service.gesperrt_hinweis("bmw")), 402
     user = _current_user()
     if user is None:
         return jsonify({"error": "no_user"}), 400
-    vin = settings_repository.get_setting("cardata_vin") or ""
+    fahrzeug = vehicle_repository.get_vehicle(vehicle_id) or {}
+    vin = fahrzeug.get("vin") or ""
     if not vin:
-        return jsonify({"ok": False, "meldung": "Bitte zuerst ein Fahrzeug auswählen."})
+        return jsonify({"ok": False, "meldung": "Bitte zuerst die Fahrgestellnummer eintragen."})
+    return jsonify(cardata_service.importiere_ladesessions(vehicle_id, vin, user["id"]))
 
-    vehicle_id = None
-    try:
-        vehs = vehicle_repository.list_vehicles()
-        std = next((v for v in vehs if v.get("ist_standard")), (vehs[0] if vehs else None))
-        vehicle_id = std["id"] if std else None
-    except Exception:
-        pass
 
-    ergebnis = cardata_service.pruefe_fahrt(vin, user["id"], vehicle_id)
-    if ergebnis.get("ok") and ergebnis.get("fahrt_erkannt"):
-        event_log_service.log_event("bmw", "info",
-            f"Neue Fahrt über {ergebnis.get('distanz_km')} km erkannt.")
-    if ergebnis.get("ok"):
-        settings_repository.set_setting(
-            "cardata_letzter_abruf", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+@app.route("/api/vehicles/<int:vehicle_id>/cardata/fahrzeugdaten", methods=["GET"])
+def api_vehicle_cardata_fahrzeugdaten(vehicle_id):
+    """Zuletzt vom Fahrzeug gemeldete Stammdaten (Reichweite, Akku, Standort,
+    Service) — Grundlage der Status-Kachel im Dashboard."""
+    if not edition_service.funktion_verfuegbar("bmw"):
+        return jsonify(edition_service.gesperrt_hinweis("bmw")), 402
+    return jsonify(cardata_service.fahrzeugdaten(vehicle_id))
+
+
+@app.route("/api/vehicles/<int:vehicle_id>/cardata/fahrzeugdaten/aktualisieren", methods=["POST"])
+def api_vehicle_cardata_fahrzeugdaten_aktualisieren(vehicle_id):
+    """Ruft die aktuellen Fahrzeugwerte einmalig ab (1 Abruf vom Tageslimit) —
+    fuer die 'Jetzt aktualisieren'-Schaltflaeche an der Status-Kachel,
+    unabhaengig davon, ob der Stream laeuft."""
+    if not edition_service.funktion_verfuegbar("bmw"):
+        return jsonify(edition_service.gesperrt_hinweis("bmw")), 402
+    ergebnis = cardata_service.aktualisiere_fahrzeugdaten(vehicle_id)
+    if not ergebnis.get("ok"):
+        event_log_service.log_event("bmw", "warning",
+            f"Fahrzeugdaten-Abruf: {ergebnis.get('meldung', 'unbekannter Fehler')}")
     return jsonify(ergebnis)
+
+
+@app.route("/api/vehicles/<int:vehicle_id>/cardata/import-zuruecksetzen", methods=["POST"])
+def api_vehicle_cardata_import_zuruecksetzen(vehicle_id):
+    """Setzt den BMW-Import dieses Fahrzeugs vollstaendig zurueck.
+
+    Entfernt die aus CarData stammenden Ladesessions und die
+    Referenztabelle der Fahrten. Danach holt ein erneuter Abruf wirklich
+    alles — ohne dass Reste den Duplikatschutz auslösen."""
+    if not edition_service.funktion_verfuegbar("bmw"):
+        return jsonify(edition_service.gesperrt_hinweis("bmw")), 402
+    user = _current_user()
+    if user is None:
+        return jsonify({"error": "no_user"}), 400
+
+    conn = get_connection()
+    try:
+        sessions = conn.execute(
+            """DELETE FROM charging_sessions WHERE source = 'bmw_app' AND user_id = ?
+               AND wallbox_id IN (SELECT id FROM wallboxes)""",
+            (user["id"],)).rowcount
+        referenzen = conn.execute(
+            "DELETE FROM bmw_trips WHERE user_id = ? AND vehicle_id = ?",
+            (user["id"], vehicle_id)).rowcount
+        conn.commit()
+    finally:
+        conn.close()
+
+    event_log_service.log_event("bmw", "info",
+        f"BMW-Import zurückgesetzt: {sessions} Ladevorgänge, "
+        f"{referenzen} Fahrt-Referenzen entfernt.")
+    return jsonify({"ok": True, "sessions": sessions, "referenzen": referenzen})
+
+
 
 
 @app.route("/api/trips/sammel-fahrtart", methods=["POST"])
@@ -4302,23 +4271,6 @@ def api_trips_km_bereich():
         user["id"], request.args.get("von"), request.args.get("bis")))
 
 
-@app.route("/api/cardata/ladesessions", methods=["POST"])
-def api_cardata_ladesessions():
-    """Importiert die Ladehistorie der letzten 30 Tage als Ladesessions.
-
-    Der Ladeort wird mitgefuehrt: Nur zuhause geladener Strom faellt unter den
-    steuerfreien Auslagenersatz (§ 3 Nr. 50 EStG)."""
-    if not edition_service.funktion_verfuegbar("bmw"):
-        return jsonify(edition_service.gesperrt_hinweis("bmw")), 402
-    user = _current_user()
-    if user is None:
-        return jsonify({"error": "no_user"}), 400
-    vin = settings_repository.get_setting("cardata_vin") or ""
-    if not vin:
-        return jsonify({"ok": False, "meldung": "Bitte zuerst ein Fahrzeug auswählen."})
-    return jsonify(cardata_service.importiere_ladesessions(vin, user["id"]))
-
-
 @app.route("/api/settings/heimadresse", methods=["GET", "POST"])
 def api_settings_heimadresse():
     """Wohnadresse fuer die Zuordnung 'zuhause' oder 'unterwegs'.
@@ -4335,23 +4287,6 @@ def api_settings_heimadresse():
         "erkannt": cardata_service._heimadresse(),
     })
 
-
-@app.route("/api/settings/archiv-bereich", methods=["GET", "POST"])
-def api_archiv_bereich():
-    """Ob der Archiv-Import bei den Fahrten angezeigt wird.
-
-    Das Datenarchiv braucht man einmal beim Erstimport, um Zeitraeume vor
-    den letzten 30 Tagen zu erfassen. Danach liefert die laufende
-    Verbindung alles Weitere — der Bereich steht dann nur im Weg.
-    """
-    if request.method == "GET":
-        return jsonify({"versteckt":
-                        settings_repository.get_setting("archiv_bereich_aus") == "1"})
-
-    daten = request.get_json(force=True, silent=True) or {}
-    aus = bool(daten.get("versteckt"))
-    settings_repository.set_setting("archiv_bereich_aus", "1" if aus else "0")
-    return jsonify({"ok": True, "versteckt": aus})
 
 
 @app.route("/api/settings/bmw-heimladungen", methods=["GET", "POST"])
@@ -4407,73 +4342,6 @@ def api_settings_ladepreise():
                       or settings_repository.get_setting("default_kwh_price") or 0.34),
         "dc_schwelle_kw": cardata_service.DC_SCHWELLE_KW,
     })
-
-
-@app.route("/api/cardata/fahrten-aus-ladehistorie", methods=["POST"])
-def api_cardata_fahrten_aus_ladehistorie():
-    """Leitet Fahrten aus der Ladehistorie ab — 30 Tage rueckwirkend.
-
-    Anders als der Telematik-Abruf braucht dieser Weg keinen Dauerbetrieb:
-    BMW haelt die Ladehistorie vor, ein Abruf im Monat genuegt."""
-    if not edition_service.funktion_verfuegbar("bmw"):
-        return jsonify(edition_service.gesperrt_hinweis("bmw")), 402
-    user = _current_user()
-    if user is None:
-        return jsonify({"error": "no_user"}), 400
-    vin = settings_repository.get_setting("cardata_vin") or ""
-    if not vin:
-        return jsonify({"ok": False, "meldung": "Bitte zuerst ein Fahrzeug auswählen."})
-
-    vehicle_id = None
-    try:
-        vehs = vehicle_repository.list_vehicles()
-        std = next((v for v in vehs if v.get("ist_standard")), (vehs[0] if vehs else None))
-        vehicle_id = std["id"] if std else None
-    except Exception:
-        pass
-    return jsonify(cardata_service.importiere_fahrten_aus_ladehistorie(
-        vin, user["id"], vehicle_id))
-
-
-@app.route("/api/cardata/fahrzeugdaten", methods=["GET"])
-def api_cardata_fahrzeugdaten():
-    """Zuletzt vom Fahrzeug gemeldete Stammdaten (Verbrauch, Akku, Service)."""
-    if not edition_service.funktion_verfuegbar("bmw"):
-        return jsonify(edition_service.gesperrt_hinweis("bmw")), 402
-    return jsonify(cardata_service.fahrzeugdaten())
-
-
-@app.route("/api/cardata/import-zuruecksetzen", methods=["POST"])
-def api_cardata_import_zuruecksetzen():
-    """Setzt den BMW-Import vollstaendig zurueck.
-
-    Entfernt die aus CarData stammenden Ladesessions, die Referenztabelle der
-    Fahrten und die gemerkten Kilometerstaende. Danach holt ein erneuter Abruf
-    wirklich alles — ohne dass Reste den Duplikatschutz auslösen."""
-    if not edition_service.funktion_verfuegbar("bmw"):
-        return jsonify(edition_service.gesperrt_hinweis("bmw")), 402
-    user = _current_user()
-    if user is None:
-        return jsonify({"error": "no_user"}), 400
-
-    conn = get_connection()
-    try:
-        sessions = conn.execute(
-            "DELETE FROM charging_sessions WHERE source = 'bmw_app' AND user_id = ?",
-            (user["id"],)).rowcount
-        referenzen = conn.execute(
-            "DELETE FROM bmw_trips WHERE user_id = ?", (user["id"],)).rowcount
-        staende = conn.execute(
-            "DELETE FROM app_settings WHERE key LIKE 'cardata_stand_%'").rowcount
-        conn.commit()
-    finally:
-        conn.close()
-
-    event_log_service.log_event("bmw", "info",
-        f"BMW-Import zurückgesetzt: {sessions} Ladevorgänge, {referenzen} Fahrt-Referenzen "
-        f"und {staende} gemerkte Kilometerstände entfernt.")
-    return jsonify({"ok": True, "sessions": sessions,
-                    "referenzen": referenzen, "staende": staende})
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -4624,42 +4492,32 @@ def api_extern_ocpp_import():
 
 
 if __name__ == "__main__":
-    # Automatischen CarData-Abruf wieder aufnehmen, falls eingeschaltet —
-    # ABER: der Stream hat Vorrang. Beide gleichzeitig fuehren dazu, dass der
-    # periodische Abruf ueber denselben Login regelmaessig einen neuen
-    # ID-Token ausstellt und damit die laufende Stream-Sitzung kappt (siehe
-    # BUG-Hinweis unten bei cardata_stream_service.starte()). Bisher wurde
-    # diese Ausschliesslichkeit nur beim Anklicken der Checkbox im Browser
-    # hergestellt, nicht beim Wiederaufnehmen nach einem Neustart — genau
-    # dieser Fall trat auf, wenn 'cardata_auto' aus einer Zeit vor dem
-    # Umstieg auf den Stream noch auf '1' stand.
-    try:
-        stream_aktiv = (settings_repository.get_setting("cardata_stream_aktiv") or "0") == "1"
-        if stream_aktiv:
-            settings_repository.set_setting("cardata_auto", "0")
-        elif (settings_repository.get_setting("cardata_auto") or "0") == "1":
-            cardata_service.starte_automatik()
-    except Exception:
-        pass
-
-    # MQTT-Stream ebenso wieder aufnehmen, falls eingeschaltet.
+    # MQTT-Streams aller Fahrzeuge wieder aufnehmen, deren Stream
+    # eingeschaltet ist — je Fahrzeug unabhaengig, seit dem Umbau auf
+    # mehrere gleichzeitige BMW-Verbindungen (28.08.).
     #
-    # BUG BEHOBEN (28.08.): Diese Zeilen fehlten. Die Einstellung
-    # 'cardata_stream_aktiv' wird dauerhaft gespeichert, der eigentliche
-    # Hintergrund-Thread aber nur beim manuellen Umschalten in den
-    # Einstellungen gestartet (_zustand ist reiner Prozessspeicher). Nach
-    # jedem Container-Neustart — Update, Docker-Neustart, Absturz — war die
-    # Einstellung weiterhin "an", der Stream lief aber nicht mehr, ohne dass
-    # das irgendwo auffiel: Die Checkbox blieb angehakt, und die Anzeige
-    # zeigte dauerhaft "Verbindung wird aufgebaut", weil status() nur die
-    # Einstellung abfragt, nicht den tatsaechlichen Thread-Zustand. Ohne
-    # erneutes Anklicken der Checkbox kamen danach nie wieder Meldungen an —
-    # exakt das gemeldete Verhalten (Abruf per Hand funktioniert weiterhin,
-    # weil er einen eigenen Codepfad ohne den Hintergrund-Thread nutzt).
+    # BUG BEHOBEN: Die Einstellung 'stream_aktiv' wird dauerhaft je
+    # Fahrzeug gespeichert, der eigentliche Hintergrund-Thread aber nur
+    # beim manuellen Umschalten in den Einstellungen gestartet (der
+    # Zustand lebt nur im Prozessspeicher). Nach jedem Container-Neustart —
+    # Update, Docker-Neustart, Absturz — war die Einstellung weiterhin
+    # "an", der Stream lief aber nicht mehr, ohne dass das irgendwo
+    # auffiel. Ohne erneutes Anklicken der Checkbox kamen danach nie
+    # wieder Meldungen an.
+    #
+    # Der fruehere periodische Abruf ("Automatischer Abruf") ist entfernt —
+    # der Stream deckt die Fahrterkennung vollstaendig ab, ohne
+    # Tageskontingent. Die Ausschliesslichkeit beider Mechanismen (frueher
+    # hier noetig, weil ein gleichzeitiger Tokenabruf die Stream-Sitzung
+    # kappen konnte) ist damit gegenstandslos geworden.
     try:
         from services import cardata_stream_service
-        if cardata_stream_service.aktiviert():
-            cardata_stream_service.starte()
+        from repositories import vehicle_bmw_repository as bmw_repo
+        for vid in bmw_repo.liste_mit_aktivem_stream():
+            try:
+                cardata_stream_service.starte(vid)
+            except Exception:
+                pass
     except Exception:
         pass
 

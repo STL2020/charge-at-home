@@ -145,6 +145,16 @@
         </button>
       </div>
 
+      <!-- ── Fahrzeugstatus (BMW CarData) — je Fahrzeug mit Verbindung ── -->
+      <div class="card" id="fahrzeug-status-card" style="display:none; margin-bottom:16px;">
+        <div class="section-title" style="display:flex; align-items:center; justify-content:space-between;">
+          <span>Fahrzeugstatus</span>
+          <button class="btn btn-sm" onclick="ladeFahrzeugStatusKachel()" title="Alle aktualisieren">↻</button>
+        </div>
+        <div id="fahrzeug-status-grid" style="display:grid;
+             grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:12px;"></div>
+      </div>
+
       <!-- Statusleiste: Was läuft gerade? Beantwortet die Frage, bevor sie
            gestellt wird — ohne dass man in die Wallbox-Ansicht wechseln muss. -->
       <div class="status-leiste" id="dash-status">
@@ -445,10 +455,6 @@
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="margin-right:5px;vertical-align:-2px;"><path d="M4 15h13M4 15a1.6 1.6 0 0 1-1.6-1.6v-2.6l1.8-3.4h9.6l2.6 3.4v2.6A1.6 1.6 0 0 1 14.8 15M6 15v1.6M15 15v1.6"/><circle cx="6.4" cy="11.6" r=".8"/><circle cx="13.2" cy="11.6" r=".8"/><path d="M18.5 8.5a4 4 0 0 1 0 5M21 6.5a7 7 0 0 1 0 9"/></svg>
             Loxone-Log importieren
           </button>
-          <button class="btn btn-sm bmw-funktion" onclick="cardataLadesessions()" id="bmw-lade-btn"
-                  title="Ladevorgänge der letzten 30 Tage über die BMW-CarData-API abrufen">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="margin-right:5px;vertical-align:-2px;"><path d="M4 15h13M4 15a1.6 1.6 0 0 1-1.6-1.6v-2.6l1.8-3.4h9.6l2.6 3.4v2.6A1.6 1.6 0 0 1 14.8 15M6 15v1.6M15 15v1.6"/><circle cx="6.4" cy="11.6" r=".8"/><circle cx="13.2" cy="11.6" r=".8"/><path d="M18.5 8.5a4 4 0 0 1 0 5M21 6.5a7 7 0 0 1 0 9"/></svg>
-            BMW CarData — Ladehistorie</button>
           <button class="btn btn-sm" onclick="document.getElementById('csv-file-input').click()">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="margin-right:5px;vertical-align:-2px;"><path d="M4 15h13M4 15a1.6 1.6 0 0 1-1.6-1.6v-2.6l1.8-3.4h9.6l2.6 3.4v2.6A1.6 1.6 0 0 1 14.8 15M6 15v1.6M15 15v1.6"/><circle cx="6.4" cy="11.6" r=".8"/><circle cx="13.2" cy="11.6" r=".8"/><path d="M18.5 8.5a4 4 0 0 1 0 5M21 6.5a7 7 0 0 1 0 9"/></svg>
             CSV importieren</button>
@@ -456,9 +462,6 @@
           <input type="file" id="csv-file-input" accept=".csv" style="display:none" onchange="importCsv(this)">
           <button class="btn btn-sm" onclick="downloadLadestromBeleg()">Beleg Zeitraum</button>
           <button class="btn btn-sm" onclick="deleteAllSessions()" style="color:var(--danger); border-color:var(--danger);">Alle löschen</button>
-          <button class="btn btn-sm bmw-funktion" onclick="cardataImportZuruecksetzen()"
-                  id="bmw-reset-btn"
-                  title="Entfernt alle aus BMW importierten Ladevorgänge und setzt den Importstand zurück">Import zurücksetzen</button>
         </div>
       </div>
 
@@ -911,12 +914,6 @@
   <section class="view" id="view-fahrzeuge">
     <div class="topbar">
       <div><div class="page-title">Fahrzeuge</div><div class="page-sub">Fahrzeuge verwalten, Kosten hinterlegen & Vollkostenrechnung</div></div>
-      <!-- Aus der laufenden CarData-Verbindung — der Normalfall.
-           Braucht keine Archiv-Anforderung und keine Wartezeit. -->
-      <button class="btn btn-sm bmw-funktion" onclick="fahrzeugAusBmw()"
-              title="Fahrzeugdaten aus der BMW-Verbindung übernehmen">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="margin-right:5px;vertical-align:-2px;"><path d="M4 15h13M4 15a1.6 1.6 0 0 1-1.6-1.6v-2.6l1.8-3.4h9.6l2.6 3.4v2.6A1.6 1.6 0 0 1 14.8 15M6 15v1.6M15 15v1.6"/><circle cx="6.4" cy="11.6" r=".8"/><circle cx="13.2" cy="11.6" r=".8"/><path d="M18.5 8.5a4 4 0 0 1 0 5M21 6.5a7 7 0 0 1 0 9"/></svg>BMW CarData — Fahrzeugdaten
-      </button>
       <button class="btn btn-primary" onclick="openVehicleModal()">+ Fahrzeug hinzufügen</button>
     </div>
     <div class="content">
@@ -997,6 +994,87 @@
         <button class="icon-btn" onclick="closeVehicleModal()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
       </div>
       <div style="padding:4px 0;">
+        <!-- Weg der Anlage: manuell eintippen oder aus dem BMW-Konto
+             importieren. Mehrere Fahrzeuge koennen dabei jeweils ihre
+             eigene, unabhaengige BMW-Verbindung haben. -->
+        <div class="toggle-pair" id="vehicle-anlage-toggle" style="width:100%; margin-bottom:14px;">
+          <button class="on" onclick="setVehicleAnlageweg(this,'manuell')" style="flex:1;">Manuell</button>
+          <button class="btn-sm bmw-funktion" onclick="setVehicleAnlageweg(this,'bmw')" style="flex:1;">Aus BMW-Konto importieren</button>
+        </div>
+
+        <div id="vehicle-bmw-block" style="display:none; margin-bottom:16px; padding:14px 16px;
+             background:var(--amber-soft); border:1px solid var(--amber); border-radius:8px;">
+          <div id="vehicle-bmw-schritt-anmelden">
+            <label class="field-label">Client-ID aus dem BMW-Portal</label>
+            <input type="text" id="vehicle-bmw-client-id" style="width:100%; margin-bottom:8px;"
+                   placeholder="Aus dem CarData Customer Portal">
+            <label style="display:flex; align-items:center; gap:8px; font-size:12.5px; cursor:pointer; margin-bottom:10px;">
+              <input type="checkbox" id="vehicle-bmw-mit-stream" style="width:auto; margin:0;" checked>
+              Datenstrom mit anfordern (empfohlen)
+            </label>
+            <button class="btn btn-sm btn-primary" id="vehicle-bmw-anmelden-btn" onclick="vehicleBmwAnmelden()">
+              Mit BMW verbinden
+            </button>
+            <div class="hint" style="margin-top:8px;">
+              Erzeugt zuerst diesen Fahrzeug-Datensatz (falls noch nicht gespeichert),
+              dann startet die Anmeldung — jedes Fahrzeug bekommt seine eigene,
+              unabhängige BMW-Verbindung.
+            </div>
+          </div>
+
+          <div id="vehicle-bmw-bestaetigung" style="display:none;">
+            <div class="hint" style="margin-bottom:8px;">
+              Im Browser bestätigen:
+              <a id="vehicle-bmw-link" href="#" target="_blank" style="font-weight:600;">BMW-Bestätigungsseite öffnen</a>
+              — Code: <b id="vehicle-bmw-usercode" style="font-family:var(--font-mono);"></b>
+            </div>
+            <div id="vehicle-bmw-warte-text" class="hint"></div>
+          </div>
+
+          <div id="vehicle-bmw-fahrzeugwahl" style="display:none;">
+            <div class="hint" style="margin-bottom:8px;">✓ Verbunden. Fahrzeug wählen:</div>
+            <div id="vehicle-bmw-vin-liste" style="margin-bottom:8px;"></div>
+            <label class="field-label">oder Fahrgestellnummer von Hand</label>
+            <div style="display:flex; gap:6px;">
+              <input type="text" id="vehicle-bmw-vin-manuell" style="flex:1; text-transform:uppercase;"
+                     maxlength="17" placeholder="17 Zeichen">
+              <button class="btn btn-sm" onclick="vehicleBmwVinUebernehmen()">Übernehmen</button>
+            </div>
+          </div>
+
+          <div id="vehicle-bmw-verbunden" style="display:none;">
+            <div class="hint" style="margin-bottom:10px;">
+              ✓ BMW-Verbindung aktiv — Fahrgestellnummer <b id="vehicle-bmw-vin-anzeige"></b>
+            </div>
+            <label style="display:flex; align-items:center; gap:9px; font-size:13.5px; font-weight:600; cursor:pointer; margin-bottom:8px;">
+              <input type="checkbox" id="vehicle-bmw-stream" style="width:auto;margin:0;" onchange="vehicleBmwStreamSchalten(this)">
+              Datenstrom nutzen — empfohlen, kein Tageskontingent
+            </label>
+            <div id="vehicle-bmw-stream-zustand" class="hint" style="margin-bottom:10px;"></div>
+            <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px;">
+              <button class="btn btn-sm" onclick="vehicleBmwLadesessions()">Ladehistorie (30 Tage) importieren</button>
+              <button class="btn btn-sm" onclick="document.getElementById('vehicle-bmw-archiv-datei').click()">
+                Archiv-ZIP importieren (älter)
+              </button>
+              <input type="file" id="vehicle-bmw-archiv-datei" accept=".zip" style="display:none" onchange="vehicleBmwArchivImport(this)">
+            </div>
+            <div id="vehicle-bmw-import-ergebnis" class="hint" style="margin-bottom:8px;"></div>
+            <button class="btn btn-sm" id="vehicle-bmw-protokoll-toggle-btn" onclick="vehicleBmwProtokollToggle()">Protokoll anzeigen</button>
+            <pre id="vehicle-bmw-protokoll" style="display:none; margin-top:8px; max-height:220px; overflow-y:auto;
+                 background:var(--bg-input); border-radius:6px; padding:8px 10px; font-size:11px;
+                 font-family:var(--font-mono); white-space:pre-wrap; word-break:break-word;"></pre>
+            <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
+              <button class="btn btn-sm" onclick="vehicleBmwImportZuruecksetzen()"
+                      title="Entfernt alle aus BMW importierten Ladevorgänge und Fahrt-Referenzen dieses Fahrzeugs">
+                Import zurücksetzen
+              </button>
+              <button class="btn btn-sm" onclick="vehicleBmwTrennen()" style="color:var(--danger); border-color:var(--danger);">
+                BMW-Verbindung trennen
+              </button>
+            </div>
+          </div>
+        </div>
+
         <label class="field-label">Person (Halter) *</label>
         <select id="vehicle-person" style="width:100%; margin-bottom:12px;"></select>
         <label class="field-label">Bezeichnung *</label>
@@ -2096,249 +2174,25 @@
           </div>
         </div>
         <div id="bmw-bereich" class="pro-bereich">
-        <!-- Schritt 1: Client-ID und Anmeldung -->
+        <!-- Anmeldung und Verbindung liegen jetzt je Fahrzeug im
+             Fahrzeug-Dialog (Fahrzeuge → Fahrzeug hinzufügen/bearbeiten →
+             "Aus BMW-Konto importieren"). Mehrere Fahrzeuge koennen dort
+             jeweils ihre eigene, unabhaengige BMW-Verbindung haben — eine
+             einzelne globale Verbindung wie frueher wuerde das nicht mehr
+             abbilden koennen. -->
         <div class="card" style="margin-bottom:16px;">
-          <div class="section-title" style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
-            <span>BMW CarData</span>
-            <a href="https://bmw-cardata.bmwgroup.com/customer/public/home" target="_blank"
-               rel="noopener" class="btn btn-sm">CarData-Portal öffnen →</a>
-          </div>
-          <div class="hint" style="margin-bottom:12px; line-height:1.7;">
-            CarData ist die <b>offizielle Schnittstelle von BMW</b> für EU-Fahrzeuge.
-            Die Fahrten werden aus Kilometerstand und Position ermittelt — die Distanz
-            kommt direkt vom Tacho und ist damit exakt.
-          </div>
-
-          <div id="cardata-status-box" style="padding:10px 12px; background:var(--bg-input);
-               border-radius:6px; margin-bottom:12px; font-size:13px;">Status wird geladen …</div>
-
-          <div id="cardata-anmeldung">
-            <label class="field-label">Client-ID aus dem BMW-Portal</label>
-            <div style="display:flex; gap:8px; margin-top:4px;">
-              <input type="text" id="cardata-client-id" style="flex:1;"
-                     placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx">
-              <button class="btn btn-primary" onclick="cardataAnmelden()" id="cardata-anmelden-btn">Anmelden</button>
-            </div>
-            <div class="hint" style="margin-top:6px;">
-              Im Desktop-Browser unter <span class="mono">bmw.de → Fahrzeugübersicht → BMW CarData →
-              Technical Access</span> erzeugen. Mindestens <b>„Request access to CarData API"</b>
-              muss aktiviert sein; nach dem Freischalten etwa 60 Sekunden warten.
-            </div>
-            <label style="display:flex; align-items:center; gap:7px; margin-top:8px; font-size:12px; cursor:pointer;">
-              <input type="checkbox" id="cardata-mit-stream" style="width:auto; margin:0;">
-              Auch Streaming-Berechtigung anfordern
-            </label>
-            <div class="hint" style="margin-top:4px;">
-              Nur ankreuzen, wenn im Portal <b>auch</b> „CarData Stream" freigeschaltet ist.
-              Wird eine Berechtigung angefordert, die dort fehlt, lehnt BMW die gesamte
-              Anmeldung ab. Für die Fahrtenerfassung wird Streaming nicht benötigt.
-            </div>
-
-            <div style="margin-top:12px; padding:12px; background:var(--bg-input);
-                 border-radius:6px; border-left:3px solid var(--warning, #eab308);">
-              <div style="font-size:12px; font-weight:700; margin-bottom:6px;">
-                Wenn die Anmeldung abgelehnt wird
-              </div>
-              <div class="hint" style="line-height:1.7;">
-                Fast immer liegt es an der <b>Reihenfolge im BMW-Portal</b>: Wurde die
-                Client-ID erzeugt, <b>bevor</b> die Dienste freigeschaltet waren, bleibt sie
-                dauerhaft ohne Berechtigung. Das Portal bestätigt die Anmeldung dann zwar,
-                der Tokenabruf scheitert trotzdem.<br><br>
-                <b>Lösung:</b> Im Portal die bestehende Client-ID löschen → fünf Minuten
-                warten → „Request access to CarData API" aktivieren → 60 Sekunden warten →
-                <b>erst dann</b> eine neue Client-ID erzeugen.<br><br>
-                Den Knopf <b>„Authenticate device" niemals drücken</b> — das ist ein anderer
-                Weg und führt zu Fehler 500.
-              </div>
-            </div>
-          </div>
-
-          <!-- Schritt 2: Bestätigung im Browser -->
-          <div id="cardata-bestaetigung" style="display:none; padding:14px; margin-top:12px;
-               background:var(--accent-soft, rgba(59,130,246,.10)); border-radius:6px;">
-            <div style="font-size:13px; font-weight:700; margin-bottom:8px;">Jetzt im Browser bestätigen</div>
-            <div class="hint" style="margin-bottom:10px;">
-              Öffne die Seite, melde dich mit deinem BMW-Konto an und gib den Code ein.
-              Diese Seite wartet so lange.
-            </div>
-            <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:10px;">
-              <a id="cardata-link" href="#" target="_blank" rel="noopener" class="btn btn-sm btn-primary">Bestätigungsseite öffnen →</a>
-              <div style="font-family:'IBM Plex Mono',monospace; font-size:20px; font-weight:700;
-                   letter-spacing:.15em; color:var(--accent);" id="cardata-usercode">–</div>
-            </div>
-            <div class="hint" id="cardata-warte-text">Warte auf Bestätigung …</div>
+          <div class="section-title">BMW CarData</div>
+          <div class="hint" style="line-height:1.7;">
+            Die Verbindung (Client-ID, Anmeldung, Datenstrom, Fahrgestellnummer)
+            wird jetzt <b>je Fahrzeug</b> eingerichtet — unter
+            <a onclick="showView('fahrzeuge'); return false;" style="cursor:pointer; text-decoration:underline;">Fahrzeuge</a>
+            beim Anlegen oder Bearbeiten eines Fahrzeugs, über „Aus BMW-Konto importieren".
+            So kann jedes Fahrzeug seine eigene, unabhängige Verbindung haben.
           </div>
         </div>
 
-        <!-- Schritt 3: Fahrzeug und Abruf -->
-        <div class="card" id="cardata-betrieb" style="display:none; margin-bottom:16px;">
-          <div class="section-title">Fahrzeug und Abruf</div>
-          <div class="form-row-2" style="margin-bottom:10px;">
-            <div>
-              <label class="field-label">Fahrgestellnummer (VIN)</label>
-              <div style="display:flex; gap:6px;">
-                <input type="text" id="cardata-vin" style="flex:1; text-transform:uppercase;"
-                       placeholder="17 Zeichen, z. B. WBA1A2C3D4E567890"
-                       maxlength="17" onchange="cardataVinSpeichern()">
-                <button class="btn btn-sm" onclick="cardataFahrzeugeLaden()"
-                        title="Fahrzeuge aus dem BMW-Konto laden (verbraucht einen Abruf)">Aus Konto laden</button>
-              </div>
-              <div class="hint" style="margin-top:4px;">
-                Steht im Fahrzeugschein (Feld E) und in der MyBMW-App. Du musst
-                <b>Hauptnutzer</b> des Fahrzeugs sein.
-              </div>
-              <div id="cardata-vin-liste" style="display:none; margin-top:6px;"></div>
-            </div>
-            <div style="grid-column:1/-1; margin-bottom:14px; padding:14px 16px;
-                 background:var(--amber-soft); border:1px solid var(--amber);
-                 border-radius:8px;">
-              <label style="display:flex; align-items:center; gap:9px;
-                     font-size:13.5px; font-weight:600; cursor:pointer;">
-                <input type="checkbox" id="cardata-stream" style="width:auto;margin:0;"
-                       onchange="cardataStreamSchalten(this)">
-                Datenstrom nutzen statt abzurufen — empfohlen
-              </label>
-              <div class="hint" style="margin-top:8px;">
-                BMW schickt Änderungen von sich aus, sobald sie eintreten.
-                <b>Kein Tageskontingent</b>, und jede Fahrt wird erfasst — auch
-                kurze und solche zu ungewöhnlichen Zeiten. Der regelmäßige
-                Abruf wird damit überflüssig.
-                <br><br>
-                <b>Voraussetzung:</b> Im BMW-Portal unter CarData einen
-                <b>Client anlegen</b> und das Fahrzeug als Hauptnutzer zuordnen.
-                Ohne diesen Schritt gibt es keinen Datenstrom.
-              </div>
-              <div id="stream-zustand" style="margin-top:10px; font-size:12.5px;
-                   display:none;"></div>
-
-              <!-- Verbindungsdaten einstellbar statt fest im Code — siehe
-                   cardata_stream_service.py. Zugeklappt per Default, es
-                   sind Werte aus dem BMW-Portal, keine taeglich gebrauchte
-                   Einstellung. -->
-              <div style="margin-top:12px;">
-                <a href="#" onclick="document.getElementById('stream-verbindung-details').style.display =
-                  document.getElementById('stream-verbindung-details').style.display === 'none' ? 'block' : 'none';
-                  return false;" style="font-size:12px;">
-                  Verbindungsdaten (Host, Port) anzeigen/ändern
-                </a>
-                <div id="stream-verbindung-details" style="display:none; margin-top:10px;">
-                  <div class="form-row-2">
-                    <div>
-                      <label class="field-label">Host</label>
-                      <input type="text" id="stream-host" style="width:100%; font-family:var(--font-mono); font-size:12.5px;"
-                             onchange="streamVerbindungSpeichern()">
-                    </div>
-                    <div>
-                      <label class="field-label">Port</label>
-                      <input type="number" id="stream-port" style="width:100%; font-family:var(--font-mono); font-size:12.5px;"
-                             onchange="streamVerbindungSpeichern()">
-                    </div>
-                  </div>
-                  <div class="hint" style="margin-top:6px;">
-                    Aus den Streaming-Zugangsdaten im BMW-Portal (CarData Stream
-                    → Host/Port). Vorbelegt mit dem bekannten Wert — nur ändern,
-                    falls BMW für dein Konto etwas anderes anzeigt.
-                  </div>
-                  <div id="stream-thema-vorschau" class="hint" style="margin-top:6px; font-family:var(--font-mono);"></div>
-                </div>
-              </div>
-
-              <!-- Live-Protokoll — direkt in der App statt in Terminal/Putty.
-                   Nach dem Muster der OCPP-Rohdaten-Anzeige. -->
-              <div style="margin-top:10px;">
-                <button class="btn btn-sm" id="stream-log-toggle-btn" onclick="toggleStreamProtokoll()">
-                  Protokoll anzeigen
-                </button>
-                <button class="btn btn-sm" id="stream-log-refresh-btn" onclick="refreshStreamProtokoll()"
-                        style="display:none;">Jetzt aktualisieren</button>
-                <button class="btn btn-sm" id="stream-log-clear-btn" onclick="leereStreamProtokoll()"
-                        style="display:none; color:var(--danger); border-color:var(--danger);">Protokoll leeren</button>
-                <span id="stream-log-autorefresh-label" class="hint" style="display:none; margin-left:6px;">
-                  aktualisiert automatisch alle 5s
-                </span>
-                <pre id="stream-log-tail" style="display:none; margin-top:8px; max-height:320px; overflow-y:auto;
-                     background:var(--bg-input); border-radius:6px; padding:10px 12px; font-size:11.5px;
-                     font-family:var(--font-mono); white-space:pre-wrap; word-break:break-word;"></pre>
-                <div id="stream-log-empty" class="hint" style="display:none; margin-top:6px;">
-                  Noch keine Einträge — Protokoll füllt sich, sobald der Stream läuft.
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <label class="field-label">Automatischer Abruf</label>
-              <div style="display:flex; gap:6px; align-items:center;">
-                <select id="cardata-intervall" style="flex:1;" onchange="cardataAutomatikSpeichern()">
-                  <option value="0">aus</option>
-                  <option value="30" selected>alle 30 Minuten (48 Abrufe/Tag) — empfohlen</option>
-                  <option value="60">stündlich (24 Abrufe/Tag)</option>
-                  <option value="120">alle 2 Stunden (12 Abrufe/Tag)</option>
-                </select>
-              </div>
-              <div class="hint" id="intervall-ueberfluessig" style="margin-top:6px;
-                   display:none; color:var(--text-tertiary);">
-                <b>Nicht mehr nötig</b> — der Datenstrom liefert Position und
-                Kilometerstand in der Meldung mit, ohne Kontingentverbrauch.
-              </div>
-              <div class="hint" style="margin-top:6px;">
-                Aus Position und Kilometerstand entstehen Fahrten: Steht das
-                Fahrzeug beim nächsten Abruf woanders, war eine Fahrt dazwischen.
-                Je kürzer der Abstand, desto genauer — 30 Minuten ist das
-                Maximum, das BMWs Tageskontingent hergibt.
-              </div>
-              <!-- Kontingent: BMW erlaubt 50 Abrufe am Tag. Wer das Limit
-                   erreicht, bekommt bis Mitternacht keine Daten mehr — das
-                   sollte man sehen, bevor es passiert. -->
-              <div id="cardata-kontingent" style="margin-top:10px; font-size:12px;
-                   display:none;">
-                <div style="display:flex; justify-content:space-between;
-                     margin-bottom:4px;">
-                  <span style="color:var(--text-tertiary);">Abrufe heute</span>
-                  <span id="kont-text" style="font-family:var(--font-mono);"></span>
-                </div>
-                <div style="height:5px; background:var(--bg-input);
-                     border-radius:3px; overflow:hidden;">
-                  <div id="kont-balken" style="height:100%; width:0%;
-                       background:var(--accent); transition:width .3s;"></div>
-                </div>
-                <div id="kont-hinweis" class="hint" style="margin-top:4px;"></div>
-              </div>
-            </div>
-          </div>
-          <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:10px;">
-            <button class="btn btn-sm" onclick="cardataAbmelden()" style="color:var(--danger); border-color:var(--danger);">Verbindung trennen</button>
-          </div>
-          <div style="margin-top:12px; padding:12px 14px; background:var(--bg-input);
-               border-radius:8px;">
-            <div style="font-size:12.5px; font-weight:700; margin-bottom:6px;">
-              BMW hält nur 30 Tage vor
-            </div>
-            <div class="hint" style="line-height:1.7;">
-              Die Ladehistorie über die API reicht <b>30 Tage</b> zurück — Ladevorgänge und
-              die daraus abgeleiteten Fahrten. Die Anwendung muss dafür <b>nicht dauerhaft
-              laufen</b>: Ein Abruf im Monat genügt, es geht nichts verloren.<br><br>
-              <b>Für ältere Zeiträume</b> brauchst du das Datenarchiv: Im CarData-Portal unter
-              „Historisches Datenarchiv" anfordern, nach einigen Stunden das ZIP herunterladen
-              und unter <b>Fahrten</b> einlesen. Es reicht weiter zurück als die API.<br><br>
-              <b>Empfehlung:</b> Einmal im Monat abrufen — dann brauchst du das Archiv nie.
-            </div>
-          </div>
-          <div class="hint" style="margin-top:10px; padding-top:10px; border-top:1px solid var(--border);">
-            Die Abrufe findest du dort, wo die Daten hingehören:
-            <b>Ladevorgänge</b> für Ladungen, <b>Fahrten</b> für Fahrten.
-          </div>
-        </div>
 
         <div class="card" style="margin-bottom:16px;">
-          <!-- Fahrzeugdaten aus dem Bordcomputer. Sie fallen beim Abruf
-               ohnehin an und kosten kein zusätzliches Kontingent. -->
-          <div class="card" id="cardata-fzg-card" style="display:none; margin-bottom:16px;">
-            <div class="section-title">Fahrzeugdaten laut Bordcomputer</div>
-            <div id="cardata-fzg-werte" style="display:grid;
-                 grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:10px;"></div>
-            <div id="cardata-fzg-stand" class="hint" style="margin-top:8px;"></div>
-          </div>
-
           <div class="section-title">Ladeort und Preise</div>
           <div style="margin-bottom:14px;">
             <label class="field-label">Wohnadresse (für die Zuordnung „zuhause")</label>

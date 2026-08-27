@@ -128,11 +128,9 @@ function showView(name) {
     if (window._protokollInterval) clearInterval(window._protokollInterval);
     window._protokollInterval = setInterval(loadProtokoll, 5000);
   } else if (name === 'ladesessions') {
-    pruefeBmwImportBereich();
     ladePreiseVorladen();
     loadWallboxesIntoFilter().then(loadSessions);
   } else if (name === 'fahrten') {
-    pruefeBmwImportBereich();
     loadTrips();
     ladeAnlaesse();          // Auswahlliste für den Anlass füllen
   } else if (name === 'fahrzeuge') {
@@ -2199,7 +2197,7 @@ function showSettingsTab(tab, btn) {
   if (tab === 'person') {
     loadPersons();
   }
-  if (tab === 'bmw') { cardataStatusLaden(); cardataFahrzeugdatenLaden(); loadLadepreise(); loadHeimadresse(); loadBmwDuplikate(); loadBmwHeimladungen(); loadKontingent(); loadStreamZustand(); loadStreamVerbindung(); }
+  if (tab === 'bmw') { loadLadepreise(); loadHeimadresse(); loadBmwDuplikate(); loadBmwHeimladungen(); }
   if (tab === 'lizenz') editionAnzeigen();
   if (tab === 'system') { backupStatusLaden(); demodatenStatus(); }
   if (tab === 'hilfe') hilfeLaden();
@@ -3741,6 +3739,7 @@ function renderLiveSessionDetail(s) {
 async function loadDashboardSummary() {
   loadBmwTrips();
   ladeDashStatus();
+  ladeFahrzeugStatusKachel();
   ladeDashLadevorgaenge();
   ladeMonatsabschluss();
   setTimeout(() => { ladeKosten100km(); ladeExternKachel(); }, 300);
@@ -5010,31 +5009,6 @@ function setVehicleAntrieb(btn, antrieb) {
 // Fahrzeug aus der laufenden CarData-Verbindung anlegen. Nutzt die
 // hinterlegte Fahrgestellnummer und die zuletzt abgerufenen Werte —
 // kein Archiv, keine Wartezeit.
-async function fahrzeugAusBmw() {
-  _toast('Frage BMW-Daten ab …');
-  try {
-    const d = await (await fetch('/api/vehicles/aus-bmw',
-                                 { method: 'POST' })).json();
-    if (!d.ok) {
-      _toast(d.fehler || 'Fahrzeugdaten nicht verfügbar');
-      return;
-    }
-    if (d.duenn) {
-      _toast('Fahrzeug angelegt — für Kilometerstand und Wartungstermine '
-           + 'bitte einmal „Fahrten abrufen" ausführen');
-    } else {
-      const teile = [];
-      if (d.km_stand) teile.push(`${Number(d.km_stand).toLocaleString('de-DE')} km`);
-      if (d.hu_faellig) teile.push(`HU ${d.hu_faellig.split('-').reverse().join('.')}`);
-      _toast((d.neu ? 'Fahrzeug angelegt' : 'Fahrzeug aktualisiert')
-           + (teile.length ? ' — ' + teile.join(', ') : ''));
-    }
-    loadVehiclesGrid();
-  } catch (e) {
-    _toast('Abruf fehlgeschlagen');
-  }
-}
-
 async function fahrzeugAusArchiv(input) {
   const datei = input.files && input.files[0];
   if (!datei) return;
@@ -5081,6 +5055,19 @@ async function openVehicleModal() {
   _vehicleAntrieb = 'elektro';
   const toggle = document.getElementById('vehicle-antrieb-toggle');
   toggle.querySelectorAll('button').forEach((b,i) => b.classList.toggle('on', i===0));
+
+  // BMW-Block zuruecksetzen — jedes neue Fahrzeug startet ohne Verbindung.
+  const anlageToggle = document.getElementById('vehicle-anlage-toggle');
+  if (anlageToggle) anlageToggle.querySelectorAll('button').forEach((b,i) => b.classList.toggle('on', i===0));
+  document.getElementById('vehicle-bmw-block').style.display = 'none';
+  document.getElementById('vehicle-bmw-client-id').value = '';
+  document.getElementById('vehicle-bmw-schritt-anmelden').style.display = 'block';
+  document.getElementById('vehicle-bmw-bestaetigung').style.display = 'none';
+  document.getElementById('vehicle-bmw-fahrzeugwahl').style.display = 'none';
+  document.getElementById('vehicle-bmw-verbunden').style.display = 'none';
+  if (_vehicleBmwPolling) { clearInterval(_vehicleBmwPolling); _vehicleBmwPolling = null; }
+  if (_vehicleBmwProtokollTimer) { clearInterval(_vehicleBmwProtokollTimer); _vehicleBmwProtokollTimer = null; }
+
   // Personen laden
   const sel = document.getElementById('vehicle-person');
   const r = await fetch('/api/persons');
@@ -5126,6 +5113,16 @@ async function editVehicle(id) {
   _vehicleAntrieb = v.antrieb;
   const toggle = document.getElementById('vehicle-antrieb-toggle');
   toggle.querySelectorAll('button').forEach((b,i) => b.classList.toggle('on', (i===0)===(v.antrieb==='elektro')));
+
+  // Bestehende BMW-Verbindung dieses Fahrzeugs anzeigen, falls vorhanden.
+  try {
+    const st = await (await fetch(`/api/vehicles/${id}/cardata/status`)).json();
+    if (st && st.angemeldet) {
+      setVehicleAnlageweg(document.getElementById('vehicle-anlage-toggle').children[1], 'bmw');
+      document.getElementById('vehicle-bmw-schritt-anmelden').style.display = 'none';
+      await vehicleBmwStatusAnzeigen(id);
+    }
+  } catch (e) {}
 }
 
 async function saveVehicle() {
@@ -5157,10 +5154,264 @@ async function saveVehicle() {
   Object.entries(zusatz).forEach(([k, v]) => { if (v) body[k] = v; });
 
   if (_editingVehicleId) body.id = _editingVehicleId;
-  await fetch('/api/vehicles', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+  const antwort = await (await fetch('/api/vehicles', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) })).json();
+  if (!_editingVehicleId && antwort && antwort.id) _editingVehicleId = antwort.id;
   closeVehicleModal();
   _toast(_editingVehicleId ? 'Fahrzeug aktualisiert' : 'Fahrzeug hinzugefügt');
   loadVehiclesView();
+}
+
+// ─── Fahrzeug anlegen: manuell vs. aus BMW-Konto importieren ──────────────
+// Mehrere Fahrzeuge koennen dabei jeweils ihre eigene, unabhaengige
+// BMW-Verbindung haben (eigene Client-ID, eigenes Konto moeglich).
+
+function setVehicleAnlageweg(btn, weg) {
+  document.getElementById('vehicle-anlage-toggle').querySelectorAll('button')
+    .forEach(b => b.classList.toggle('on', b === btn));
+  document.getElementById('vehicle-bmw-block').style.display = weg === 'bmw' ? 'block' : 'none';
+}
+
+// Legt bei Bedarf still einen Fahrzeug-Datensatz an, damit die
+// BMW-Anmeldung eine vehicle_id hat, an der sie haengen kann — der Dialog
+// bleibt dabei offen, nur das Speichern passiert vorab.
+async function _stelleFahrzeugFuerBmwSicher() {
+  if (_editingVehicleId) return _editingVehicleId;
+  const person_id = parseInt(document.getElementById('vehicle-person').value);
+  if (!person_id) {
+    _toast('Bitte zuerst eine Person auswählen');
+    return null;
+  }
+  const bezeichnung = document.getElementById('vehicle-bezeichnung').value.trim() || 'BMW (aus CarData)';
+  const antwort = await (await fetch('/api/vehicles', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ person_id, bezeichnung, antrieb: 'elektro' })
+  })).json();
+  if (antwort && antwort.id) {
+    _editingVehicleId = antwort.id;
+    if (!document.getElementById('vehicle-bezeichnung').value.trim()) {
+      document.getElementById('vehicle-bezeichnung').value = bezeichnung;
+    }
+    return antwort.id;
+  }
+  return null;
+}
+
+let _vehicleBmwPolling = null;
+
+async function vehicleBmwAnmelden() {
+  const vid = await _stelleFahrzeugFuerBmwSicher();
+  if (!vid) return;
+  const clientId = document.getElementById('vehicle-bmw-client-id').value.trim();
+  if (!clientId) { _toast('Bitte die Client-ID eintragen'); return; }
+  const btn = document.getElementById('vehicle-bmw-anmelden-btn');
+  if (btn) btn.disabled = true;
+  try {
+    const d = await (await fetch(`/api/vehicles/${vid}/cardata/anmelden`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ client_id: clientId,
+        mit_streaming: !!document.getElementById('vehicle-bmw-mit-stream')?.checked })
+    })).json();
+    if (d.gesperrt) { _toast(d.meldung || 'BMW CarData nur in der Vollversion'); return; }
+    if (!d.ok) { _toast(d.meldung || 'Anmeldung fehlgeschlagen'); return; }
+
+    document.getElementById('vehicle-bmw-schritt-anmelden').style.display = 'none';
+    document.getElementById('vehicle-bmw-bestaetigung').style.display = 'block';
+    document.getElementById('vehicle-bmw-usercode').textContent = d.user_code || '–';
+    const link = document.getElementById('vehicle-bmw-link');
+    if (link) link.href = d.verification_uri_complete || d.verification_uri || '#';
+    _vehicleBmwWarteAufBestaetigung(vid, d.interval || 5, d.expires_in || 600);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+function _vehicleBmwWarteAufBestaetigung(vid, intervallSek, gueltigSek) {
+  if (_vehicleBmwPolling) clearInterval(_vehicleBmwPolling);
+  const ende = Date.now() + gueltigSek * 1000;
+  const text = document.getElementById('vehicle-bmw-warte-text');
+
+  _vehicleBmwPolling = setInterval(async () => {
+    if (Date.now() > ende) {
+      clearInterval(_vehicleBmwPolling); _vehicleBmwPolling = null;
+      if (text) text.innerHTML = '<span style="color:var(--danger);">Code abgelaufen — bitte erneut anmelden.</span>';
+      return;
+    }
+    try {
+      const d = await (await fetch(`/api/vehicles/${vid}/cardata/tokens`, { method:'POST' })).json();
+      if (d.ok) {
+        clearInterval(_vehicleBmwPolling); _vehicleBmwPolling = null;
+        document.getElementById('vehicle-bmw-bestaetigung').style.display = 'none';
+        _toast('Mit BMW CarData verbunden');
+        vehicleBmwFahrzeugeLaden(vid);
+      } else if (!d.wartet && text) {
+        text.innerHTML = `<span style="color:var(--danger);">${d.meldung || 'Fehlgeschlagen.'}</span>`;
+      } else if (text) {
+        const rest = Math.round((ende - Date.now()) / 1000);
+        text.textContent = `Warte auf Bestätigung … (noch ${rest} Sekunden gültig)`;
+      }
+    } catch (e) {}
+  }, Math.max(3, intervallSek) * 1000);
+}
+
+async function vehicleBmwFahrzeugeLaden(vid) {
+  document.getElementById('vehicle-bmw-fahrzeugwahl').style.display = 'block';
+  const box = document.getElementById('vehicle-bmw-vin-liste');
+  box.innerHTML = '<div class="hint">Lade Fahrzeuge vom Konto …</div>';
+  try {
+    const d = await (await fetch(`/api/vehicles/${vid}/cardata/fahrzeuge`)).json();
+    if (!d.ok || !d.fahrzeuge || !d.fahrzeuge.length) {
+      box.innerHTML = `<div class="hint">${d.meldung || 'Keine Fahrzeuge gefunden.'} Bitte die VIN von Hand eintragen.</div>`;
+      return;
+    }
+    box.innerHTML = d.fahrzeuge.map(f => `
+      <button class="btn btn-sm" style="margin:2px;" onclick="vehicleBmwVinWaehlen('${f.vin}')">${f.vin}</button>
+    `).join('');
+  } catch (e) {
+    box.innerHTML = '<div class="hint">Fahrzeuge konnten nicht geladen werden — bitte VIN von Hand eintragen.</div>';
+  }
+}
+
+async function vehicleBmwVinWaehlen(vin) {
+  document.getElementById('vehicle-bmw-vin-manuell').value = vin;
+  await vehicleBmwVinUebernehmen();
+}
+
+async function vehicleBmwVinUebernehmen() {
+  const vid = _editingVehicleId;
+  if (!vid) return;
+  const vin = document.getElementById('vehicle-bmw-vin-manuell').value.trim().toUpperCase();
+  if (vin.length !== 17) { _toast('Eine Fahrgestellnummer hat genau 17 Zeichen'); return; }
+  await fetch(`/api/vehicles/${vid}/cardata/vin`, { method:'POST',
+    headers:{'Content-Type':'application/json'}, body: JSON.stringify({ vin }) });
+  document.getElementById('vehicle-vin').value = vin;
+  document.getElementById('vehicle-bmw-fahrzeugwahl').style.display = 'none';
+  await vehicleBmwStatusAnzeigen(vid);
+  _toast('Fahrzeug verbunden');
+}
+
+async function vehicleBmwStatusAnzeigen(vid) {
+  document.getElementById('vehicle-bmw-verbunden').style.display = 'block';
+  const d = await (await fetch(`/api/vehicles/${vid}/cardata/status`)).json();
+  document.getElementById('vehicle-bmw-vin-anzeige').textContent = d.vin || '';
+  const cb = document.getElementById('vehicle-bmw-stream');
+  const s = await (await fetch(`/api/vehicles/${vid}/cardata/stream`)).json();
+  if (cb) cb.checked = !!s.aktiv;
+  _vehicleBmwStreamAnzeige(s);
+}
+
+function _vehicleBmwStreamAnzeige(s) {
+  const box = document.getElementById('vehicle-bmw-stream-zustand');
+  if (!box) return;
+  if (!s.aktiv) { box.textContent = ''; return; }
+  if (s.verbunden && s.abonniert === false) {
+    box.innerHTML = `<b style="color:var(--danger);">Verbunden, Abonnement abgelehnt</b> — ${s.fehler || ''}`;
+  } else if (s.verbunden) {
+    box.innerHTML = `<b style="color:var(--success,#16a34a);">Verbunden</b> — ${s.nachrichten} Meldungen empfangen`;
+  } else if (s.fehler) {
+    box.innerHTML = `<b style="color:var(--danger);">Nicht verbunden</b> — ${s.fehler}`;
+  } else {
+    box.innerHTML = '<span style="color:var(--text-tertiary);">Verbindung wird aufgebaut …</span>';
+  }
+}
+
+async function vehicleBmwStreamSchalten(cb) {
+  const vid = _editingVehicleId;
+  if (!vid) return;
+  const d = await (await fetch(`/api/vehicles/${vid}/cardata/stream`, {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ aktiv: cb.checked })
+  })).json();
+  if (d.gesperrt) { cb.checked = false; _toast('Datenstrom nur in der Vollversion'); return; }
+  setTimeout(async () => {
+    const s = await (await fetch(`/api/vehicles/${vid}/cardata/stream`)).json();
+    _vehicleBmwStreamAnzeige(s);
+  }, 2500);
+}
+
+async function vehicleBmwLadesessions() {
+  const vid = _editingVehicleId;
+  if (!vid) return;
+  const out = document.getElementById('vehicle-bmw-import-ergebnis');
+  out.textContent = 'Rufe Ladehistorie ab …';
+  try {
+    const d = await (await fetch(`/api/vehicles/${vid}/cardata/ladesessions`, { method:'POST' })).json();
+    out.textContent = d.ok
+      ? `${d.neu || 0} von ${d.gefunden || 0} Ladevorgängen übernommen.`
+      : (d.meldung || 'Import fehlgeschlagen.');
+  } catch (e) {
+    out.textContent = 'Import fehlgeschlagen.';
+  }
+}
+
+async function vehicleBmwArchivImport(input) {
+  const vid = _editingVehicleId;
+  const file = input.files[0];
+  if (!vid || !file) return;
+  const out = document.getElementById('vehicle-bmw-import-ergebnis');
+  out.textContent = 'Lese Archiv …';
+  const formData = new FormData();
+  formData.append('file', file);
+  try {
+    const d = await (await fetch(`/api/vehicles/${vid}/cardata/archiv-ladesessions`,
+                                 { method:'POST', body: formData })).json();
+    out.textContent = d.ok
+      ? `${d.neu || 0} von ${d.gefunden || 0} Ladevorgängen aus dem Archiv übernommen.`
+      : (d.meldung || 'Import fehlgeschlagen.');
+  } catch (e) {
+    out.textContent = 'Import fehlgeschlagen.';
+  }
+  input.value = '';
+}
+
+let _vehicleBmwProtokollTimer = null;
+
+function vehicleBmwProtokollToggle() {
+  const pre = document.getElementById('vehicle-bmw-protokoll');
+  const btn = document.getElementById('vehicle-bmw-protokoll-toggle-btn');
+  const show = pre.style.display === 'none';
+  if (show) {
+    pre.style.display = 'block';
+    btn.textContent = 'Protokoll ausblenden';
+    _vehicleBmwProtokollAktualisieren();
+    _vehicleBmwProtokollTimer = setInterval(_vehicleBmwProtokollAktualisieren, 5000);
+  } else {
+    pre.style.display = 'none';
+    btn.textContent = 'Protokoll anzeigen';
+    if (_vehicleBmwProtokollTimer) { clearInterval(_vehicleBmwProtokollTimer); _vehicleBmwProtokollTimer = null; }
+  }
+}
+
+async function _vehicleBmwProtokollAktualisieren() {
+  const vid = _editingVehicleId;
+  const pre = document.getElementById('vehicle-bmw-protokoll');
+  if (!vid || !pre) return;
+  try {
+    const d = await (await fetch(`/api/vehicles/${vid}/cardata/stream/protokoll`)).json();
+    pre.textContent = (d.log_tail || []).join('\n') || 'Noch keine Einträge.';
+  } catch (e) {}
+}
+
+async function vehicleBmwImportZuruecksetzen() {
+  const vid = _editingVehicleId;
+  if (!vid) return;
+  if (!confirm('Alle aus BMW importierten Ladevorgänge und Fahrt-Referenzen dieses Fahrzeugs wirklich löschen?')) return;
+  const d = await (await fetch(`/api/vehicles/${vid}/cardata/import-zuruecksetzen`, { method:'POST' })).json();
+  if (d.ok) {
+    _toast(`Zurückgesetzt: ${d.sessions || 0} Ladevorgänge, ${d.referenzen || 0} Fahrt-Referenzen`);
+  } else {
+    _toast('Zurücksetzen fehlgeschlagen');
+  }
+}
+
+async function vehicleBmwTrennen() {
+  const vid = _editingVehicleId;
+  if (!vid) return;
+  if (!confirm('BMW-Verbindung dieses Fahrzeugs wirklich trennen?')) return;
+  await fetch(`/api/vehicles/${vid}/cardata/abmelden`, { method:'POST' });
+  document.getElementById('vehicle-bmw-verbunden').style.display = 'none';
+  document.getElementById('vehicle-bmw-schritt-anmelden').style.display = 'block';
+  document.getElementById('vehicle-bmw-client-id').value = '';
+  _toast('BMW-Verbindung getrennt');
 }
 
 async function deleteVehicle(id) {
@@ -6468,400 +6719,6 @@ async function pruefAktion(sessionId, aktion, korrekturWh) {
 // ═══════════════════════════════════════════════════════════════════════════
 let _cardataPolling = null;
 
-async function cardataStatusLaden() {
-  try {
-    const d = await (await hole('/api/cardata/status')).json();
-    const box = document.getElementById('cardata-status-box');
-    const anmeldung = document.getElementById('cardata-anmeldung');
-    const betrieb = document.getElementById('cardata-betrieb');
-    if (!box) return;
-
-    if (d.angemeldet) {
-      const warnung = d.ablauf_droht
-        ? `<div style="color:var(--warning,#eab308); margin-top:6px;">Die Anmeldung läuft in Kürze ab `
-          + `(seit ${d.tage_seit_erneuerung} Tagen nicht erneuert). Ein Abruf erneuert sie automatisch.</div>`
-        : '';
-      box.innerHTML = `<span style="color:var(--success);">●</span> <b>Verbunden</b>`
-        + (d.vin ? ` · Fahrzeug ${d.vin}` : ' · noch kein Fahrzeug gewählt')
-        + (d.letzter_abruf ? `<br><span style="color:var(--text-tertiary);">Letzter Abruf: ${d.letzter_abruf}</span>` : '')
-        + (d.auto ? `<br><span style="color:var(--text-tertiary);">Automatik: alle ${d.intervall_min} Minuten (${d.abrufe_pro_tag} Abrufe/Tag)</span>` : '')
-        + warnung;
-      if (anmeldung) anmeldung.style.display = 'none';
-      if (betrieb) betrieb.style.display = 'block';
-      const iv = document.getElementById('cardata-intervall');
-      if (iv) iv.value = d.auto ? String(d.intervall_min) : '0';
-      const vinFeld = document.getElementById('cardata-vin');
-      if (vinFeld && d.vin && !vinFeld.value) vinFeld.value = d.vin;
-    } else {
-      box.innerHTML = '<span style="color:var(--text-tertiary);">●</span> Nicht verbunden — '
-        + 'bitte mit der Client-ID aus dem BMW-Portal anmelden.';
-      if (anmeldung) anmeldung.style.display = 'block';
-      if (betrieb) betrieb.style.display = 'none';
-    }
-  } catch (e) {}
-}
-
-async function cardataAnmelden() {
-  const btn = document.getElementById('cardata-anmelden-btn');
-  const clientId = document.getElementById('cardata-client-id').value.trim();
-  if (!clientId) { _toast('Bitte die Client-ID eintragen'); return; }
-  if (btn) btn.disabled = true;
-  try {
-    const d = await (await fetch('/api/cardata/anmelden', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ client_id: clientId,
-        mit_streaming: !!document.getElementById('cardata-mit-stream')?.checked })
-    })).json();
-    if (!d.ok) { _toast(d.meldung || 'Anmeldung fehlgeschlagen'); return; }
-
-    document.getElementById('cardata-bestaetigung').style.display = 'block';
-    document.getElementById('cardata-usercode').textContent = d.user_code || '–';
-    const link = document.getElementById('cardata-link');
-    if (link) link.href = d.verification_uri_complete || d.verification_uri || '#';
-    // Der Nutzer bestätigt jetzt im Browser; wir fragen in Abständen nach,
-    // bis BMW die Tokens herausgibt oder der Code abläuft.
-    _cardataWartenAufBestaetigung(d.interval || 5, d.expires_in || 600);
-  } finally {
-    if (btn) btn.disabled = false;
-  }
-}
-
-function _cardataWartenAufBestaetigung(intervallSek, gueltigSek) {
-  if (_cardataPolling) clearInterval(_cardataPolling);
-  const ende = Date.now() + gueltigSek * 1000;
-  const text = document.getElementById('cardata-warte-text');
-
-  _cardataPolling = setInterval(async () => {
-    if (Date.now() > ende) {
-      clearInterval(_cardataPolling); _cardataPolling = null;
-      if (text) text.innerHTML = '<span style="color:var(--danger);">Code abgelaufen — bitte erneut anmelden.</span>';
-      return;
-    }
-    try {
-      const d = await (await fetch('/api/cardata/tokens', { method:'POST' })).json();
-      if (d.ok) {
-        clearInterval(_cardataPolling); _cardataPolling = null;
-        document.getElementById('cardata-bestaetigung').style.display = 'none';
-        _toast('Mit BMW CarData verbunden');
-        cardataStatusLaden();
-        cardataFahrzeugeLaden();
-      } else if (!d.wartet && text) {
-        text.innerHTML = `<span style="color:var(--danger);">${d.meldung || 'Fehlgeschlagen.'}</span>`;
-      } else if (text) {
-        const rest = Math.round((ende - Date.now()) / 1000);
-        text.textContent = `Warte auf Bestätigung … (noch ${rest} Sekunden gültig)`;
-      }
-    } catch (e) {}
-  }, Math.max(3, intervallSek) * 1000);
-}
-
-async function cardataFahrzeugeLaden() {
-  // Optionaler Komfort: Fahrzeuge aus dem Konto holen. Schlaegt das fehl,
-  // ist das unkritisch — die VIN lässt sich auch von Hand eintragen.
-  const box = document.getElementById('cardata-vin-liste');
-  try {
-    const d = await (await fetch('/api/cardata/fahrzeuge')).json();
-    if (!d.ok) {
-      if (box) {
-        box.style.display = 'block';
-        box.innerHTML = `<span style="color:var(--warning,#eab308); font-size:12px;">`
-          + `${d.meldung || 'Fahrzeuge konnten nicht geladen werden.'} `
-          + `Trage die Fahrgestellnummer bitte von Hand ein.</span>`;
-      }
-      return;
-    }
-    const liste = d.fahrzeuge || [];
-    if (!liste.length) {
-      if (box) {
-        box.style.display = 'block';
-        box.innerHTML = '<span style="color:var(--warning,#eab308); font-size:12px;">'
-          + 'Keine Fahrzeuge im Konto gefunden — bitte VIN von Hand eintragen.</span>';
-      }
-      return;
-    }
-    if (liste.length === 1) {
-      document.getElementById('cardata-vin').value = liste[0].vin;
-      cardataVinSpeichern();
-      if (box) box.style.display = 'none';
-      return;
-    }
-    if (box) {
-      box.style.display = 'block';
-      box.innerHTML = '<div style="font-size:12px; margin-bottom:4px;">Gefundene Fahrzeuge:</div>'
-        + liste.map(f => `<button class="btn btn-sm" style="margin:0 6px 6px 0;"
-             onclick="document.getElementById('cardata-vin').value='${f.vin}'; cardataVinSpeichern();">`
-             + `${f.vin}${f.typ ? ' · ' + f.typ : ''}</button>`).join('');
-    }
-  } catch (e) {
-    if (box) {
-      box.style.display = 'block';
-      box.innerHTML = '<span style="color:var(--warning,#eab308); font-size:12px;">'
-        + 'Abruf fehlgeschlagen — bitte VIN von Hand eintragen.</span>';
-    }
-  }
-}
-
-async function cardataVinSpeichern() {
-  const feld = document.getElementById('cardata-vin');
-  const vin = (feld.value || '').trim().toUpperCase();
-  feld.value = vin;
-  if (!vin) return;
-  if (vin.length !== 17) {
-    _toast('Eine Fahrgestellnummer hat genau 17 Zeichen');
-    return;
-  }
-  await fetch('/api/cardata/vin', { method:'POST',
-    headers:{'Content-Type':'application/json'}, body: JSON.stringify({ vin }) });
-  _toast('Fahrzeug gespeichert');
-  cardataStatusLaden();
-  aktualisiereThemaVorschau();
-}
-
-async function cardataAutomatikSpeichern() {
-  const wert = parseInt(document.getElementById('cardata-intervall').value, 10);
-  const d = await (await fetch('/api/cardata/automatik', {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ aktiv: wert > 0, intervall_min: wert || 30 })
-  })).json();
-  _toast(d.aktiv ? `Automatik aktiv: alle ${d.intervall_min} Minuten` : 'Automatik ausgeschaltet');
-  cardataStatusLaden();
-}
-
-async function cardataAbrufen(ausFahrten = false) {
-  if (bmwGesperrtHinweis('fahrten')) return;
-  const btn = document.getElementById('cardata-abruf-btn');
-  const out = document.getElementById(
-    ausFahrten ? 'trips-import-ergebnis' : 'cardata-abruf-ergebnis');
-  if (btn) btn.disabled = true;
-  if (out) out.textContent = 'Rufe Fahrzeugdaten ab …';
-  try {
-    const d = await (await fetch('/api/cardata/abrufen', { method:'POST' })).json();
-    if (!d.ok) {
-      if (out) out.innerHTML = `<span style="color:var(--danger);">✕</span> ${d.meldung || 'Abruf fehlgeschlagen.'}`;
-      return;
-    }
-    if (d.fahrt_erkannt) {
-      if (out) out.innerHTML = `<span style="color:var(--success);">✓</span> Fahrt über `
-        + `${fmtDe(d.distanz_km, 1)} km erkannt — im Dashboard zuordnen.`;
-      _toast('Neue Fahrt erkannt');
-      loadBmwTrips();
-      if (ausFahrten) loadTrips();
-    } else {
-      if (out) out.innerHTML = `<span style="color:var(--text-tertiary);">●</span> ${d.meldung || 'Keine neue Fahrt.'}`
-        + (d.km ? ` <span style="color:var(--text-tertiary);">(Kilometerstand ${fmtDe(d.km, 0)} km)</span>` : '');
-    }
-    cardataStatusLaden();
-  } finally {
-    if (btn) btn.disabled = false;
-  }
-}
-
-async function cardataAbmelden() {
-  if (!confirm('Verbindung zu BMW CarData trennen?')) return;
-  await fetch('/api/cardata/abmelden', { method:'POST' });
-  _toast('Verbindung getrennt');
-  cardataStatusLaden();
-}
-
-// ─── Fahrten aus dem BMW-Datenarchiv einlesen ──────────────────────────────
-async function cardataArchivImport(ausFahrten = false) {
-  const feld = document.getElementById(ausFahrten ? 'trips-archiv-datei' : 'cardata-archiv-datei');
-  const btn = document.getElementById(ausFahrten ? 'trips-archiv-btn' : 'cardata-archiv-btn');
-  const out = document.getElementById(ausFahrten ? 'trips-import-ergebnis' : 'cardata-archiv-ergebnis');
-  if (!feld || !feld.files.length) { _toast('Bitte zuerst das ZIP-Archiv auswählen'); return; }
-
-  const daten = new FormData();
-  daten.append('file', feld.files[0]);
-  if (btn) btn.disabled = true;
-  if (out) out.innerHTML = '<div class="hint">Lese Archiv …</div>';
-  try {
-    const d = await (await fetch('/api/cardata/archiv-import', {
-      method: 'POST', body: daten })).json();
-    if (!d.ok) {
-      if (out) out.innerHTML = `<div style="color:var(--danger); font-size:13px;">✕ ${d.meldung || 'Import fehlgeschlagen.'}</div>`;
-      return;
-    }
-    if (!d.gefunden) {
-      if (out) out.innerHTML = `<div class="hint">${d.meldung || 'Keine Fahrten gefunden.'}</div>`;
-      return;
-    }
-    const vorschau = (d.vorschau || []).map(f =>
-      `<div style="padding:6px 0; border-top:1px solid var(--border); font-size:12px;">
-         <b>${fmtDatum(f.start_time)}</b> · ${fmtDe(f.distance_km, 0)} km<br>
-         <span style="color:var(--text-tertiary);">${f.start_address} → ${f.end_address}</span>
-       </div>`).join('');
-    out.innerHTML = `
-      <div style="color:var(--success); font-size:13px; font-weight:600; margin-bottom:6px;">
-        ✓ ${d.neu} neue Fahrten übernommen
-      </div>
-      <div class="hint">
-        ${d.gefunden} Fahrten aus ${d.ladevorgaenge} Ladevorgängen abgeleitet
-        (${fmtDe(d.km_gesamt, 0)} km, ${d.zeitraum})${d.uebersprungen ? ` · ${d.uebersprungen} bereits bekannt` : ''}.
-        ${d.neu ? 'Sie warten jetzt im Dashboard auf die Zuordnung.' : ''}
-      </div>
-      ${vorschau ? '<div style="margin-top:8px;">' + vorschau + '</div>' : ''}`;
-    if (d.neu) {
-      _toast(`${d.neu} Fahrten importiert`);
-      loadBmwTrips();
-      if (ausFahrten) loadTrips();
-    }
-  } catch (e) {
-    if (out) out.innerHTML = '<div style="color:var(--danger); font-size:13px;">✕ Import fehlgeschlagen.</div>';
-  } finally {
-    if (btn) btn.disabled = false;
-  }
-}
-
-
-// ─── Sammelaktionen für ausgewählte Fahrten ────────────────────────────────
-async function sammelFahrtart(art) {
-  const ids = Array.from(_selectedTrips);
-  if (!ids.length) return;
-  const d = await (await fetch('/api/trips/sammel-fahrtart', {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ trip_ids: ids, fahrtart: art })
-  })).json();
-  if (d.ok) {
-    _toast(art === 'privat'
-      ? `${d.anzahl} Fahrt(en) als privat — ohne Erstattung, bleiben im Fahrtenbuch`
-      : `${d.anzahl} Fahrt(en) als dienstlich eingestuft`);
-    _selectedTrips.clear();
-    _updateSelectionBar();
-    loadTrips();
-    loadDashboardSummary();
-  }
-}
-
-async function sammelSatz(rate) {
-  const ids = Array.from(_selectedTrips);
-  if (!ids.length) return;
-  const d = await (await fetch('/api/trips/sammel-satz', {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ trip_ids: ids, rate })
-  })).json();
-  if (d.ok) {
-    // Private Fahrten werden bewusst übersprungen — dort wäre ein
-    // Erstattungssatz steuerlich unzulässig.
-    const hinweis = d.uebersprungen
-      ? ` (${d.uebersprungen} private Fahrt(en) unverändert)` : '';
-    _toast(`${d.anzahl} Fahrt(en) auf ${rate === 0 ? 'keine Erstattung' : fmtDe(rate,2) + ' €/km'} gesetzt${hinweis}`);
-    _selectedTrips.clear();
-    _updateSelectionBar();
-    loadTrips();
-    loadDashboardSummary();
-  }
-}
-
-// ─── Fahrzeugdaten aus dem Bordcomputer anzeigen ───────────────────────────
-async function cardataFahrzeugdatenLaden() {
-  const card = document.getElementById('cardata-fzg-card');
-  const box = document.getElementById('cardata-fzg-werte');
-  if (!card || !box) return;
-  try {
-    const d = await (await fetch('/api/cardata/fahrzeugdaten')).json();
-    // Nur anzeigen, wenn tatsächlich Werte vorliegen
-    const hatWerte = ['km','verbrauch_kwh_100','akku_max_kwh','soc_prozent',
-                      'reichweite_km','service_in_km'].some(k => d[k] != null);
-    if (!hatWerte) { card.style.display = 'none'; return; }
-    card.style.display = 'block';
-
-    const kachel = (label, wert, einheit, hinweis) => wert == null ? '' : `
-      <div style="padding:10px 12px; background:var(--bg-input); border-radius:6px;">
-        <div style="font-size:10px; color:var(--text-tertiary); text-transform:uppercase;
-             letter-spacing:.04em;">${label}</div>
-        <div style="font-size:17px; font-weight:700; margin-top:2px;">${wert}${einheit ? ' ' + einheit : ''}</div>
-        ${hinweis ? `<div style="font-size:10px; color:var(--text-tertiary);">${hinweis}</div>` : ''}
-      </div>`;
-
-    box.innerHTML =
-        kachel('Kilometerstand', d.km != null ? fmtDe(d.km, 0) : null, 'km')
-      + kachel('Ø Verbrauch', d.verbrauch_kwh_100 != null ? fmtDe(d.verbrauch_kwh_100, 1) : null,
-               'kWh/100 km', 'echter Wert statt Schätzung')
-      + kachel('Ladestand', d.soc_prozent != null ? fmtDe(d.soc_prozent, 0) : null, '%')
-      + kachel('Reichweite', d.reichweite_km != null ? fmtDe(d.reichweite_km, 0) : null, 'km')
-      + kachel('Akkukapazität', d.akku_max_kwh != null ? fmtDe(d.akku_max_kwh, 1) : null, 'kWh')
-      + kachel('Akkuzustand', d.akku_soh_prozent != null ? fmtDe(d.akku_soh_prozent, 0) : null,
-               '%', 'State of Health')
-      + kachel('Nächster Service', d.service_in_km != null ? fmtDe(d.service_in_km, 0) : null, 'km')
-      + kachel('Ø pro Woche', d.woche_km != null ? fmtDe(d.woche_km, 0) : null, 'km');
-
-    const stand = document.getElementById('cardata-fzg-stand');
-    if (stand && d.stand) stand.textContent = `Stand: ${d.stand}`;
-  } catch (e) {}
-}
-
-// Sichtbarkeit der BMW-Bedienelemente.
-//
-// Frühere Regel war: ohne Verbindung ausblenden. Das verschweigt aber, dass
-// es die Funktion überhaupt gibt — in der Demo ist genau das der Punkt.
-// Neue Regel:
-//
-//   Vollversion, verbunden      → nutzbar
-//   Vollversion, nicht verbunden → sichtbar, führt zur Einrichtung
-//   Demo                         → sichtbar mit Pro-Abzeichen, erklärt beim Klick
-//
-// Ein Dateifeld ohne Verbindung ist keine Werbung, sondern eine Sackgasse.
-async function pruefeBmwImportBereich() {
-  // Alle BMW-Knöpfe bleiben sichtbar, in der Demo mit Pro-Abzeichen.
-  // Ein ausgeblendeter Knopf wirft die Frage auf, wo die Funktion ist.
-  ['bmw-lade-btn', 'bmw-fahrt-btn', 'bmw-reset-btn']
-    .map(id => document.getElementById(id))
-    .filter(Boolean)
-    .forEach(el => { el.style.display = 'inline-flex'; });
-}
-
-// Ladevorgänge der letzten 30 Tage übernehmen
-async function cardataLadesessions() {
-  if (bmwGesperrtHinweis('historie')) return;
-  const btn = document.getElementById('bmw-lade-btn') || document.getElementById('cardata-lade-btn');
-  const out = document.getElementById('cardata-abruf-ergebnis');
-  if (btn) btn.disabled = true;
-  if (out) out.textContent = 'Rufe Ladehistorie ab …';
-  try {
-    const d = await (await fetch('/api/cardata/ladesessions', { method:'POST' })).json();
-    if (!d.ok) {
-      if (out) out.innerHTML = `<span style="color:var(--danger);">✕</span> ${d.meldung || 'Abruf fehlgeschlagen.'}`;
-      return;
-    }
-    // Aufschlüsselung zeigen: Wenn nichts übernommen wurde, ist der Grund
-    // die eigentliche Information.
-    const gruende = [];
-    if (d.bereits_da)   gruende.push(`${d.bereits_da} bereits vorhanden`);
-    if (d.doppelt)      gruende.push(`${d.doppelt} von deiner Wallbox bereits erfasst`);
-    if (d.ohne_energie) gruende.push(`${d.ohne_energie} ohne Energiefluss (nur eingesteckt)`);
-    if (d.ohne_zeit)    gruende.push(`${d.ohne_zeit} ohne Zeitstempel`);
-    const details = gruende.length
-      ? `<div class="hint" style="margin-top:4px;">${gruende.join(' · ')}</div>` : '';
-
-    if (out) out.innerHTML = d.neu
-      ? `<span style="color:var(--success);">✓</span> ${d.neu} von ${d.gefunden} `
-        + `Ladevorgängen übernommen.${details}`
-      : `<span style="color:var(--text-tertiary);">●</span> Keine neuen Ladevorgänge `
-        + `übernommen (${d.gefunden} empfangen).${details}`;
-    if (d.neu) {
-      _toast(`${d.neu} Ladevorgänge importiert`);
-      if (typeof loadSessions === 'function') loadSessions();
-    }
-
-    // Aus denselben Daten lassen sich die Fahrten ableiten — ohne zusätzlichen
-    // Abruf vom Tageskontingent, weil die Ladehistorie bereits vorliegt.
-    try {
-      const f = await (await fetch('/api/cardata/fahrten-aus-ladehistorie',
-                                    { method:'POST' })).json();
-      if (f.ok && f.neu) {
-        if (out) out.innerHTML += `<div class="hint" style="margin-top:4px; color:var(--akz-geld);">`
-          + `✓ Zusätzlich ${f.neu} Fahrten abgeleitet (${fmtDe(f.km_gesamt, 0)} km) — `
-          + `unter <b>Fahrten</b> zuordnen.</div>`;
-        _toast(`${f.neu} Fahrten aus der Ladehistorie abgeleitet`);
-      }
-    } catch (e) {}
-
-    if (!d.neu) _toast(d.meldung || 'Keine neuen Ladevorgänge');
-  } finally {
-    if (btn) btn.disabled = false;
-  }
-}
-
 // ─── Preise für externes Laden ─────────────────────────────────────────────
 async function loadLadepreise() {
   try {
@@ -6962,6 +6819,94 @@ async function ladeKosten100km() {
 // ═══════════════════════════════════════════════════════════════════════════
 
 // Statusleiste: beantwortet, ob die Zahlen darunter aktuell sind.
+// Fahrzeugstatus-Kachel: Reichweite, Akku, Standort — je Fahrzeug mit
+// bestehender BMW-Verbindung. Nutzt die ohnehin vorliegenden, zuletzt
+// gemeldeten Werte (aus Stream oder letztem Abruf) statt bei jedem
+// Dashboard-Aufruf neues Kontingent zu verbrauchen; "Aktualisieren" holt
+// bei Bedarf gezielt frische Werte.
+async function ladeFahrzeugStatusKachel() {
+  const card = document.getElementById('fahrzeug-status-card');
+  const grid = document.getElementById('fahrzeug-status-grid');
+  if (!card || !grid) return;
+  try {
+    const vs = await (await hole('/api/vehicles')).json();
+    const fahrzeuge = (vs.vehicles || []).filter(v => v.vin);
+    if (!fahrzeuge.length) { card.style.display = 'none'; return; }
+
+    const kacheln = [];
+    for (const v of fahrzeuge) {
+      let status;
+      try {
+        status = await (await hole(`/api/vehicles/${v.id}/cardata/status`)).json();
+      } catch (e) { continue; }
+      if (!status.angemeldet) continue;
+
+      let d = {};
+      try {
+        d = await (await hole(`/api/vehicles/${v.id}/cardata/fahrzeugdaten`)).json();
+      } catch (e) {}
+
+      kacheln.push(_fahrzeugStatusKachelHtml(v, d));
+    }
+
+    if (!kacheln.length) { card.style.display = 'none'; return; }
+    card.style.display = 'block';
+    grid.innerHTML = kacheln.join('');
+  } catch (e) {
+    card.style.display = 'none';
+  }
+}
+
+function _fahrzeugStatusKachelHtml(v, d) {
+  const wert = (label, val, einheit) => val == null ? '' : `
+    <div style="padding:8px 10px; background:var(--bg-input); border-radius:6px;">
+      <div style="font-size:9.5px; color:var(--text-tertiary); text-transform:uppercase; letter-spacing:.04em;">${label}</div>
+      <div style="font-size:15px; font-weight:700; margin-top:2px;">${val}${einheit ? ' ' + einheit : ''}</div>
+    </div>`;
+
+  const hatDaten = d && (d.reichweite_km != null || d.soc_prozent != null || d.km != null);
+  const standort = (d && d.lat != null && d.lon != null)
+    ? `<a href="https://www.google.com/maps?q=${d.lat},${d.lon}" target="_blank" rel="noopener"
+         style="font-size:11px; text-decoration:underline;">Standort auf Karte</a>`
+    : '';
+
+  return `
+    <div class="card" style="margin:0; padding:12px 14px;">
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+        <div style="font-weight:600; font-size:13px;">${v.bezeichnung || 'Fahrzeug'}</div>
+        <button class="btn btn-sm" style="padding:2px 8px; font-size:11px;"
+                onclick="fahrzeugDatenAktualisieren(${v.id}, this)" title="Jetzt abrufen">↻</button>
+      </div>
+      ${hatDaten ? `
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+          ${wert('Reichweite', d.reichweite_km != null ? fmtDe(d.reichweite_km, 0) : null, 'km')}
+          ${wert('Ladestand', d.soc_prozent != null ? fmtDe(d.soc_prozent, 0) : null, '%')}
+          ${wert('Kilometerstand', d.km != null ? fmtDe(d.km, 0) : null, 'km')}
+          ${wert('Nächster Service', d.service_in_km != null ? fmtDe(d.service_in_km, 0) : null, 'km')}
+        </div>
+        <div style="margin-top:8px; display:flex; justify-content:space-between; align-items:center;">
+          ${standort || '<span></span>'}
+          ${d.stand ? `<span style="font-size:10px; color:var(--text-tertiary);">Stand: ${d.stand.slice(11,16)} Uhr</span>` : ''}
+        </div>
+      ` : `<div class="hint">Noch keine Daten — auf ↻ tippen, um jetzt abzurufen.</div>`}
+    </div>`;
+}
+
+async function fahrzeugDatenAktualisieren(vehicleId, btn) {
+  if (btn) btn.disabled = true;
+  try {
+    const d = await (await fetch(`/api/vehicles/${vehicleId}/cardata/fahrzeugdaten/aktualisieren`,
+                                 { method: 'POST' })).json();
+    if (!d.ok) { _toast(d.meldung || 'Abruf fehlgeschlagen'); return; }
+    _toast('Fahrzeugdaten aktualisiert');
+    ladeFahrzeugStatusKachel();
+  } catch (e) {
+    _toast('Abruf fehlgeschlagen');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
 async function ladeDashStatus() {
   const setze = (id, klasse, text) => {
     const el = document.getElementById(id);
@@ -6979,10 +6924,18 @@ async function ladeDashStatus() {
   } catch (e) { setze('sp-wallbox', '', 'Wallbox'); }
 
   try {
-    const cd = await (await hole('/api/cardata/status')).json();
-    setze('sp-cardata', cd.angemeldet ? 'ok' : '',
-      cd.angemeldet
-        ? (cd.letzter_abruf ? `CarData · ${cd.letzter_abruf.slice(11,16)} Uhr` : 'CarData verbunden')
+    const vs = await (await hole('/api/vehicles')).json();
+    const fahrzeuge = (vs.vehicles || []).filter(v => v.vin);
+    let verbunden = 0;
+    for (const v of fahrzeuge) {
+      try {
+        const cd = await (await hole(`/api/vehicles/${v.id}/cardata/status`)).json();
+        if (cd.angemeldet) verbunden++;
+      } catch (e) {}
+    }
+    setze('sp-cardata', verbunden > 0 ? 'ok' : '',
+      verbunden > 0
+        ? `CarData · ${verbunden} Fahrzeug${verbunden === 1 ? '' : 'e'} verbunden`
         : 'CarData nicht verbunden');
   } catch (e) {}
 
@@ -7096,26 +7049,6 @@ async function ladeExternKachel() {
   } catch (e) {}
 }
 
-// BMW-Import vollständig zurücksetzen — für den Fall, dass nach einem
-// Löschvorgang nichts mehr importiert werden kann.
-async function cardataImportZuruecksetzen() {
-  if (bmwGesperrtHinweis('reset')) return;
-  if (!confirm('BMW-Import vollständig zurücksetzen?\n\n'
-    + 'Entfernt alle aus BMW importierten Ladevorgänge sowie die gemerkten '
-    + 'Importstände. Selbst erfasste Sessions und Wallbox-Daten bleiben erhalten.\n\n'
-    + 'Danach holt ein erneuter Abruf wieder alles.')) return;
-  try {
-    const d = await (await fetch('/api/cardata/import-zuruecksetzen', { method:'POST' })).json();
-    if (d.ok) {
-      _toast(`Zurückgesetzt: ${d.sessions} Ladevorgänge, ${d.referenzen} Fahrt-Referenzen`);
-      loadSessions();
-      loadDashboardSummary();
-    }
-  } catch (e) {
-    _toast('Zurücksetzen fehlgeschlagen');
-  }
-}
-
 // Heimladungen aus der BMW-App übernehmen — standardmäßig aus, weil die
 // eigene Wallbox der belastbare Messnachweis ist.
 async function loadBmwHeimladungen() {
@@ -7145,233 +7078,6 @@ function _zeigeDuplikatSchalter() {
   const an = document.getElementById('bmw-heimladungen')?.checked;
   const zeile = document.getElementById('bmw-dupl-zeile');
   if (zeile) zeile.style.display = an ? 'flex' : 'none';
-}
-
-// MQTT-Datenstrom ein- und ausschalten. Ersetzt den regelmäßigen Abruf.
-async function cardataStreamSchalten(cb) {
-  try {
-    const d = await (await fetch('/api/cardata/stream', {
-      method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ aktiv: cb.checked })
-    })).json();
-    if (d.gesperrt) {
-      cb.checked = false;
-      _toast('Datenstrom nur in der Vollversion');
-      return;
-    }
-    if (cb.checked) {
-      // Der Abruf wird überflüssig: Der Strom liefert Position und
-      // Kilometerstand in der Meldung mit — ohne Kontingentverbrauch.
-      const sel = document.getElementById('cardata-intervall');
-      if (sel && sel.value !== '0') {
-        sel.value = '0';
-        await fetch('/api/cardata/automatik', {
-          method: 'POST', headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({ aktiv: false, intervall_min: 0 })
-        });
-        _toast('Datenstrom aktiv — der regelmäßige Abruf wurde abgeschaltet');
-      } else {
-        _toast('Datenstrom wird aufgebaut …');
-      }
-    } else {
-      _toast('Datenstrom angehalten — regelmäßigen Abruf nicht vergessen');
-    }
-    setTimeout(loadStreamZustand, 2500);
-    setTimeout(loadKontingent, 2600);
-  } catch (e) {
-    _toast('Umschalten fehlgeschlagen');
-  }
-}
-
-// ─── Verbindungsdaten (Host/Port) — einstellbar statt fest im Code ────────
-async function loadStreamVerbindung() {
-  const hostFeld = document.getElementById('stream-host');
-  const portFeld = document.getElementById('stream-port');
-  if (!hostFeld || !portFeld) return;
-  try {
-    const d = await (await hole('/api/cardata/stream-verbindung')).json();
-    hostFeld.value = d.host || d.host_standard || '';
-    portFeld.value = d.port || d.port_standard || '';
-    hostFeld.placeholder = d.host_standard || '';
-    portFeld.placeholder = d.port_standard || '';
-  } catch (e) {}
-  aktualisiereThemaVorschau();
-}
-
-async function streamVerbindungSpeichern() {
-  const host = document.getElementById('stream-host').value.trim();
-  const port = parseInt(document.getElementById('stream-port').value, 10) || 0;
-  try {
-    await fetch('/api/cardata/stream-verbindung', {
-      method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ host, port })
-    });
-    _toast('Verbindungsdaten gespeichert — wirkt beim nächsten Verbindungsaufbau');
-  } catch (e) {
-    _toast('Speichern fehlgeschlagen');
-  }
-}
-
-// Zeigt das tatsaechliche MQTT-Thema (gcid/vin), damit sich das ohne
-// Rätselraten mit dem Portal-Wert abgleichen laesst — genau das Thema, das
-// im Code abonniert wird, nicht nur der Bauplan dazu.
-async function aktualisiereThemaVorschau() {
-  const box = document.getElementById('stream-thema-vorschau');
-  if (!box) return;
-  try {
-    const [statusD, authD] = await Promise.all([
-      (await hole('/api/cardata/stream')).json(),
-      (await hole('/api/cardata/status')).json().catch(() => ({})),
-    ]);
-    const gcid = authD?.gcid || '';
-    const vin = document.getElementById('cardata-vin')?.value || '';
-    if (gcid && vin) {
-      box.textContent = `Abonniertes Thema: ${gcid}/${vin}`;
-    } else {
-      box.textContent = 'Thema erscheint hier, sobald Anmeldung und VIN vorliegen.';
-    }
-  } catch (e) {}
-}
-
-// ─── Live-Protokoll — direkt in der App statt in Terminal/Putty ───────────
-let _streamLogAutoRefreshTimer = null;
-
-function toggleStreamProtokoll() {
-  const pre = document.getElementById('stream-log-tail');
-  const btn = document.getElementById('stream-log-toggle-btn');
-  const refreshBtn = document.getElementById('stream-log-refresh-btn');
-  const clearBtn = document.getElementById('stream-log-clear-btn');
-  const autoLabel = document.getElementById('stream-log-autorefresh-label');
-  const show = pre.style.display === 'none';
-
-  if (show) {
-    btn.textContent = 'Protokoll ausblenden';
-    refreshBtn.style.display = 'inline-block';
-    clearBtn.style.display = 'inline-block';
-    autoLabel.style.display = 'inline';
-    refreshStreamProtokoll();
-    _streamLogAutoRefreshTimer = setInterval(refreshStreamProtokoll, 5000);
-  } else {
-    pre.style.display = 'none';
-    document.getElementById('stream-log-empty').style.display = 'none';
-    btn.textContent = 'Protokoll anzeigen';
-    refreshBtn.style.display = 'none';
-    clearBtn.style.display = 'none';
-    autoLabel.style.display = 'none';
-    if (_streamLogAutoRefreshTimer) {
-      clearInterval(_streamLogAutoRefreshTimer);
-      _streamLogAutoRefreshTimer = null;
-    }
-  }
-}
-
-async function refreshStreamProtokoll() {
-  const pre = document.getElementById('stream-log-tail');
-  const emptyEl = document.getElementById('stream-log-empty');
-  try {
-    const d = await (await hole('/api/cardata/stream/protokoll')).json();
-    const zeilen = d.log_tail || [];
-    if (!zeilen.length) {
-      pre.style.display = 'none';
-      emptyEl.style.display = 'block';
-      return;
-    }
-    emptyEl.style.display = 'none';
-    // Neueste unten, wie ein "tail -f" — aber am unteren Rand automatisch
-    // mitscrollen, damit man nicht nach jeder Aktualisierung selbst
-    // herunterscrollen muss.
-    const warUntenGescrollt = pre.scrollHeight - pre.scrollTop - pre.clientHeight < 30;
-    pre.style.display = 'block';
-    pre.textContent = zeilen.join('\n');
-    if (warUntenGescrollt) pre.scrollTop = pre.scrollHeight;
-  } catch (e) {
-    pre.style.display = 'block';
-    pre.textContent = 'Protokoll konnte nicht geladen werden.';
-  }
-}
-
-async function leereStreamProtokoll() {
-  if (!confirm('Protokoll wirklich leeren?')) return;
-  await fetch('/api/cardata/stream/protokoll', { method: 'DELETE' });
-  refreshStreamProtokoll();
-}
-
-async function loadStreamZustand() {
-
-
-  const box = document.getElementById('stream-zustand');
-  const cb = document.getElementById('cardata-stream');
-  if (!box) return;
-  try {
-    const d = await (await hole('/api/cardata/stream')).json();
-    if (cb) cb.checked = !!d.aktiv;
-
-    // Beim Abrufintervall vermerken, dass es nicht mehr gebraucht wird
-    const intervallHinweis = document.getElementById('intervall-ueberfluessig');
-    if (intervallHinweis) {
-      intervallHinweis.style.display = d.aktiv ? 'block' : 'none';
-    }
-
-    if (!d.aktiv) { box.style.display = 'none'; return; }
-    box.style.display = 'block';
-
-    if (d.verbunden && d.abonniert === false) {
-      // Verbindung steht, aber BMW hat das Thema abgelehnt — sah bisher
-      // identisch aus wie "läuft normal", weil niemand die SUBACK prüfte.
-      box.innerHTML = `<b style="color:var(--danger);">Verbunden, Abonnement abgelehnt</b><br>`
-        + `<span style="color:var(--text-tertiary);">${d.fehler || 'BMW hat das Thema nicht akzeptiert.'}</span>`;
-    } else if (d.verbunden) {
-      const abonnementHinweis = d.abonniert === true ? ''
-        : ' <span style="color:var(--text-tertiary);">(Abonnement noch unbestätigt)</span>';
-      box.innerHTML = '<b style="color:var(--success,#16a34a);">Verbunden</b>'
-        + abonnementHinweis
-        + ` — ${d.nachrichten} Meldungen empfangen`
-        + (d.letzte_nachricht ? `, zuletzt ${d.letzte_nachricht.slice(11,16)} Uhr` : '');
-    } else if (d.fehler) {
-      box.innerHTML = `<b style="color:var(--danger);">Nicht verbunden</b><br>`
-        + `<span style="color:var(--text-tertiary);">${d.fehler}</span>`;
-    } else {
-      box.innerHTML = '<span style="color:var(--text-tertiary);">'
-        + 'Verbindung wird aufgebaut …</span>';
-    }
-  } catch (e) {
-    box.style.display = 'none';
-  }
-}
-
-// Tageskontingent anzeigen. BMW erlaubt 50 Abrufe; ist das Limit erreicht,
-// kommen bis Mitternacht keine Daten mehr.
-async function loadKontingent() {
-  const box = document.getElementById('cardata-kontingent');
-  if (!box) return;
-  try {
-    const d = await (await hole('/api/cardata/kontingent')).json();
-    const anteil = Math.min(100, Math.round(d.verbraucht / d.limit * 100));
-    box.style.display = 'block';
-    document.getElementById('kont-text').textContent =
-      `${d.verbraucht} von ${d.limit}`;
-
-    const balken = document.getElementById('kont-balken');
-    balken.style.width = anteil + '%';
-    // Ab 80 % wird es eng, ab 95 % kritisch
-    balken.style.background = anteil >= 95 ? 'var(--danger)'
-                            : anteil >= 80 ? 'var(--amber)'
-                            : 'var(--accent)';
-
-    const hinweis = document.getElementById('kont-hinweis');
-    if (d.rest <= 0) {
-      hinweis.innerHTML = '<b style="color:var(--danger);">Kontingent '
-        + 'aufgebraucht</b> — bis Mitternacht keine weiteren Abrufe möglich.';
-    } else if (d.rest <= 5) {
-      hinweis.innerHTML = `<b style="color:var(--amber);">Noch ${d.rest} Abrufe</b> `
-        + 'heute — manuelles Abrufen jetzt sparsam einsetzen.';
-    } else {
-      hinweis.textContent = `Noch ${d.rest} Abrufe verfügbar.`
-        + (d.von_bmw_gemeldet ? ' (von BMW gemeldet)' : '');
-    }
-  } catch (e) {
-    box.style.display = 'none';
-  }
 }
 
 // Doppelerfassungs-Prüfung ein-/ausschalten
@@ -8206,25 +7912,6 @@ function proAbzeichen(text = 'Vollversion') {
        + `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">`
        + `<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>`
        + `${text}</span>`;
-}
-
-// Klick auf eine gesperrte BMW-Funktion: erklären, was sie tut und wozu sie
-// gehört — statt den Aufruf ins Leere laufen zu lassen.
-function bmwGesperrtHinweis(was) {
-  if (_istVollversion) return false;
-  const texte = {
-    historie: 'Die BMW-Ladehistorie holt Ladevorgänge unmittelbar aus dem '
-            + 'Fahrzeug — auch solche an fremden Ladesäulen.',
-    reset:    'Diese Funktion entfernt aus dem Fahrzeug importierte '
-            + 'Ladevorgänge und setzt den Importstand zurück.',
-    fahrten:  'Der Abruf holt neue Fahrten unmittelbar aus dem Fahrzeug — '
-            + 'mit Datum, Strecke und Kilometerstand.',
-  };
-  alert((texte[was] || '') + '\n\n'
-      + 'BMW CarData ist der Vollversion vorbehalten.\n\n'
-      + 'In der Demo lassen sich Ladevorgänge über die Wallbox erfassen, '
-      + 'per CSV einlesen oder von Hand eintragen.');
-  return true;
 }
 
 async function proKennzeichnungSetzen() {

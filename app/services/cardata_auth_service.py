@@ -5,19 +5,29 @@ Loest die frueher genutzte inoffizielle Anbindung ab, die BMW am
 von BMW bereitgestellte Weg fuer EU-Fahrzeuge — ohne Captcha, ohne
 nachgebaute App-Schnittstelle.
 
+JE FAHRZEUG, NICHT GLOBAL (28.08.)
+------------------------------------
+Fruehere Fassung hielt Client-ID, Token und GCID als anwendungsweite
+Einstellungen — es passte also nur ein BMW-Fahrzeug. Wer mehrere Autos mit
+eigenem CarData-Zugang hat, braucht je Fahrzeug eine eigene, vollstaendig
+unabhaengige Anmeldung. Jede Funktion hier nimmt deshalb jetzt eine
+`vehicle_id` entgegen; die Zugangsdaten liegen in
+repositories/vehicle_bmw_repository.py, verknuepft mit dem jeweiligen
+Fahrzeug-Datensatz.
+
 ABLAUF (siehe BMW CarData Integration Guide, Kapitel 2)
 -------------------------------------------------------
 1. Der Nutzer erzeugt im MyBMW-Portal eine Client-ID und abonniert die
    Dienste "CarData API" und "CarData Stream".
-2. `starte_geraeteanmeldung()` fordert Geraete- und Nutzercode an. Der Nutzer
-   bestaetigt die Anmeldung einmalig im Browser.
-3. `hole_tokens()` tauscht den Geraetecode gegen drei Token:
+2. `starte_geraeteanmeldung(vehicle_id, ...)` fordert Geraete- und
+   Nutzercode an. Der Nutzer bestaetigt die Anmeldung einmalig im Browser.
+3. `hole_tokens(vehicle_id)` tauscht den Geraetecode gegen drei Token:
       access_token   — REST-API, 1 Stunde gueltig
       id_token       — MQTT-Stream, 1 Stunde gueltig
       refresh_token  — erneuert alle drei, 2 Wochen gueltig
-4. `erneuere_tokens()` haelt die Anmeldung dauerhaft am Leben. Solange
-   mindestens alle zwei Wochen erneuert wird, ist keine neue Bestaetigung
-   noetig.
+4. `erneuere_tokens(vehicle_id)` haelt die Anmeldung dauerhaft am Leben.
+   Solange mindestens alle zwei Wochen erneuert wird, ist keine neue
+   Bestaetigung noetig.
 
 Die Absicherung erfolgt per PKCE (S256): Ein zufaelliger `code_verifier`
 wird gehasht als `code_challenge` mitgeschickt und beim Tokenabruf im
@@ -35,7 +45,7 @@ import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta
 
-from repositories import settings_repository
+from repositories import vehicle_bmw_repository as bmw_repo
 
 BASIS_URL = "https://customer.bmwgroup.com"
 DEVICE_CODE_URL = f"{BASIS_URL}/gcdm/oauth/device/code"
@@ -139,13 +149,14 @@ def _http_meldung(status: int, fehler: dict) -> str:
 
 # ── Schritt 1: Geräteanmeldung starten ─────────────────────────────────────
 
-def starte_geraeteanmeldung(client_id: str, mit_streaming: bool = False) -> dict:
-    """Fordert Geraete- und Nutzercode an.
+def starte_geraeteanmeldung(vehicle_id: int, client_id: str,
+                            mit_streaming: bool = False) -> dict:
+    """Fordert Geraete- und Nutzercode fuer EIN Fahrzeug an.
 
     `mit_streaming` nur setzen, wenn im Portal auch "CarData Stream"
     freigeschaltet ist — sonst lehnt BMW die Anmeldung komplett ab.
-    Der `code_verifier` wird zwischengespeichert, weil er beim spaeteren
-    Tokenabruf nachgereicht werden muss."""
+    Der `code_verifier` wird je Fahrzeug zwischengespeichert, weil er beim
+    spaeteren Tokenabruf nachgereicht werden muss."""
     client_id = (client_id or "").strip()
     if not client_id:
         return {"ok": False, "meldung": "Bitte zuerst die Client-ID eintragen."}
@@ -162,9 +173,10 @@ def starte_geraeteanmeldung(client_id: str, mit_streaming: bool = False) -> dict
         return {"ok": False, "meldung": antwort["meldung"]}
 
     d = antwort["daten"]
-    settings_repository.set_setting("cardata_client_id", client_id)
-    settings_repository.set_setting("cardata_code_verifier", verifier)
-    settings_repository.set_setting("cardata_device_code", d.get("device_code", ""))
+    bmw_repo.set_felder(vehicle_id,
+                        client_id=client_id,
+                        code_verifier=verifier,
+                        device_code=d.get("device_code", ""))
     return {
         "ok": True,
         "user_code": d.get("user_code"),
@@ -177,16 +189,17 @@ def starte_geraeteanmeldung(client_id: str, mit_streaming: bool = False) -> dict
 
 # ── Schritt 2: Tokens abholen ──────────────────────────────────────────────
 
-def hole_tokens() -> dict:
-    """Tauscht den Geraetecode gegen die drei Token.
+def hole_tokens(vehicle_id: int) -> dict:
+    """Tauscht den Geraetecode gegen die drei Token, fuer dieses Fahrzeug.
 
     Wird aufgerufen, NACHDEM der Nutzer die Anmeldung im Browser bestaetigt
     hat. Steht die Bestaetigung noch aus, meldet BMW 'authorization_pending' —
     das ist kein Fehler, sondern die Aufforderung, es gleich erneut zu
     versuchen."""
-    client_id = settings_repository.get_setting("cardata_client_id") or ""
-    device_code = settings_repository.get_setting("cardata_device_code") or ""
-    verifier = settings_repository.get_setting("cardata_code_verifier") or ""
+    daten = bmw_repo.get(vehicle_id)
+    client_id = daten["client_id"]
+    device_code = daten["device_code"]
+    verifier = daten["code_verifier"]
     if not (client_id and device_code and verifier):
         return {"ok": False, "meldung": "Keine laufende Anmeldung. Bitte neu starten."}
 
@@ -200,39 +213,40 @@ def hole_tokens() -> dict:
         wartet = (antwort.get("fehler", {}).get("error") == "authorization_pending")
         return {"ok": False, "wartet": wartet, "meldung": antwort["meldung"]}
 
-    _speichere_tokens(antwort["daten"])
+    _speichere_tokens(vehicle_id, antwort["daten"])
     return {"ok": True, "gcid": antwort["daten"].get("gcid")}
 
 
-def _speichere_tokens(d: dict) -> None:
+def _speichere_tokens(vehicle_id: int, d: dict) -> None:
     gueltig_bis = datetime.now() + timedelta(seconds=int(d.get("expires_in", 3600)))
-    settings_repository.set_setting("cardata_access_token", d.get("access_token", ""))
-    settings_repository.set_setting("cardata_id_token", d.get("id_token", ""))
-    settings_repository.set_setting("cardata_refresh_token", d.get("refresh_token", ""))
-    settings_repository.set_setting("cardata_gcid", d.get("gcid", ""))
-    settings_repository.set_setting("cardata_token_gueltig_bis",
-                                    gueltig_bis.strftime("%Y-%m-%d %H:%M:%S"))
-    settings_repository.set_setting("cardata_refresh_erneuert_am",
-                                    datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-    # Einmalige Anmeldedaten werden nicht mehr gebraucht
-    settings_repository.set_setting("cardata_device_code", "")
-    settings_repository.set_setting("cardata_code_verifier", "")
+    bmw_repo.set_felder(
+        vehicle_id,
+        access_token=d.get("access_token", ""),
+        id_token=d.get("id_token", ""),
+        refresh_token=d.get("refresh_token", ""),
+        gcid=d.get("gcid", ""),
+        token_gueltig_bis=gueltig_bis.strftime("%Y-%m-%d %H:%M:%S"),
+        refresh_erneuert_am=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        # Einmalige Anmeldedaten werden nicht mehr gebraucht
+        device_code="", code_verifier="",
+    )
 
 
 # ── Schritt 3: Tokens erneuern ─────────────────────────────────────────────
 
-def erneuere_tokens(erzwingen: bool = False) -> dict:
-    """Erneuert Access-, ID- und Refresh-Token.
+def erneuere_tokens(vehicle_id: int, erzwingen: bool = False) -> dict:
+    """Erneuert Access-, ID- und Refresh-Token dieses Fahrzeugs.
 
     Wird vor jedem Zugriff aufgerufen; erneuert nur, wenn noetig. BMW setzt
     dabei auch die Frist des Refresh-Tokens zurueck, weshalb regelmaessige
     Nutzung eine erneute Browser-Bestaetigung erspart."""
-    refresh = settings_repository.get_setting("cardata_refresh_token") or ""
-    client_id = settings_repository.get_setting("cardata_client_id") or ""
+    daten = bmw_repo.get(vehicle_id)
+    refresh = daten["refresh_token"]
+    client_id = daten["client_id"]
     if not (refresh and client_id):
         return {"ok": False, "meldung": "Nicht angemeldet."}
 
-    if not erzwingen and not token_laeuft_ab():
+    if not erzwingen and not token_laeuft_ab(vehicle_id):
         return {"ok": True, "erneuert": False}
 
     antwort = _post_form(TOKEN_URL, {
@@ -242,13 +256,13 @@ def erneuere_tokens(erzwingen: bool = False) -> dict:
     })
     if not antwort["ok"]:
         return {"ok": False, "meldung": antwort["meldung"]}
-    _speichere_tokens(antwort["daten"])
+    _speichere_tokens(vehicle_id, antwort["daten"])
     return {"ok": True, "erneuert": True}
 
 
-def token_laeuft_ab() -> bool:
-    """True, wenn der Access-Token in Kuerze ungueltig wird."""
-    bis = settings_repository.get_setting("cardata_token_gueltig_bis") or ""
+def token_laeuft_ab(vehicle_id: int) -> bool:
+    """True, wenn der Access-Token dieses Fahrzeugs in Kuerze ungueltig wird."""
+    bis = bmw_repo.get(vehicle_id)["token_gueltig_bis"]
     try:
         ende = datetime.strptime(bis, "%Y-%m-%d %H:%M:%S")
     except ValueError:
@@ -256,26 +270,29 @@ def token_laeuft_ab() -> bool:
     return (ende - datetime.now()).total_seconds() < ERNEUERN_VOR_SEKUNDEN
 
 
-def hole_access_token() -> str | None:
-    """Gueltiger Access-Token fuer REST-Aufrufe, erneuert bei Bedarf."""
-    if token_laeuft_ab():
-        if not erneuere_tokens().get("ok"):
+def hole_access_token(vehicle_id: int) -> str | None:
+    """Gueltiger Access-Token dieses Fahrzeugs fuer REST-Aufrufe, erneuert
+    bei Bedarf."""
+    if token_laeuft_ab(vehicle_id):
+        if not erneuere_tokens(vehicle_id).get("ok"):
             return None
-    return settings_repository.get_setting("cardata_access_token") or None
+    return bmw_repo.get(vehicle_id)["access_token"] or None
 
 
-def hole_id_token() -> str | None:
-    """Gueltiger ID-Token fuer den MQTT-Stream, erneuert bei Bedarf."""
-    if token_laeuft_ab():
-        if not erneuere_tokens().get("ok"):
+def hole_id_token(vehicle_id: int) -> str | None:
+    """Gueltiger ID-Token dieses Fahrzeugs fuer den MQTT-Stream, erneuert
+    bei Bedarf."""
+    if token_laeuft_ab(vehicle_id):
+        if not erneuere_tokens(vehicle_id).get("ok"):
             return None
-    return settings_repository.get_setting("cardata_id_token") or None
+    return bmw_repo.get(vehicle_id)["id_token"] or None
 
 
-def status() -> dict:
-    """Anmeldestatus fuer die Oberflaeche."""
-    refresh = settings_repository.get_setting("cardata_refresh_token") or ""
-    erneuert_am = settings_repository.get_setting("cardata_refresh_erneuert_am") or ""
+def status(vehicle_id: int) -> dict:
+    """Anmeldestatus dieses Fahrzeugs fuer die Oberflaeche."""
+    daten = bmw_repo.get(vehicle_id)
+    refresh = daten["refresh_token"]
+    erneuert_am = daten["refresh_erneuert_am"]
     tage_seit = None
     if erneuert_am:
         try:
@@ -288,19 +305,16 @@ def status() -> dict:
     ablauf_droht = tage_seit is not None and tage_seit >= 11
     return {
         "angemeldet": bool(refresh),
-        "client_id_gesetzt": bool(settings_repository.get_setting("cardata_client_id")),
-        "gcid": settings_repository.get_setting("cardata_gcid") or "",
+        "client_id_gesetzt": bool(daten["client_id"]),
+        "gcid": daten["gcid"] or "",
         "erneuert_am": erneuert_am,
         "tage_seit_erneuerung": tage_seit,
         "ablauf_droht": ablauf_droht,
-        "token_gueltig_bis": settings_repository.get_setting("cardata_token_gueltig_bis") or "",
+        "token_gueltig_bis": daten["token_gueltig_bis"] or "",
     }
 
 
-def abmelden() -> None:
-    """Entfernt alle gespeicherten Anmeldedaten."""
-    for key in ("cardata_access_token", "cardata_id_token", "cardata_refresh_token",
-                "cardata_gcid", "cardata_token_gueltig_bis",
-                "cardata_refresh_erneuert_am", "cardata_device_code",
-                "cardata_code_verifier"):
-        settings_repository.set_setting(key, "")
+def abmelden(vehicle_id: int) -> None:
+    """Entfernt die gespeicherten Anmeldedaten dieses Fahrzeugs — trennt
+    nur diese eine Verbindung, alle anderen Fahrzeuge bleiben unberuehrt."""
+    bmw_repo.loeschen(vehicle_id)

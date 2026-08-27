@@ -98,7 +98,7 @@ DC_SCHWELLE_KW = 25.0
 
 # ── HTTP ───────────────────────────────────────────────────────────────────
 
-def _request(methode: str, pfad: str, token: str,
+def _request(methode: str, pfad: str, token: str, vehicle_id: int,
              body: dict | None = None, params: dict | None = None) -> dict:
     """Aufruf gegen die CarData-API. Wirft nie; Fehler kommen als Dict zurueck."""
     url = f"{API_BASIS}{pfad}"
@@ -119,13 +119,13 @@ def _request(methode: str, pfad: str, token: str,
             # Kontingent aus den Kopfzeilen lesen, falls BMW eines meldet.
             # Die Namen sind nicht dokumentiert — deshalb mehrere Varianten.
             # Fehlen sie, greift der eigene Zaehler.
-            _merke_kontingent(resp.headers)
-            _zaehle_abruf()
+            _merke_kontingent(vehicle_id, resp.headers)
+            _zaehle_abruf(vehicle_id)
             return {"ok": True, "daten": json.loads(roh) if roh else {}}
     except urllib.error.HTTPError as e:
-        _zaehle_abruf()          # auch abgelehnte Aufrufe zaehlen beim Limit
+        _zaehle_abruf(vehicle_id)          # auch abgelehnte Aufrufe zaehlen beim Limit
         try:
-            _merke_kontingent(e.headers)
+            _merke_kontingent(vehicle_id, e.headers)
         except Exception:
             pass
         try:
@@ -147,8 +147,10 @@ def _request(methode: str, pfad: str, token: str,
                 "meldung": f"CarData nicht erreichbar ({type(e).__name__})."}
 
 
-def _merke_kontingent(headers) -> None:
-    """Liest das verbleibende Kontingent aus den Antwort-Kopfzeilen.
+def _merke_kontingent(vehicle_id: int, headers) -> None:
+    """Liest das verbleibende Kontingent aus den Antwort-Kopfzeilen — je
+    Fahrzeug, da unterschiedliche Fahrzeuge unterschiedliche BMW-Konten und
+    damit getrennte Tageskontingente haben koennen.
 
     BMW dokumentiert nicht, ob und unter welchem Namen ein Rest gemeldet
     wird. Deshalb werden die ueblichen Schreibweisen geprueft. Findet sich
@@ -165,17 +167,17 @@ def _merke_kontingent(headers) -> None:
         if wert is None:
             continue
         try:
-            settings_repository.set_setting("cardata_rest_gemeldet", str(int(wert)))
+            settings_repository.set_setting(f"cardata_rest_gemeldet_{vehicle_id}", str(int(wert)))
             settings_repository.set_setting(
-                "cardata_rest_gemeldet_am",
+                f"cardata_rest_gemeldet_am_{vehicle_id}",
                 datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
             return
         except (TypeError, ValueError):
             continue
 
 
-def _zaehle_abruf() -> None:
-    """Zaehlt einen verbrauchten Abruf fuer den laufenden Tag.
+def _zaehle_abruf(vehicle_id: int) -> None:
+    """Zaehlt einen verbrauchten Abruf dieses Fahrzeugs fuer den laufenden Tag.
 
     BMW setzt das Kontingent zur Tagesmitte zurueck (UTC). Hier wird nach
     lokalem Datum gezaehlt — das weicht hoechstens um wenige Stunden ab und
@@ -183,22 +185,22 @@ def _zaehle_abruf() -> None:
     """
     heute = datetime.now().strftime("%Y-%m-%d")
     try:
-        tag = settings_repository.get_setting("cardata_zaehler_tag") or ""
-        stand = int(settings_repository.get_setting("cardata_zaehler") or 0)
+        tag = settings_repository.get_setting(f"cardata_zaehler_tag_{vehicle_id}") or ""
+        stand = int(settings_repository.get_setting(f"cardata_zaehler_{vehicle_id}") or 0)
     except (TypeError, ValueError):
         tag, stand = "", 0
     if tag != heute:
         tag, stand = heute, 0
-    settings_repository.set_setting("cardata_zaehler_tag", tag)
-    settings_repository.set_setting("cardata_zaehler", str(stand + 1))
+    settings_repository.set_setting(f"cardata_zaehler_tag_{vehicle_id}", tag)
+    settings_repository.set_setting(f"cardata_zaehler_{vehicle_id}", str(stand + 1))
 
 
-def kontingent() -> dict:
-    """Verbrauch und Rest fuer die Anzeige."""
+def kontingent(vehicle_id: int) -> dict:
+    """Verbrauch und Rest dieses Fahrzeugs fuer die Anzeige."""
     heute = datetime.now().strftime("%Y-%m-%d")
     try:
-        tag = settings_repository.get_setting("cardata_zaehler_tag") or ""
-        verbraucht = int(settings_repository.get_setting("cardata_zaehler") or 0)
+        tag = settings_repository.get_setting(f"cardata_zaehler_tag_{vehicle_id}") or ""
+        verbraucht = int(settings_repository.get_setting(f"cardata_zaehler_{vehicle_id}") or 0)
     except (TypeError, ValueError):
         tag, verbraucht = "", 0
     if tag != heute:
@@ -206,8 +208,8 @@ def kontingent() -> dict:
 
     gemeldet = None
     try:
-        roh = settings_repository.get_setting("cardata_rest_gemeldet")
-        am = settings_repository.get_setting("cardata_rest_gemeldet_am") or ""
+        roh = settings_repository.get_setting(f"cardata_rest_gemeldet_{vehicle_id}")
+        am = settings_repository.get_setting(f"cardata_rest_gemeldet_am_{vehicle_id}") or ""
         # Nur verwenden, wenn die Meldung von heute stammt
         if roh not in (None, "") and am[:10] == heute:
             gemeldet = int(roh)
@@ -261,9 +263,12 @@ def _fehlertext(status: int, fehler: dict) -> str:
 
 # ── Fahrzeuge ──────────────────────────────────────────────────────────────
 
-def hole_fahrzeuge() -> dict:
-    """Fahrzeuge des Kontos. Nur als Hauptnutzer zugeordnete liefern Daten."""
-    token = auth.hole_access_token()
+def hole_fahrzeuge(vehicle_id: int) -> dict:
+    """Fahrzeuge des BMW-Kontos, das an dieses App-Fahrzeug angemeldet ist.
+
+    Nur als Hauptnutzer zugeordnete liefern Daten. Wird beim Anlegen eines
+    Fahrzeugs 'aus BMW-Konto importieren' genutzt, um die VIN auszuwaehlen."""
+    token = auth.hole_access_token(vehicle_id)
     if not token:
         return {"ok": False, "meldung": "Nicht angemeldet."}
     # BMW hat den Endpunkt im Lauf der Zeit umbenannt. Die Reihenfolge geht
@@ -275,7 +280,7 @@ def hole_fahrzeuge() -> dict:
     ]
     letzte_meldung = ""
     for pfad in versuche:
-        antwort = _request("GET", pfad, token)
+        antwort = _request("GET", pfad, token, vehicle_id)
         if antwort["ok"]:
             roh = antwort["daten"]
             liste = (roh.get("mappings") or roh.get("vehicles")
@@ -294,20 +299,22 @@ def hole_fahrzeuge() -> dict:
 
 # ── Container ──────────────────────────────────────────────────────────────
 
-def stelle_container_sicher() -> dict:
-    """Legt den Container mit den Fahrt-Datenpunkten an, falls noetig.
+def stelle_container_sicher(vehicle_id: int) -> dict:
+    """Legt den Container mit den Fahrt-Datenpunkten fuer dieses Fahrzeug an,
+    falls noetig.
 
     Die Container-ID wird gespeichert; ein erneuter Aufruf verbraucht dann
     kein weiteres Kontingent."""
-    vorhandene = settings_repository.get_setting("cardata_container_id") or ""
+    from repositories import vehicle_bmw_repository as bmw_repo
+    vorhandene = bmw_repo.get(vehicle_id)["container_id"]
     if vorhandene:
         return {"ok": True, "container_id": vorhandene, "neu": False}
 
-    token = auth.hole_access_token()
+    token = auth.hole_access_token(vehicle_id)
     if not token:
         return {"ok": False, "meldung": "Nicht angemeldet."}
 
-    antwort = _request("POST", "/customers/containers", token, body={
+    antwort = _request("POST", "/customers/containers", token, vehicle_id, body={
         "name": "eChargeHome Fahrtenbuch",
         "purpose": "Fahrtenerfassung für die steuerliche Abrechnung",
         "technicalDescriptors": CONTAINER_DESCRIPTORS,
@@ -319,7 +326,7 @@ def stelle_container_sicher() -> dict:
            or antwort["daten"].get("id") or "")
     if not cid:
         return {"ok": False, "meldung": "BMW lieferte keine Container-ID zurück."}
-    settings_repository.set_setting("cardata_container_id", cid)
+    bmw_repo.set_felder(vehicle_id, container_id=cid)
     event_log_service.log_event("bmw", "info", f"CarData-Container angelegt: {cid}")
     return {"ok": True, "container_id": cid, "neu": True}
 
@@ -333,16 +340,16 @@ def _zahl(wert) -> float | None:
         return None
 
 
-def lese_telematik(vin: str) -> dict:
-    """Aktuelle Werte des Containers fuer ein Fahrzeug (1 Aufruf vom Tageslimit)."""
-    token = auth.hole_access_token()
+def lese_telematik(vehicle_id: int, vin: str) -> dict:
+    """Aktuelle Werte des Containers dieses Fahrzeugs (1 Aufruf vom Tageslimit)."""
+    token = auth.hole_access_token(vehicle_id)
     if not token:
         return {"ok": False, "meldung": "Nicht angemeldet."}
-    cont = stelle_container_sicher()
+    cont = stelle_container_sicher(vehicle_id)
     if not cont["ok"]:
         return cont
 
-    antwort = _request("GET", f"/customers/vehicles/{vin}/telematicData", token,
+    antwort = _request("GET", f"/customers/vehicles/{vin}/telematicData", token, vehicle_id,
                        params={"containerId": cont["container_id"]})
     if not antwort["ok"]:
         return {"ok": False, "meldung": antwort["meldung"]}
@@ -437,113 +444,6 @@ def _lies_wartungstermine(wert) -> dict:
     return ergebnis
 
 
-def _lade_letzten_stand(vin: str) -> dict:
-    roh = settings_repository.get_setting(f"cardata_stand_{vin}") or ""
-    try:
-        return json.loads(roh) if roh else {}
-    except Exception:
-        return {}
-
-
-def _speichere_stand(vin: str, stand: dict) -> None:
-    settings_repository.set_setting(f"cardata_stand_{vin}", json.dumps(stand))
-
-
-def pruefe_fahrt(vin: str, user_id: int, vehicle_id: int | None = None) -> dict:
-    """Ruft die aktuellen Werte ab und legt bei erkannter Fahrt einen Eintrag an.
-
-    Der jeweils letzte Stand wird gespeichert und beim naechsten Aufruf als
-    Startpunkt verwendet. Beim allerersten Abruf entsteht daher noch keine
-    Fahrt — es fehlt der Vergleichswert."""
-    jetzt = lese_telematik(vin)
-    if not jetzt["ok"]:
-        return jetzt
-    if jetzt["km"] is None:
-        return {"ok": False, "meldung": ("Kein Kilometerstand geliefert. Ist "
-                                         f"'{DESCRIPTOR_KM}' im Portal ausgewählt?")}
-
-    # Fahrzeugdaten mitspeichern — sie kommen ohnehin im selben Abruf und
-    # ersparen spaeter einen zusaetzlichen Aufruf vom Tageskontingent.
-    _speichere_fahrzeugdaten(vin, jetzt)
-
-    # Fahrzeug in der Verwaltung anlegen oder auffrischen. Damit muss
-    # niemand auf das Datenarchiv warten — Kilometerstand und Wartungs-
-    # termine stehen sofort zur Verfuegung.
-    try:
-        _fahrzeug_pflegen(vin, jetzt)
-    except Exception:
-        pass   # Stammdaten sind Beiwerk, die Fahrterkennung laeuft weiter
-
-    vorher = _lade_letzten_stand(vin)
-    # Zeitstempel des Fahrzeugs bevorzugen: Der Fahrt-Ende-Wert stammt vom
-    # Bordcomputer und trifft den tatsaechlichen Ankunftszeitpunkt, waehrend
-    # unser Abruf bis zu 30 Minuten spaeter erfolgen kann.
-    zeit = jetzt.get("trip_zeit") or jetzt["zeitpunkt"] or datetime.now().isoformat(timespec="seconds")
-    neuer_stand = {
-        "km": jetzt["km"], "lat": jetzt["lat"], "lon": jetzt["lon"],
-        "zeitpunkt": zeit,
-    }
-    _speichere_stand(vin, neuer_stand)
-
-    if not vorher or vorher.get("km") is None:
-        return {"ok": True, "fahrt_erkannt": False,
-                "meldung": "Ausgangsstand gespeichert. Ab dem nächsten Abruf werden Fahrten erkannt.",
-                "km": jetzt["km"]}
-
-    distanz = round(jetzt["km"] - vorher["km"], 1)
-    if distanz < MIN_DISTANZ_KM:
-        event_log_service.log_event("bmw", "info",
-            f"Fahrtabruf: keine Änderung (Kilometerstand {int(jetzt['km'])} km, "
-            f"zuletzt {int(vorher['km'])} km).")
-        return {"ok": True, "fahrt_erkannt": False,
-                "meldung": "Keine neue Fahrt seit dem letzten Abruf.",
-                "km": jetzt["km"]}
-
-    # Fahrt-ID aus Kilometerständen: stabil und eindeutig, verhindert
-    # Doppelanlage bei mehrfachem Abruf.
-    trip_id = f"CD-{vin}-{int(vorher['km'])}-{int(jetzt['km'])}"
-    trip = {
-        "trip_id": trip_id,
-        "start_time": _als_dbzeit(vorher.get("zeitpunkt")),
-        "end_time": _als_dbzeit(neuer_stand["zeitpunkt"]),
-        "start_mileage": int(vorher["km"]),
-        "end_mileage": int(jetzt["km"]),
-        "distance_km": distanz,
-        "start_address": _koordinaten_text(vorher.get("lat"), vorher.get("lon")),
-        "end_address": _koordinaten_text(jetzt["lat"], jetzt["lon"]),
-    }
-    # Verwaiste Referenzen entfernen: Wurde eine Fahrt geloescht, soll sie
-    # erneut importiert werden koennen.
-    bmw_trip_repository.raeume_verwaiste_auf(user_id)
-    bekannt = bmw_trip_repository.bekannte_trip_ids(user_id)
-    neu = 0
-    if trip["trip_id"] not in bekannt:
-        # Direkt in die normale Fahrtenliste — dort wird zugeordnet und
-        # bearbeitet, ohne zweite Oberflaeche.
-        from repositories import trip_repository
-        neue_id = trip_repository.insert_trip(
-            user_id=user_id, trip_date=(trip["start_time"] or "")[:10],
-            start_address=trip["start_address"] or "—",
-            end_address=trip["end_address"] or "—",
-            distance_km=trip["distance_km"], purpose="",
-            rate_chosen=0.0, vehicle_id=vehicle_id, fahrtart="offen")
-        bmw_trip_repository.insert_trip_ref(user_id, trip, neue_id, vehicle_id=vehicle_id)
-        neu = 1
-    if neu:
-        event_log_service.log_event("bmw", "info",
-            f"CarData: Fahrt über {distanz} km erkannt ({trip['start_mileage']} → {trip['end_mileage']} km).")
-    return {"ok": True, "fahrt_erkannt": bool(neu), "distanz_km": distanz,
-            "km": jetzt["km"], "trip": trip if neu else None}
-
-
-def _als_dbzeit(iso: str | None) -> str:
-    """ISO-8601 von BMW in unser Datenbankformat umsetzen."""
-    if not iso:
-        return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    text = str(iso).replace("Z", "").replace("T", " ")
-    return text[:19] if len(text) >= 19 else datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-
 def _koordinaten_text(lat, lon) -> str:
     """Koordinaten in eine lesbare Adresse aufloesen.
 
@@ -563,95 +463,16 @@ def _koordinaten_text(lat, lon) -> str:
         return f"{lat:.5f}, {lon:.5f}"
 
 
-def status() -> dict:
-    """Zustand der Anbindung fuer die Oberflaeche."""
-    a = auth.status()
-    a["container_id"] = settings_repository.get_setting("cardata_container_id") or ""
-    a["vin"] = settings_repository.get_setting("cardata_vin") or ""
+def status(vehicle_id: int) -> dict:
+    """Zustand der Anbindung dieses Fahrzeugs fuer die Oberflaeche."""
+    from repositories import vehicle_bmw_repository as bmw_repo
+    from repositories import vehicle_repository
+    a = auth.status(vehicle_id)
+    a["container_id"] = bmw_repo.get(vehicle_id)["container_id"]
+    fahrzeug = vehicle_repository.get_vehicle(vehicle_id) or {}
+    a["vin"] = fahrzeug.get("vin") or ""
     a["descriptors"] = CONTAINER_DESCRIPTORS
     return a
-
-
-# ── Automatischer Abruf im Hintergrund ─────────────────────────────────────
-# Bewusst ein schlanker Timer-Thread im Flask-Prozess statt eines eigenen
-# Dienstes: Der Abruf ist ein einzelner HTTP-Aufruf alle 30 Minuten, dafuer
-# braucht es keinen separaten Prozess mit eigener Ueberwachung.
-
-import threading
-
-_timer: "threading.Timer | None" = None
-STANDARD_INTERVALL_MIN = 30
-
-
-def _intervall_minuten() -> int:
-    """Abrufintervall aus den Einstellungen; 0 schaltet den Automatikbetrieb ab.
-
-    Untergrenze 30 Minuten: Bei 50 erlaubten Abrufen pro Tag waeren kuerzere
-    Abstaende nicht durchzuhalten (48 Abrufe bei 30 Minuten)."""
-    roh = settings_repository.get_setting("cardata_intervall_min")
-    try:
-        wert = int(roh) if roh not in (None, "") else STANDARD_INTERVALL_MIN
-    except ValueError:
-        wert = STANDARD_INTERVALL_MIN
-    if wert <= 0:
-        return 0
-    return max(30, wert)
-
-
-def _automatischer_abruf() -> None:
-    """Ein Durchlauf: Fahrt pruefen, dann neu einplanen.
-
-    Faengt jeden Fehler ab — ein Ausfall der BMW-Server darf den Timer nicht
-    beenden, sonst liefe die Automatik bis zum Neustart nicht mehr."""
-    try:
-        vin = settings_repository.get_setting("cardata_vin") or ""
-        aktiv = (settings_repository.get_setting("cardata_auto") or "0") == "1"
-        if vin and aktiv and auth.status().get("angemeldet"):
-            from services import db_service
-            conn = db_service.get_connection()
-            try:
-                zeile = conn.execute("SELECT id FROM users_config LIMIT 1").fetchone()
-                user_id = zeile["id"] if zeile else None
-            finally:
-                conn.close()
-            if user_id:
-                ergebnis = pruefe_fahrt(vin, user_id)
-                settings_repository.set_setting(
-                    "cardata_letzter_abruf",
-                    datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-                if not ergebnis.get("ok"):
-                    event_log_service.log_event(
-                        "bmw", "warning",
-                        f"CarData-Abruf fehlgeschlagen: {ergebnis.get('meldung', '')}")
-    except Exception as e:
-        try:
-            event_log_service.log_event("bmw", "warning",
-                f"CarData-Automatik: {type(e).__name__}")
-        except Exception:
-            pass
-    finally:
-        starte_automatik()
-
-
-def starte_automatik() -> None:
-    """Plant den naechsten Abruf ein (bzw. verschiebt ihn)."""
-    global _timer
-    if _timer is not None:
-        _timer.cancel()
-        _timer = None
-    minuten = _intervall_minuten()
-    if minuten <= 0:
-        return
-    _timer = threading.Timer(minuten * 60, _automatischer_abruf)
-    _timer.daemon = True   # blockiert das Herunterfahren nicht
-    _timer.start()
-
-
-def stoppe_automatik() -> None:
-    global _timer
-    if _timer is not None:
-        _timer.cancel()
-        _timer = None
 
 
 # ── Fahrzeugdaten (Stammdaten aus dem Fahrzeug) ────────────────────────────
@@ -662,56 +483,77 @@ FAHRZEUGDATEN_FELDER = (
 )
 
 
-def _fahrzeug_pflegen(vin: str, daten: dict) -> None:
-    """Legt das Fahrzeug an oder frischt es auf — aus dem Live-Abruf.
-
-    Bisher entstand das Fahrzeug nur beim Archiv-Import. Wer die Live-
-    Anbindung nutzt, musste trotzdem erst Stunden auf das Datenarchiv
-    warten. Die Angaben kommen aber im selben Abruf mit.
-    """
+def _fahrzeug_pflegen(vehicle_id: int, vin: str, daten: dict) -> None:
+    """Frischt die Stammdaten dieses Fahrzeugs mit den Live-Werten auf
+    (Kilometerstand, Wartungstermine) — fallen beim Telematik-Abruf ohnehin
+    an, ein Datenarchiv-Import ist dafuer nicht mehr noetig."""
     from repositories import vehicle_repository
 
     wartung = daten.get("wartung") or {}
     werte = {
         "vin": vin,
-        "bezeichnung": "BMW",
         "km_stand": int(daten["km"]) if daten.get("km") else None,
         "km_stand_datum": (daten.get("zeitpunkt") or "")[:10] or None,
         "hu_faellig": wartung.get("hu_faellig"),
         "service_faellig": wartung.get("service_faellig"),
         "bremsfluessigkeit": wartung.get("bremsfluessigkeit"),
     }
-    # Leere Werte gar nicht erst uebergeben — sonst wuerden vorhandene
-    # Angaben aus dem Archiv wieder geleert.
     werte = {k: v for k, v in werte.items() if v is not None}
-    if len(werte) > 2:      # mehr als vin und bezeichnung
-        vehicle_repository.anlegen_aus_bmw(werte)
+    if werte:
+        vehicle_repository.setze_stammdaten(vehicle_id, werte)
 
 
-def _speichere_fahrzeugdaten(vin: str, daten: dict) -> None:
-    """Legt die zuletzt gemeldeten Fahrzeugwerte ab.
+def _speichere_fahrzeugdaten(vehicle_id: int, daten: dict) -> None:
+    """Legt die zuletzt gemeldeten Fahrzeugwerte dieses Fahrzeugs ab —
+    Grundlage fuer die Status-Kachel im Dashboard.
 
-    Sie fallen beim Fahrten-Abruf ohnehin an; getrennt abzurufen wuerde nur
-    unnoetig Kontingent verbrauchen."""
+    Sie fallen beim Telematik-Abruf ohnehin an; getrennt abzurufen wuerde
+    nur unnoetig Kontingent verbrauchen."""
+    from repositories import vehicle_bmw_repository as bmw_repo
     werte = {f: daten.get(f) for f in FAHRZEUGDATEN_FELDER if daten.get(f) is not None}
     if not werte:
         return
     werte["stand"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    settings_repository.set_setting(f"cardata_fzg_{vin}", json.dumps(werte))
+    if daten.get("lat") is not None:
+        werte["lat"] = daten["lat"]
+    if daten.get("lon") is not None:
+        werte["lon"] = daten["lon"]
+    bmw_repo.set_felder(vehicle_id, fzg_daten=json.dumps(werte, ensure_ascii=False))
 
 
-def fahrzeugdaten(vin: str = "") -> dict:
-    """Zuletzt bekannte Fahrzeugdaten fuer die Anzeige."""
-    vin = vin or settings_repository.get_setting("cardata_vin") or ""
-    if not vin:
-        return {}
-    roh = settings_repository.get_setting(f"cardata_fzg_{vin}") or ""
+def fahrzeugdaten(vehicle_id: int) -> dict:
+    """Zuletzt bekannte Fahrzeugdaten dieses Fahrzeugs fuer die Anzeige."""
+    from repositories import vehicle_bmw_repository as bmw_repo
+    roh = bmw_repo.get(vehicle_id)["fzg_daten"]
     try:
         d = json.loads(roh) if roh else {}
     except Exception:
         return {}
-    d["vin"] = vin
     return d
+
+
+def aktualisiere_fahrzeugdaten(vehicle_id: int) -> dict:
+    """Ruft die aktuellen Werte ab und legt sie fuer die Status-Kachel ab —
+    ein einzelner Aufruf vom Tageskontingent, unabhaengig vom Stream.
+
+    Frischt nebenbei auch Kilometerstand und Wartungstermine des
+    Fahrzeug-Datensatzes auf."""
+    from repositories import vehicle_repository
+    fahrzeug = vehicle_repository.get_vehicle(vehicle_id) or {}
+    vin = (fahrzeug.get("vin") or "").strip()
+    if not vin:
+        return {"ok": False, "meldung": "Keine Fahrgestellnummer hinterlegt."}
+
+    jetzt = lese_telematik(vehicle_id, vin)
+    if not jetzt["ok"]:
+        return jetzt
+
+    _speichere_fahrzeugdaten(vehicle_id, jetzt)
+    try:
+        _fahrzeug_pflegen(vehicle_id, vin, jetzt)
+    except Exception:
+        pass   # Stammdaten sind Beiwerk, der Abruf gilt trotzdem als erfolgreich
+    return {"ok": True, **fahrzeugdaten(vehicle_id)}
 
 
 # ── Ladehistorie über die API ──────────────────────────────────────────────
@@ -722,14 +564,14 @@ def fahrzeugdaten(vin: str = "") -> dict:
 # Ladeort mit Adresse. Das ist steuerlich entscheidend: Nur zuhause geladener
 # Strom faellt unter den steuerfreien Auslagenersatz (§ 3 Nr. 50 EStG).
 
-def lese_ladehistorie(vin: str, tage: int = 30) -> dict:
+def lese_ladehistorie(vehicle_id: int, vin: str, tage: int = 30) -> dict:
     """Ladevorgaenge eines Zeitraums (1 Abruf vom Tageslimit).
 
     Umgesetzt nach der offiziellen Spezifikation (swagger-customer-api-v1):
       GET /customers/vehicles/{vin}/chargingHistory?from=…&to=…
     'from' und 'to' sind PFLICHT — fehlen sie, antwortet BMW mit einem Fehler.
     Die Nutzdaten stehen unter 'data', die Fortsetzung unter 'next_token'."""
-    token = auth.hole_access_token()
+    token = auth.hole_access_token(vehicle_id)
     if not token:
         return {"ok": False, "meldung": "Nicht angemeldet."}
 
@@ -746,7 +588,7 @@ def lese_ladehistorie(vin: str, tage: int = 30) -> dict:
         if next_token:
             params["nextToken"] = next_token
         antwort = _request("GET", f"/customers/vehicles/{vin}/chargingHistory",
-                           token, params=params)
+                           token, vehicle_id, params=params)
         if not antwort["ok"]:
             event_log_service.log_event("bmw", "warning",
                 f"Ladehistorie nicht abrufbar: {antwort['meldung']}")
@@ -869,13 +711,20 @@ def _wallbox_zuhause() -> int:
         "Wallbox zuhause", source_type="manual")
 
 
-def importiere_ladesessions(vin: str, user_id: int,
-                            ueberschneidung_pruefen: bool | None = None) -> dict:
-    """Uebernimmt die Ladehistorie als Ladesessions.
+def importiere_ladesessions(vehicle_id: int, vin: str, user_id: int,
+                            ueberschneidung_pruefen: bool | None = None,
+                            sessions_liste: list | None = None) -> dict:
+    """Uebernimmt die Ladehistorie dieses Fahrzeugs als Ladesessions.
 
     Der Ladeort entscheidet ueber die steuerliche Behandlung, deshalb wird er
     als 'zuhause' oder 'unterwegs' vermerkt. Ohne diese Unterscheidung waere
-    unterwegs geladener Strom faelschlich als Heimladung abgerechnet."""
+    unterwegs geladener Strom faelschlich als Heimladung abgerechnet.
+
+    `sessions_liste` erlaubt es, dieselbe Verarbeitung (Heimladung-Erkennung,
+    Preise, Duplikatschutz, Energieermittlung) auf bereits vorliegende
+    Eintraege anzuwenden, statt sie live abzurufen — genutzt vom
+    Archiv-Import (ZIP aelter als 30 Tage), damit die Geschaeftslogik nicht
+    doppelt gepflegt werden muss."""
     from repositories import session_repository, wallbox_repository
 
     # Standard: pruefen. Wer lieber alles importiert und selbst aussortiert,
@@ -884,10 +733,13 @@ def importiere_ladesessions(vin: str, user_id: int,
         ueberschneidung_pruefen = (
             settings_repository.get_setting("bmw_duplikate_pruefen") or "1") == "1"
 
-    gelesen = lese_ladehistorie(vin)
-    if not gelesen["ok"]:
-        return gelesen
-    sessions = gelesen["sessions"]
+    if sessions_liste is not None:
+        sessions = sessions_liste
+    else:
+        gelesen = lese_ladehistorie(vehicle_id, vin)
+        if not gelesen["ok"]:
+            return gelesen
+        sessions = gelesen["sessions"]
 
     # ROHDATEN-DIAGNOSE: Den ersten Datensatz unveraendert protokollieren.
     # Bei Importproblemen ist das die einzig verlaessliche Auskunft darueber,
@@ -1027,7 +879,7 @@ def importiere_ladesessions(vin: str, user_id: int,
         if not aus_bloecken:
             soc_start = s.get("displayedStartSoc")
             soc_ende = s.get("displayedSoc")
-            akku = _akku_kapazitaet(vin)
+            akku = _akku_kapazitaet(vehicle_id)
             if soc_start is not None and soc_ende is not None and akku:
                 # Ladeverlust aufschlagen, damit die Menge dem Netzbezug
                 # entspricht (AC rund 8 %, DC rund 2 %).
@@ -1111,9 +963,9 @@ def importiere_ladesessions(vin: str, user_id: int,
             "ohne_zeit": ohne_zeit}
 
 
-def _akku_kapazitaet(vin: str) -> float:
+def _akku_kapazitaet(vehicle_id: int) -> float:
     """Akkukapazitaet aus den zuletzt gelesenen Fahrzeugdaten."""
-    d = fahrzeugdaten(vin)
+    d = fahrzeugdaten(vehicle_id)
     try:
         return float(d.get("akku_max_kwh") or 0)
     except (TypeError, ValueError):
@@ -1215,59 +1067,8 @@ def _heimadresse(sessions: list | None = None) -> str:
                 return haeufigster
     return ""
 
-
-
-# ── Fahrten aus der Ladehistorie ableiten ──────────────────────────────────
-# Der wichtigste Unterschied zu den Telematikdaten: BMW haelt die Ladehistorie
-# 30 Tage vor. Ein Abruf im Monat genuegt also, um sowohl Ladevorgaenge als
-# auch Fahrten vollstaendig zu erfassen — die Anwendung muss dafuer NICHT
-# dauerhaft laufen.
-#
-# Moeglich wird das, weil jeder Ladevorgang Kilometerstand und Ladeort traegt:
-# Zwischen zwei Ladungen an verschiedenen Orten liegt zwangslaeufig die
-# gefahrene Strecke. Dieselbe Rechnung wie beim Archiv-Import, nur mit
-# tagesaktuellen Daten.
-
-def importiere_fahrten_aus_ladehistorie(vin: str, user_id: int,
-                                        vehicle_id: int | None = None,
-                                        tage: int = 30) -> dict:
-    """Leitet Fahrten aus der abgerufenen Ladehistorie ab."""
-    from services import cardata_archiv_service
-
-    gelesen = lese_ladehistorie(vin, tage=tage)
-    if not gelesen["ok"]:
-        return gelesen
-    sessions = gelesen["sessions"]
-    if not sessions:
-        return {"ok": True, "neu": 0, "gefunden": 0,
-                "meldung": "Keine Ladevorgänge im Zeitraum."}
-
-    fahrten = cardata_archiv_service.rekonstruiere_fahrten(sessions, vin)
-    if not fahrten:
-        return {"ok": True, "neu": 0, "gefunden": 0,
-                "meldung": "Keine Fahrten ableitbar — es fehlen Ortswechsel."}
-
-    bmw_trip_repository.raeume_verwaiste_auf(user_id)
-    bekannt = bmw_trip_repository.bekannte_trip_ids(user_id)
-    neue = [f for f in fahrten if f["trip_id"] not in bekannt]
-
-    from repositories import trip_repository
-    gespeichert = 0
-    for f in neue:
-        trip_id = trip_repository.insert_trip(
-            user_id=user_id, trip_date=(f.get("start_time") or "")[:10],
-            start_address=f.get("start_address") or "—",
-            end_address=f.get("end_address") or "—",
-            distance_km=f.get("distance_km") or 0,
-            purpose="",
-            rate_chosen=0.0, vehicle_id=vehicle_id, fahrtart="offen")
-        bmw_trip_repository.insert_trip_ref(user_id, f, trip_id, vehicle_id=vehicle_id)
-        gespeichert += 1
-
-    km = round(sum(f["distance_km"] for f in fahrten), 1)
-    event_log_service.log_event("bmw", "info",
-        f"Fahrten aus Ladehistorie: {gespeichert} neu von {len(fahrten)} "
-        f"({km} km, {len(sessions)} Ladevorgänge ausgewertet).")
-    return {"ok": True, "neu": gespeichert, "gefunden": len(fahrten),
-            "uebersprungen": len(fahrten) - len(neue), "km_gesamt": km,
-            "ladevorgaenge": len(sessions)}
+# ENTFERNT (28.08.): importiere_fahrten_aus_ladehistorie leitete Fahrten aus
+# Ladepunkten ab — derselbe fachliche Fehler wie beim entfernten
+# Archiv-Import (siehe cardata_archiv_service.rekonstruiere_fahrten-Docstring):
+# zwischen zwei Ladungen kann beliebig viel liegen. Fahrten entstehen jetzt
+# ausschliesslich aus dem MQTT-Stream (cardata_stream_service).

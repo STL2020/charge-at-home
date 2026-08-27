@@ -140,46 +140,13 @@ def _zieltext(start: str, ziel: str, km: float) -> str:
     return ziel or "—"
 
 
-def rekonstruiere_fahrten(eintraege: list, vin: str = "") -> list[dict]:
-    """NICHT MEHR VERWENDEN — bildet aus Ladepunkten vermeintliche Fahrten.
-
-    Diese Funktion war ein Irrweg. Zwischen zwei Ladevorgaengen kann
-    beliebig viel passiert sein: 100 km zum Kunden und danach 20 km
-    einkaufen ergeben hier eine einzige "Fahrt" ueber 120 km. Als
-    Dienstreise waere das eine unrichtige Angabe.
-
-    Die Ladehistorie kennt nur Ladeorte, keine Fahrten. Fahrten entstehen
-    stattdessen aus dem regelmaessigen Abruf von Position und
-    Kilometerstand (services/cardata_service.py).
-
-    Bleibt vorerst erhalten, weil aeltere Datenbanken noch Referenzen
-    darauf haben koennen.
-
-    Die Fahrt-ID enthaelt beide Kilometerstaende und ist damit stabil: Ein
-    erneuter Import derselben Daten erzeugt keine Doppeleintraege."""
-    punkte = _ladepunkte(eintraege)
-    fahrten = []
-    for a, b in zip(punkte, punkte[1:]):
-        distanz = (b["km"] or 0) - (a["km"] or 0)
-        if distanz < MIN_DISTANZ_KM:
-            continue
-        fahrten.append({
-            "trip_id": f"ARCH-{vin or 'BMW'}-{a['km']}-{b['km']}",
-            # Abfahrt: nach Ende des Ladevorgangs am Startpunkt
-            "start_time": _zeit(a["zeit_ende"] or a["zeit_start"], a.get("zeitzone")),
-            "end_time": _zeit(b["zeit_start"], b.get("zeitzone")),
-            "start_mileage": a["km"],
-            "end_mileage": b["km"],
-            "distance_km": round(float(distanz), 1),
-            "start_address": a["adresse"] or "—",
-            # Start und Ziel gleich: Der Wagen ist weggefahren und
-            # zurueckgekommen, ohne unterwegs zu laden. BMW kennt nur die
-            # beiden Ladepunkte — wo der Termin war, steht nirgends. Statt
-            # zweimal derselben Adresse (was aussieht, als waere man im
-            # Kreis gefahren) wird das offen benannt.
-            "end_address": _zieltext(a["adresse"], b["adresse"], distanz),
-        })
-    return fahrten
+# ENTFERNT (28.08.): rekonstruiere_fahrten bildete aus Ladepunkten
+# vermeintliche Fahrten. Zwischen zwei Ladevorgaengen kann beliebig viel
+# passiert sein: 100 km zum Kunden und danach 20 km einkaufen ergeben hier
+# eine einzige "Fahrt" ueber 120 km. Die Ladehistorie kennt nur Ladeorte,
+# keine Fahrten. Fahrten entstehen jetzt ausschliesslich aus dem MQTT-Stream
+# (services/cardata_stream_service.py). Mit ihr entfernt: _standard_fahrzeug
+# und importiere_archiv, die nur fuer diesen Zweck existierten.
 
 
 def lies_fahrzeugdaten(zip_pfad: str) -> dict:
@@ -259,116 +226,6 @@ def lies_fahrzeugdaten(zip_pfad: str) -> dict:
     return daten
 
 
-def _standard_fahrzeug(user_id: int, vin: str = "") -> int | None:
-    """Fahrzeug fuer den Import ermitteln.
-
-    Zuerst ueber die Fahrgestellnummer — sie steht im Archivnamen und
-    identifiziert den Wagen eindeutig. Sonst: Gibt es genau ein Fahrzeug,
-    kann es nur dieses sein.
-    """
-    from services import db_service
-    conn = db_service.get_connection()
-    try:
-        spalten = [r["name"] for r in conn.execute("PRAGMA table_info(vehicles)")]
-        if not spalten:
-            return None
-        if vin and "vin" in spalten:
-            z = conn.execute("SELECT id FROM vehicles WHERE vin = ? LIMIT 1",
-                             (vin,)).fetchone()
-            if z:
-                return z["id"]
-        zeilen = conn.execute("SELECT id FROM vehicles LIMIT 2").fetchall()
-        if len(zeilen) == 1:
-            return zeilen[0]["id"]
-    except Exception:
-        pass
-    finally:
-        conn.close()
-    return None
-
-
-def importiere_archiv(zip_pfad: str, user_id: int, vin: str = "",
-                      vehicle_id: int | None = None) -> dict:
-    """Kompletter Durchlauf: Archiv lesen, Fahrten bilden, speichern."""
-    gelesen = lese_ladehistorie(zip_pfad)
-    if not gelesen["ok"]:
-        return gelesen
-
-    eintraege = gelesen["eintraege"]
-    fahrten = rekonstruiere_fahrten(eintraege, vin)
-    if not fahrten:
-        return {"ok": True, "neu": 0, "gefunden": 0,
-                "ladevorgaenge": len(eintraege),
-                "meldung": ("Keine Fahrten ableitbar — im Archiv fehlen "
-                            "Kilometerstände oder es gab keine Ortswechsel.")}
-
-    # Verwaiste Referenzen entfernen: Wurde eine Fahrt geloescht, soll sie
-    # erneut importiert werden koennen.
-    bmw_trip_repository.raeume_verwaiste_auf(user_id)
-    bekannt = bmw_trip_repository.bekannte_trip_ids(user_id)
-    neue = [f for f in fahrten if f["trip_id"] not in bekannt]
-
-    # Die Fahrten landen direkt in der normalen Fahrtenliste. Eine zweite
-    # Oberflaeche zum Zuordnen waere ueberfluessig: Dort stehen ohnehin alle
-    # Fahrten, dort werden neue erfasst, dort wird bearbeitet. `bmw_trips`
-    # dient nur noch als technische Referenz fuer den Duplikatschutz.
-    from repositories import trip_repository
-    # Fahrzeug bestimmen, falls keines uebergeben wurde: Gibt es nur eines,
-    # ist die Sache eindeutig. Sonst bleibt das Feld leer und der Anwender
-    # waehlt selbst — raten waere hier schlechter als offen lassen.
-    # Fahrzeug aus dem Archiv anlegen oder auffrischen: Fahrgestellnummer,
-    # Kilometerstand, TÜV-Termin, Service, Reifen. Das spart dem Anwender
-    # das Abtippen — und die Termine hat er sonst nirgends im Blick.
-    fz_daten = lies_fahrzeugdaten(zip_pfad)
-    if fz_daten:
-        try:
-            from repositories import vehicle_repository
-            if not fz_daten.get("bezeichnung"):
-                fz_daten["bezeichnung"] = "BMW"
-            neue_id = vehicle_repository.anlegen_aus_bmw(fz_daten)
-            if vehicle_id is None:
-                vehicle_id = neue_id
-        except Exception:
-            pass   # ohne Fahrzeug laeuft der Fahrten-Import trotzdem
-
-    if vehicle_id is None:
-        vehicle_id = _standard_fahrzeug(user_id, vin)
-
-    gespeichert = 0
-    for f in neue:
-        trip_id = trip_repository.insert_trip(
-            user_id=user_id,
-            trip_date=(f.get("start_time") or "")[:10],
-            start_address=f.get("start_address") or "—",
-            end_address=f.get("end_address") or "—",
-            distance_km=f.get("distance_km") or 0,
-            purpose="",
-            rate_chosen=0.0, vehicle_id=vehicle_id, fahrtart="offen")
-        # Referenz mit direkter Verknuepfung — nur so laesst sich spaeter
-        # erkennen, ob die Fahrt noch existiert.
-        bmw_trip_repository.insert_trip_ref(user_id, f, trip_id, vehicle_id=vehicle_id)
-        gespeichert += 1
-
-    km_gesamt = round(sum(f["distance_km"] for f in fahrten), 1)
-    zeitraum = ""
-    if fahrten:
-        zeitraum = f"{fahrten[0]['start_time'][:10]} bis {fahrten[-1]['end_time'][:10]}"
-
-    event_log_service.log_event("bmw", "info",
-        f"CarData-Archiv importiert: {gespeichert} neue Fahrten "
-        f"({km_gesamt} km) aus {len(eintraege)} Ladevorgängen.")
-    return {
-        "ok": True,
-        "neu": gespeichert,
-        "gefunden": len(fahrten),
-        "uebersprungen": len(fahrten) - len(neue),
-        "ladevorgaenge": len(eintraege),
-        "km_gesamt": km_gesamt,
-        "zeitraum": zeitraum,
-        "vorschau": fahrten[:5],
-    }
-
-
 def ladevorgaenge_uebersicht(eintraege: list) -> dict:
     """Kennzahlen der Ladehistorie — informativ fuer die Oberflaeche.
 
@@ -382,3 +239,25 @@ def ladevorgaenge_uebersicht(eintraege: list) -> dict:
         "anzahl": len(eintraege),
         "orte": sorted(orte.items(), key=lambda x: -x[1]),
     }
+
+
+def importiere_ladehistorie_datei(vehicle_id: int, zip_pfad: str, user_id: int,
+                                  vin: str = "") -> dict:
+    """Einmaliger Import: Ladehistorie aus dem BMW-Datenarchiv (ZIP) als
+    Ladesessions dieses Fahrzeugs uebernehmen — fuer Zeitraeume vor den
+    letzten 30 Tagen, die die laufende Verbindung (Stream) nicht mehr
+    erreicht.
+
+    Nutzt bewusst dieselbe Verarbeitung wie der laufende API-Import
+    (Heimladung-Erkennung, Preise je Ladeart, Duplikatschutz, Energie aus
+    Ladebloecken/SoC) — nur die Quelle der Rohdaten unterscheidet sich.
+    Die fruehere Variante hat aus denselben Daten stattdessen Fahrten
+    rekonstruiert; das ist entfernt (siehe rekonstruiere_fahrten-Docstring),
+    weil zwischen zwei Ladungen beliebig viel liegen kann."""
+    gelesen = lese_ladehistorie(zip_pfad)
+    if not gelesen["ok"]:
+        return gelesen
+
+    from services import cardata_service
+    return cardata_service.importiere_ladesessions(
+        vehicle_id, vin, user_id, sessions_liste=gelesen["eintraege"])
