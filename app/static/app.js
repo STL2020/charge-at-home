@@ -1107,6 +1107,14 @@ function renderTripsTable(trips) {
     const row = document.createElement('tr');
     if (art === 'privat') row.style.opacity = '0.72';
     if (art === 'offen') row.style.borderLeft = '3px solid var(--warning, #eab308)';
+
+    // Klick auf die Zeile öffnet den Bearbeitungsmodus. Ausgenommen sind
+    // Kästchen und Knöpfe — dort hat der Klick bereits eine eigene Bedeutung.
+    row.style.cursor = 'pointer';
+    row.addEventListener('click', function (e) {
+      if (e.target.closest('button, input, a, svg')) return;
+      editTrip(t.id);
+    });
     row.innerHTML = `
       <td><input type="checkbox" class="trip-cb" data-id="${t.id}" onchange="toggleTripCheck(${t.id}, this.checked)"></td>
       <td>${datePart}</td>

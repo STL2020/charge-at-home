@@ -361,7 +361,7 @@ def pruefe_fahrt(vin: str, user_id: int, vehicle_id: int | None = None) -> dict:
             user_id=user_id, trip_date=(trip["start_time"] or "")[:10],
             start_address=trip["start_address"] or "—",
             end_address=trip["end_address"] or "—",
-            distance_km=trip["distance_km"], purpose="BMW-Import — bitte zuordnen",
+            distance_km=trip["distance_km"], purpose="",
             rate_chosen=0.0, vehicle_id=vehicle_id, fahrtart="offen")
         bmw_trip_repository.insert_trip_ref(user_id, trip, neue_id, vehicle_id=vehicle_id)
         neu = 1
@@ -1001,7 +1001,7 @@ def importiere_fahrten_aus_ladehistorie(vin: str, user_id: int,
             start_address=f.get("start_address") or "—",
             end_address=f.get("end_address") or "—",
             distance_km=f.get("distance_km") or 0,
-            purpose="BMW-Import — bitte zuordnen",
+            purpose="",
             rate_chosen=0.0, vehicle_id=vehicle_id, fahrtart="offen")
         bmw_trip_repository.insert_trip_ref(user_id, f, trip_id, vehicle_id=vehicle_id)
         gespeichert += 1
