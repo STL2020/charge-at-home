@@ -894,8 +894,9 @@ input[type="date"] {
 
 
 /* ─── Tabellen ────────────────────────────────────────────────────────────
-   Kopfzeilen als ruhige Grossbuchstaben-Labels, Zahlen rechtsbuendig in
-   Monospace. Das macht Spalten mit Betraegen auf einen Blick vergleichbar. */
+   Nach dem Loxone-Vorbild: eigene, ruhige Kopfzeilen-Flaeche statt nur ein
+   Unterstrich, grosszuegigere Zeilenhoehe, dezente Icon-Aktionen statt
+   voller Knoepfe. Gilt global fuer alle Tabellen der App. */
 table thead th {
   font-size: 10px;
   letter-spacing: .07em;
@@ -903,13 +904,28 @@ table thead th {
   color: var(--text-tertiary);
   font-weight: 600;
   white-space: nowrap;
-  padding: 10px 14px;
+  padding: 12px 14px;
+  background: var(--bg-input);
   border-bottom: 1px solid var(--border);
 }
-table tbody td { padding: 11px 14px; border-bottom: 1px solid var(--border); }
+table thead th:first-child { border-top-left-radius: var(--radius-sm); }
+table thead th:last-child { border-top-right-radius: var(--radius-sm); }
+table tbody td { padding: 13px 14px; border-bottom: 1px solid var(--border); }
 table tbody tr:last-child td { border-bottom: none; }
 table tbody tr:hover { background: var(--bg-input); }
 table td.mono, table th.mono { font-family: var(--font-mono); }
+
+/* Dezente Icon-Aktionen in Tabellenzeilen (bearbeiten/loeschen/Beleg) --
+   keine Umrandung, kein eigener Hintergrund, bis man drueberfaehrt.
+   Ersetzt die bisherige volle Button-Optik (.btn.btn-sm) speziell in
+   Tabellenzeilen, ohne .btn-sm an anderer Stelle in der App anzufassen. */
+.row-icon-btn {
+  background: none; border: none; color: var(--text-tertiary); cursor: pointer;
+  padding: 5px; display: inline-flex; align-items: center; border-radius: var(--radius-sm);
+  text-decoration: none;
+}
+.row-icon-btn:hover { color: var(--text-primary); background: var(--bg-elevated); }
+.row-icon-btn.danger:hover { color: #f87171; }
 
 /* Summenzeile deutlich abgesetzt — sie ist das Ergebnis, nicht eine Zeile
    unter vielen. */

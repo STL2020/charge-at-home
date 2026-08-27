@@ -82,13 +82,44 @@ DESCRIPTOR_CBS = "vehicle.status.conditionBasedServices"
 # gehoert statt zur Fernbedienung (siehe Diskussion: Tueren/Fenster bewusst
 # nicht erfasst, das deckt die BMW-App bereits ab).
 #
-# BUG BEHOBEN (28.08.): Der urspruengliche Deskriptor war geraten, nicht
-# nachgeschlagen, und existiert so nicht — im offiziellen Telematics-
-# Datenkatalog heisst das Element "isPlugConnected" mit den Werten
-# CONNECTED/DISCONNECTED/INVALID (ein Text, kein wahr/falsch). Bestaetigt
-# durch eine echte, produktiv laufende Referenzintegration (evcc), die
-# genau diesen vollstaendigen Pfad fuer denselben Zweck nutzt.
-DESCRIPTOR_ANGESTECKT = "vehicle.body.chargingPort.status"
+# KORREKTUR (28.08.): Hier hatte ich zuvor faelschlich behauptet, der
+# urspruengliche Deskriptor (anyPosition.isPlugged) sei erfunden und
+# existiere nicht — falsch. Stephan hat per Bildschirmfoto aus dem echten
+# Portal bestaetigt: er existiert, mit genau dieser deutschen Beschreibung,
+# und war die ganze Zeit bereits aktiv. Mein Fehler war ein voreiliger
+# Schluss aus einer PDF-Fundstelle und einem Community-Beispiel, nicht
+# eine Ueberpruefung am echten Portal. Beide Deskriptoren sind real und
+# jetzt aktiv — welcher tatsaechlich zuverlaessig sendet, ist offen, daher
+# werden beide gelesen: das echte Bool zuerst (direkter, kein Text-Umweg),
+# der Text-Status als Rueckfall.
+DESCRIPTOR_ANGESTECKT = "vehicle.powertrain.tractionBattery.charging.port.anyPosition.isPlugged"
+DESCRIPTOR_ANGESTECKT_ALT = "vehicle.body.chargingPort.status"
+
+# Ladevorgang im Detail — "angesteckt" allein sagt nichts darueber, ob
+# gerade tatsaechlich geladen wird oder die Sitzung pausiert/beendet ist.
+DESCRIPTOR_LADESTATUS = "vehicle.drivetrain.electricEngine.charging.status"
+DESCRIPTOR_RESTLADEDAUER = "vehicle.drivetrain.electricEngine.charging.timeToFullyCharged"
+DESCRIPTOR_STECKERTYP = "vehicle.drivetrain.electricEngine.charging.method"
+
+# Ladeklappe und allgemeine Fahrzeugverriegelung — beide ladebezogen
+# (Kabel gesichert bzw. Fahrzeug zu), anders als Tueren/Fenster einzeln,
+# die reine Fernbedienungs-Funktion waeren und bewusst nicht als
+# Einzelwerte, sondern nur zusammengefasst als ein "offen/zu"-Signal
+# gefuehrt werden (siehe DESCRIPTOR_TUEREN/_FENSTER unten).
+DESCRIPTOR_LADEKLAPPE = "vehicle.body.flap.isLocked"
+DESCRIPTOR_VERRIEGELUNG = "vehicle.cabin.door.lock.status"
+
+# Tueren und Fenster einzeln abgefragt (BMW liefert keinen Sammelwert),
+# aber im Frontend zu einem einzigen Chip zusammengefasst -- siehe
+# _fahrzeugdaten_tueren_fenster_offen() weiter unten.
+DESCRIPTOR_TUER_VL = "vehicle.cabin.door.row1.driver.isOpen"
+DESCRIPTOR_TUER_VR = "vehicle.cabin.door.row1.passenger.isOpen"
+DESCRIPTOR_TUER_HL = "vehicle.cabin.door.row2.driver.isOpen"
+DESCRIPTOR_TUER_HR = "vehicle.cabin.door.row2.passenger.isOpen"
+DESCRIPTOR_FENSTER_VL = "vehicle.cabin.window.row1.driver.status"
+DESCRIPTOR_FENSTER_VR = "vehicle.cabin.window.row1.passenger.status"
+DESCRIPTOR_FENSTER_HL = "vehicle.cabin.window.row2.driver.status"
+DESCRIPTOR_FENSTER_HR = "vehicle.cabin.window.row2.passenger.status"
 
 CONTAINER_DESCRIPTORS = [
     # Fahrterfassung
@@ -97,7 +128,13 @@ CONTAINER_DESCRIPTORS = [
     # Fahrzeugdaten
     DESCRIPTOR_VERBRAUCH, DESCRIPTOR_AKKU_MAX, DESCRIPTOR_AKKU_MAX_ALT, DESCRIPTOR_AKKU_SOH,
     DESCRIPTOR_SOC, DESCRIPTOR_REICHWEITE, DESCRIPTOR_SERVICE, DESCRIPTOR_WOCHE,
-    DESCRIPTOR_ANGESTECKT,
+    DESCRIPTOR_ANGESTECKT, DESCRIPTOR_ANGESTECKT_ALT,
+    # Ladevorgang im Detail
+    DESCRIPTOR_LADESTATUS, DESCRIPTOR_RESTLADEDAUER, DESCRIPTOR_STECKERTYP,
+    # Verriegelung
+    DESCRIPTOR_LADEKLAPPE, DESCRIPTOR_VERRIEGELUNG,
+    DESCRIPTOR_TUER_VL, DESCRIPTOR_TUER_VR, DESCRIPTOR_TUER_HL, DESCRIPTOR_TUER_HR,
+    DESCRIPTOR_FENSTER_VL, DESCRIPTOR_FENSTER_VR, DESCRIPTOR_FENSTER_HL, DESCRIPTOR_FENSTER_HR,
     # Wartung
     DESCRIPTOR_CBS,
 ]
@@ -386,20 +423,21 @@ def _bool(wert) -> bool | None:
     """Wandelt BMWs Wahrheitswerte in ein Python-bool um. None, wenn der
     Wert fehlt.
 
-    Deckt zwei Formen ab: echte true/false-Werte (die meisten Deskriptoren)
-    UND Text-Aufzaehlungen wie 'CONNECTED'/'DISCONNECTED', wie sie der
-    offizielle Katalog fuer den Steckerstatus vorsieht (isPlugConnected) —
-    nicht jeder BMW-Datenpunkt ist ein echtes Bool, manche sind ein
-    Zustandstext mit nur zwei sinnvollen Werten."""
+    Deckt drei Formen ab: echte true/false-Werte (die meisten Deskriptoren),
+    Text-Aufzaehlungen wie 'CONNECTED'/'DISCONNECTED' (isPlugConnected) UND
+    praefigierte Varianten wie 'FLAP_LOCKED'/'FLAP_UNLOCKED' (Ladeklappe) —
+    deshalb Endungspruefung statt exaktem Abgleich. 'UNLOCKED' zuerst
+    pruefen, sonst wuerde das enthaltene 'LOCKED' faelschlich True liefern.
+    """
     if wert is None:
         return None
     if isinstance(wert, bool):
         return wert
     text = str(wert).strip().upper()
-    if text in ("CONNECTED", "TRUE", "1", "LOCKED", "ON"):
-        return True
-    if text in ("DISCONNECTED", "FALSE", "0", "UNLOCKED", "OFF"):
+    if text.endswith("UNLOCKED") or text in ("DISCONNECTED", "FALSE", "0", "OFF"):
         return False
+    if text.endswith("LOCKED") or text in ("CONNECTED", "TRUE", "1", "ON", "SECURED"):
+        return True
     return None
 
 
@@ -416,6 +454,64 @@ def _kombiniere_akkukapazitaet(feld) -> float | None:
     if primaer:
         return primaer
     return _zahl(feld(DESCRIPTOR_AKKU_MAX_ALT)[0])
+
+
+def _fenster_offen(wert) -> bool | None:
+    """Fenster liefern einen Zustandstext (CLOSED/INTERMEDIATE/OPEN/INVALID),
+    kein reines Bool. INTERMEDIATE (einen Spalt offen) zaehlt als "offen" —
+    fuer die Zusammenfassung "alles zu" reicht ein Spalt, um das Bild zu
+    kippen."""
+    if wert is None:
+        return None
+    text = str(wert).strip().upper()
+    if text == "CLOSED":
+        return False
+    if text in ("OPEN", "INTERMEDIATE"):
+        return True
+    return None
+
+
+# Menschenlesbare Bezeichnung samt MDI-Icon je Lademethode. Nur die
+# AC-Werte sind aus dem Katalog bestaetigt (siehe DESCRIPTOR_STECKERTYP-
+# Diskussion); die DC-Varianten sind die plausibelsten Bezeichner nach
+# demselben Namensmuster, aber NICHT am echten HPC-Ladevorgang
+# gegengeprueft — muss beim ersten echten Schnellladevorgang verifiziert
+# werden (siehe Protokoll-Auswertung dafuer nutzen).
+STECKERTYP_ANZEIGE = {
+    "AC_TYPE1PLUG": ("Typ 1 · AC", "mdi-ev-plug-type1", False),
+    "AC_TYPE2PLUG": ("Typ 2 · AC", "mdi-ev-plug-type2", False),
+    "DC_CCS1PLUG": ("CCS1 · HPC", "mdi-ev-plug-ccs1", True),
+    "DC_CCS2PLUG": ("CCS2 · HPC", "mdi-ev-plug-ccs2", True),
+    "DC_COMBO1": ("CCS1 · HPC", "mdi-ev-plug-ccs1", True),
+    "DC_COMBO2": ("CCS2 · HPC", "mdi-ev-plug-ccs2", True),
+}
+
+
+def _steckertyp_anzeige(wert) -> dict | None:
+    """Wandelt den rohen Lademethoden-Code in eine anzeigefertige Form um.
+    None, wenn kein Wert vorliegt oder der Code unbekannt ist (dann zeigt
+    das Frontend einfach keinen Steckertyp-Chip, statt einen falschen zu
+    erfinden)."""
+    if not wert:
+        return None
+    eintrag = STECKERTYP_ANZEIGE.get(str(wert).strip().upper())
+    if not eintrag:
+        return None
+    text, icon, ist_dc = eintrag
+    return {"text": text, "icon": icon, "dc": ist_dc}
+
+
+# Ladestatus-Rohwert -> anzeigefertiger Text. NOCHARGING bewusst als "None"
+# behandelt (kein Chip), da es der Normalzustand ist und keinen eigenen
+# Hinweis verdient — nur ein tatsaechlich aktiver/gestoerter Zustand ist
+# meldenswert.
+LADESTATUS_ANZEIGE = {
+    "CHARGINGACTIVE": "Lädt aktiv",
+    "INITIALIZATION": "Ladevorgang startet",
+    "CHARGINGPAUSED": "Ladepause",
+    "CHARGINGENDED": "Ladevorgang beendet",
+    "CHARGINGERROR": "Ladefehler",
+}
 
 
 def lese_telematik(vehicle_id: int, vin: str) -> dict:
@@ -458,6 +554,17 @@ def lese_telematik(vehicle_id: int, vin: str) -> dict:
     trip_zeit_wert, _ = feld(DESCRIPTOR_TRIP_ZEIT)
     trip_soc, _ = feld(DESCRIPTOR_TRIP_SOC)
 
+    # "" statt None fuer "nicht ladend" (NOCHARGING/unbekannt) — die
+    # Merge-Regel in _speichere_fahrzeugdaten() ueberschreibt nur mit
+    # Werten, die "is not None" sind. Mit None wuerde "Ladevorgang
+    # beendet" nie ankommen, ein veralteter "Laedt aktiv"-Chip bliebe
+    # stehen. "" ist ein gueltiger, expliziter Wert und loescht ihn korrekt.
+    ladestatus_roh = feld(DESCRIPTOR_LADESTATUS)[0]
+    if ladestatus_roh is None:
+        laedt_aktiv_text = None
+    else:
+        laedt_aktiv_text = LADESTATUS_ANZEIGE.get(str(ladestatus_roh).strip().upper()) or ""
+
     return {
         "ok": True,
         "km": _zahl(km_wert),
@@ -476,7 +583,27 @@ def lese_telematik(vehicle_id: int, vin: str) -> dict:
         "reichweite_km": _zahl(feld(DESCRIPTOR_REICHWEITE)[0]),
         "service_in_km": _zahl(feld(DESCRIPTOR_SERVICE)[0]),
         "woche_km": _zahl(feld(DESCRIPTOR_WOCHE)[0]),
-        "angesteckt": _bool(feld(DESCRIPTOR_ANGESTECKT)[0]),
+        "angesteckt": _bool(feld(DESCRIPTOR_ANGESTECKT)[0])
+                      if _bool(feld(DESCRIPTOR_ANGESTECKT)[0]) is not None
+                      else _bool(feld(DESCRIPTOR_ANGESTECKT_ALT)[0]),
+        # Ladevorgang im Detail
+        "laedt_aktiv_text": laedt_aktiv_text,
+        "restladedauer_min": _zahl(feld(DESCRIPTOR_RESTLADEDAUER)[0]),
+        "steckertyp": _steckertyp_anzeige(feld(DESCRIPTOR_STECKERTYP)[0]),
+        # Verriegelung
+        "ladeklappe_zu": _bool(feld(DESCRIPTOR_LADEKLAPPE)[0]),
+        "verriegelt": _bool(feld(DESCRIPTOR_VERRIEGELUNG)[0]),
+        # Acht Einzelwerte statt vorberechneter Zusammenfassung -- die
+        # Zusammenfassung entsteht erst beim Lesen in fahrzeugdaten(), aus
+        # dem GESAMTEN gespeicherten Stand (siehe dortiger Kommentar).
+        "tuer_vl": _bool(feld(DESCRIPTOR_TUER_VL)[0]),
+        "tuer_vr": _bool(feld(DESCRIPTOR_TUER_VR)[0]),
+        "tuer_hl": _bool(feld(DESCRIPTOR_TUER_HL)[0]),
+        "tuer_hr": _bool(feld(DESCRIPTOR_TUER_HR)[0]),
+        "fenster_vl": _fenster_offen(feld(DESCRIPTOR_FENSTER_VL)[0]),
+        "fenster_vr": _fenster_offen(feld(DESCRIPTOR_FENSTER_VR)[0]),
+        "fenster_hl": _fenster_offen(feld(DESCRIPTOR_FENSTER_HL)[0]),
+        "fenster_hr": _fenster_offen(feld(DESCRIPTOR_FENSTER_HR)[0]),
         # Wartungstermine live statt aus dem Archiv
         "wartung": _lies_wartungstermine(feld(DESCRIPTOR_CBS)[0]),
         "roh": roh,
@@ -559,6 +686,13 @@ def status(vehicle_id: int) -> dict:
 FAHRZEUGDATEN_FELDER = (
     "verbrauch_kwh_100", "akku_max_kwh", "akku_soh_prozent", "soc_prozent",
     "reichweite_km", "service_in_km", "woche_km", "km", "angesteckt",
+    # Ladevorgang im Detail
+    "laedt_aktiv_text", "restladedauer_min", "steckertyp",
+    # Verriegelung -- acht Einzelwerte statt vorberechneter Zusammenfassung,
+    # siehe Kommentar bei _tueren_fenster_offen()/fahrzeugdaten().
+    "ladeklappe_zu", "verriegelt",
+    "tuer_vl", "tuer_vr", "tuer_hl", "tuer_hr",
+    "fenster_vl", "fenster_vr", "fenster_hl", "fenster_hr",
 )
 
 
@@ -626,6 +760,23 @@ def _speichere_fahrzeugdaten(vehicle_id: int, daten: dict) -> None:
     bmw_repo.set_felder(vehicle_id, fzg_daten=json.dumps(bestehend, ensure_ascii=False))
 
 
+def _tueren_fenster_offen(d: dict) -> tuple[bool | None, int]:
+    """Fasst die acht einzeln gespeicherten Tuer-/Fenster-Zustaende (siehe
+    _speichere_fahrzeugdaten) zu einem "offen/zu"-Signal zusammen. Wird
+    beim LESEN berechnet, nicht beim Speichern — die acht Werte treffen
+    ueber mehrere Nachrichten verteilt ein, eine einzelne Nachricht kennt
+    daher nie alle acht auf einmal. Der gespeicherte Gesamtstand (nach dem
+    Merge in _speichere_fahrzeugdaten) enthaelt dagegen den jeweils
+    letzten bekannten Wert jeder einzelnen Tuer/jedes Fensters."""
+    schluessel = ("tuer_vl", "tuer_vr", "tuer_hl", "tuer_hr",
+                  "fenster_vl", "fenster_vr", "fenster_hl", "fenster_hr")
+    bekannte = [d[s] for s in schluessel if d.get(s) is not None]
+    if not bekannte:
+        return None, 0
+    anzahl_offen = sum(1 for b in bekannte if b)
+    return anzahl_offen > 0, anzahl_offen
+
+
 def fahrzeugdaten(vehicle_id: int) -> dict:
     """Zuletzt bekannte Fahrzeugdaten dieses Fahrzeugs fuer die Anzeige."""
     from repositories import vehicle_bmw_repository as bmw_repo
@@ -634,6 +785,9 @@ def fahrzeugdaten(vehicle_id: int) -> dict:
         d = json.loads(roh) if roh else {}
     except Exception:
         return {}
+    offen, anzahl = _tueren_fenster_offen(d)
+    d["tueren_fenster_offen"] = offen
+    d["tueren_fenster_anzahl_offen"] = anzahl
     return d
 
 

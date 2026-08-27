@@ -60,7 +60,7 @@ def handle_404(exc):
     # Für nicht-API-Routen: normale 404-Seite oder zur App weiterleiten
     return jsonify({"error": "not_found"}), 404
 
-PFLICHTENHEFT_VERSION = "14.3"
+PFLICHTENHEFT_VERSION = "15.0"
 
 # Fassung, die dem Anwender gezeigt wird. Die Pflichtenheft-Nummer daneben ist
 # die interne Baunummer — beide zusammen machen Rückfragen eindeutig.
@@ -177,6 +177,13 @@ PROJECT_STATUS = [
     {"sprint": 9, "id": "S9-28", "modul": "BMW Telematik", "text": "checkControlMessages-Deskriptor entfernt -- vom Nutzer bestaetigt, dass dieser Datenpunkt im BMW-Portal gar nicht existiert; war ohnehin in keinem der beiden Verarbeitungspfade ausgewertet worden (siehe S9-26). MQTT-Keepalive von 60s auf 240s erhoeht: das echte Verbindungsprotokoll zeigte zuverlaessige Verbindungsabbrueche im 60-70-Sekunden-Takt mit MQTTv5-Grund 'Unspecified error' -- exakt im Takt des bisherigen Keepalive-Werts, ein starkes Indiz fuer einen zu knapp bemessenen Ping-Zyklus statt eines grundsaetzlichen Verbindungsproblems (jeder Verbindungsaufbau selbst gelang zuverlaessig). Nicht zu 100% als alleinige Ursache bestaetigt (keine Moeglichkeit zum Live-Test gegen BMWs Server aus der Entwicklungsumgebung), aber eine sichere, standardkonforme Massnahme, die die Angriffsflaeche fuer dieses Zeitfenster deutlich verkleinert. Bestehender Wiederverbindungs-Mechanismus bleibt als Sicherheitsnetz unveraendert. Gleicher Wert auch im eigenstaendigen Diagnose-Tool (mqtt_diagnose.py) angeglichen.", "status": "fertig", "view": "fahrzeuge"},
     {"sprint": 9, "id": "S9-29", "modul": "BMW Telematik", "text": "ECHTER BUG BEHOBEN: Der Angesteckt-Deskriptor (vehicle.powertrain.tractionBattery.charging.port.anyPosition.isPlugged) war geraten statt nachgeschlagen und existiert in dieser Form nicht -- deshalb kam trotz aktivem Ein-/Ausstecken durch den Nutzer nie ein Wert an. Im offiziellen BMW-Telematics-Datenkatalog heisst das Element 'isPlugConnected'; eine echte, produktiv laufende Referenzintegration (evcc) bestaetigt den vollstaendigen Pfad 'vehicle.body.chargingPort.status' mit den Werten CONNECTED/DISCONNECTED/INVALID (Text, kein wahr/falsch). Deskriptor korrigiert, Wahrheitswert-Umwandlung (_bool) um Text-Aufzaehlungen erweitert, doppelte Kopie dieser Logik im Stream-Handler entfernt (nutzt jetzt dieselbe Funktion wie der manuelle Abruf). Mit einer simulierten CONNECTED-Nachricht End-zu-Ende bestaetigt.", "status": "fertig", "view": "fahrzeuge"},
     {"sprint": 9, "id": "S9-30", "modul": "Protokoll", "text": "MQTT-Rohdaten aus dem Fahrzeug-Dialog entfernt und stattdessen als eigene Quelle ('MQTT (roh)') in das zentrale Protokoll (Hauptnavigation) integriert -- auf ausdruecklichen Wunsch nur eine Protokollstelle statt verstreuter Anzeigen. Zeigt bei mehreren verbundenen Fahrzeugen eine Fahrzeugauswahl, aktualisiert sich automatisch alle 5s waehrend sichtbar, mit eigenem Download-Knopf (Textdatei). Fahrzeug-Dialog verweist jetzt per Link dorthin statt eine zweite Anzeige vorzuhalten.", "status": "fertig", "view": "protokoll"},
+    {"sprint": 9, "id": "S9-31", "modul": "BMW Telematik", "text": "KORREKTUR eines eigenen Fehlers aus S9-29: Der urspruengliche Angesteckt-Deskriptor (anyPosition.isPlugged) wurde faelschlich als erfunden/nicht-existent bezeichnet -- per Bildschirmfoto aus dem echten BMW-Portal vom Nutzer widerlegt, der Deskriptor existiert, war laengst aktiv, und blieb trotzdem stumm. Ursache war ein voreiliger Schluss aus einer PDF-Fundstelle und einem Community-Beispiel statt einer Pruefung am echten Portal. Da nun sowohl anyPosition.isPlugged (echtes Bool) als auch chargingPort.status (Text CONNECTED/DISCONNECTED) im Portal aktiv sind und unklar ist, welcher fuer dieses Fahrzeug zuverlaessig sendet, werden jetzt beide gelesen: das Bool zuerst, der Text-Status als Rueckfall, in beiden Verarbeitungspfaden (REST und Stream). Beide Faelle unabhaengig voneinander mit simulierten Nachrichten bestaetigt.", "status": "fertig", "view": "fahrzeuge"},
+    {"sprint": 9, "id": "S9-32", "modul": "Tabellen", "text": "Globale Tabellen-Optik ueberarbeitet nach einem vom Nutzer bereitgestellten Referenzbild (Loxone-Oberflaeche): eigene Kopfzeilen-Flaeche statt nur Unterstrich, grosszuegigere Zeilenhoehe (13px statt 11px Zellenpolsterung), neue dezente Icon-Aktionen (.row-icon-btn, kein Rahmen/Hintergrund bis Hover) statt voller Knoepfe. In Ladevorgaenge- und Fahrten-Tabelle real umgesetzt (JS-Templates umgestellt), Kopfzeilen-/Zeilenhoehen-Aenderung ist global in style.css und wirkt dadurch automatisch auf alle Tabellen der App. Personen-Tabelle bewusst bei Text-Buttons belassen (keine Icon-Umstellung angefragt).", "status": "fertig", "view": None},
+    {"sprint": 9, "id": "S9-33", "modul": "BMW Telematik", "text": "Neue Deskriptoren vollstaendig verdrahtet, in BEIDEN Pfaden (REST und Stream) und mit eigenen Tests bestaetigt: Ladestatus aktiv (charging.status), Restladedauer (timeToFullyCharged), Steckertyp (charging.method, AC bestaetigt/DC plausibelste Bezeichnung noch nicht am echten HPC-Vorgang geprueft), Ladeklappe (flap.isLocked), allgemeine Verriegelung (door.lock.status), sowie acht Einzelwerte fuer Tueren/Fenster. Eigener Fehler beim Bauen selbst gefunden und behoben: die Tueren/Fenster-Zusammenfassung wird bewusst beim LESEN aus dem gesamten gespeicherten Stand berechnet, nicht aus einer einzelnen Nachricht -- sonst wuerde eine Nachricht, die nur eine Tuer meldet, die anderen sieben faelschlich als 'unbekannt' werten. Zweiter eigener Fehler gefunden: 'Ladevorgang beendet' haette mit None nie den veralteten 'Laedt aktiv'-Chip geloescht (Merge-Regel ueberschreibt nur mit Nicht-None-Werten) -- mit explizitem Leerstring korrigiert. Alle neuen Felder in die Merge-Whitelist (FAHRZEUGDATEN_FELDER) aufgenommen, ohne die waeren sie sonst still verworfen worden.", "status": "fertig", "view": "fahrzeuge"},
+    {"sprint": 9, "id": "S9-34", "modul": "Fahrzeuge", "text": "Eigenes Fahrzeugfoto: echte Speicherung statt nur Browser-Vorschau. Neue DB-Spalte foto_dateiname, drei Routen (Hochladen/Abrufen/Loeschen), Datei liegt unter data/fahrzeugfotos/ (Docker-Volume deckt das automatisch ab, .gitignore ausgeschlossen -- private Fotos gelangen nie ins oeffentliche Repo). Bewusst KEIN Markenbild mit der Software ausgeliefert (Markenrechtsrisiko fuer ein verkauftes Produkt) -- ohne eigenes Foto zeigt das Frontend eine gezeichnete Silhouette. Sechs Testfaelle bestaetigt: kein Foto (404), Upload, Abruf, falscher Dateityp abgelehnt, Loeschen, Zustand danach korrekt zurueckgesetzt.", "status": "fertig", "view": "fahrzeuge"},
+    {"sprint": 9, "id": "S9-35", "modul": "Dashboard", "text": "Fahrzeugstatus-Kachel nach der im Chat abgestimmten finalen Vorlage komplett neu gebaut: Foto-Upload-Bereich, Kreisanzeige mit Hochlauf-Animation (0 -> 100 -> Echtwert), Chip-Zeilen mit korrekter Grau/Orange-Logik (zu/verriegelt = grau als Normalzustand, offen = orange als Warnhinweis, statt vorher ueberall gruen), Steckertyp- und Ladestatus-Chips, Standort ohne Kasten (nur Schlagschatten-Text), Details-Bereich mit Kilometerstand/HU-TUEV/Service (Bremsfluessigkeit bewusst raus, siehe Diskussion), Details-Zustand bleibt ueber Re-Renders erhalten. MDI-Icons global eingebunden. Eigenen CSS-Bug beim Bauen selbst gefunden und behoben (var(--border) liess sich nicht mit Alpha-Suffix kombinieren, Puls-Animation haette sonst lautlos versagt). Mit isoliertem Node-Rendering-Test fuer Leerfall/Vollfall/Warnfall bestaetigt.", "status": "fertig", "view": "dashboard"},
+    {"sprint": 9, "id": "S9-36", "modul": "Dashboard", "text": "Mein Reinerloes / Monatsabschluss zu einem Abschnitt mit zwei Reitern zusammengefuehrt. Alle 27 zuvor bestehenden Element-IDs (count-up-Bindungen, versteckte Kompatibilitaets-Elemente wie dash-steuervorteil) einzeln geprueft und unveraendert erhalten -- nur die Huelle umgebaut, keine bestehende Logik angefasst. Echter Seitenaufruf nach dem Umbau mit Status 200 bestaetigt.", "status": "fertig", "view": "dashboard"},
+    {"sprint": 9, "id": "S9-37", "modul": "Dokumentation", "text": "Neuer Abschnitt 'BMW CarData einrichten' in INSTALLATION.md: vollstaendige Tabelle aller benoetigten Deskriptoren (inkl. aller heute neu hinzugekommenen), Erklaerung Datenstrom (unbegrenzt, aber ereignisgesteuert) vs. manueller Abruf (Tageslimit 50), Vorgehen bei fehlenden Werten trotz Haekchen, ehrlicher Hinweis auf die unbestaetigten DC-Steckertyp-Werte. Vollstaendiger End-zu-Ende-Test (Fahrzeug anlegen, Foto hochladen, Stream-Nachricht mit allen neuen Feldern verarbeiten, Fahrzeugdaten abrufen, Foto abrufen, Seite rendern) bestaetigt das Zusammenspiel aller heutigen Aenderungen.", "status": "fertig", "view": None},
 
 ]
 
@@ -4195,6 +4202,85 @@ def api_vehicle_cardata_fahrzeugdaten(vehicle_id):
     if not edition_service.funktion_verfuegbar("bmw"):
         return jsonify(edition_service.gesperrt_hinweis("bmw")), 402
     return jsonify(cardata_service.fahrzeugdaten(vehicle_id))
+
+
+# ── Eigenes Fahrzeugfoto ─────────────────────────────────────────────────
+# Rein privates Bild je Nutzer, selbst hochgeladen und lokal gespeichert.
+# KEIN Markenbild wird mit der Software ausgeliefert — das waere fuer ein
+# verkauftes Produkt ein Markenrechtsrisiko fuer jeden Kaeufer (siehe
+# Diskussion). Ohne eigenes Foto zeigt das Frontend eine gezeichnete
+# Silhouette als Rueckfall.
+FOTO_VERZEICHNIS = os.path.join(os.path.dirname(__file__), "..", "data", "fahrzeugfotos")
+FOTO_ERLAUBTE_ENDUNGEN = {"jpg", "jpeg", "png", "webp"}
+
+
+@app.route("/api/vehicles/<int:vehicle_id>/foto", methods=["POST"])
+def api_vehicle_foto_hochladen(vehicle_id):
+    """Speichert ein vom Nutzer selbst hochgeladenes Fahrzeugfoto.
+
+    Ein Foto je Fahrzeug — ein erneuter Upload ersetzt ein vorhandenes."""
+    if "file" not in request.files:
+        return jsonify({"ok": False, "meldung": "Keine Datei übermittelt."}), 400
+    datei = request.files["file"]
+    if not datei.filename:
+        return jsonify({"ok": False, "meldung": "Keine Datei ausgewählt."}), 400
+
+    endung = datei.filename.rsplit(".", 1)[-1].lower() if "." in datei.filename else ""
+    if endung not in FOTO_ERLAUBTE_ENDUNGEN:
+        return jsonify({"ok": False,
+                        "meldung": "Nur JPG, PNG oder WEBP werden unterstützt."}), 400
+
+    fahrzeug = vehicle_repository.get_vehicle(vehicle_id)
+    if not fahrzeug:
+        return jsonify({"ok": False, "meldung": "Fahrzeug nicht gefunden."}), 404
+
+    os.makedirs(FOTO_VERZEICHNIS, exist_ok=True)
+    # Altes Foto (falls vorhanden, evtl. mit anderer Endung) zuerst entfernen,
+    # damit sich keine verwaisten Dateien ansammeln.
+    alter_dateiname = fahrzeug.get("foto_dateiname")
+    if alter_dateiname:
+        alter_pfad = os.path.join(FOTO_VERZEICHNIS, alter_dateiname)
+        if os.path.exists(alter_pfad):
+            try:
+                os.remove(alter_pfad)
+            except OSError:
+                pass
+
+    neuer_dateiname = f"fahrzeug_{vehicle_id}.{endung}"
+    datei.save(os.path.join(FOTO_VERZEICHNIS, neuer_dateiname))
+    vehicle_repository.setze_stammdaten(vehicle_id, {"foto_dateiname": neuer_dateiname})
+    return jsonify({"ok": True, "dateiname": neuer_dateiname})
+
+
+@app.route("/api/vehicles/<int:vehicle_id>/foto", methods=["GET"])
+def api_vehicle_foto_abrufen(vehicle_id):
+    """Liefert das gespeicherte Fahrzeugfoto aus, falls eins hochgeladen
+    wurde — sonst 404, das Frontend zeigt dann die Silhouette."""
+    fahrzeug = vehicle_repository.get_vehicle(vehicle_id)
+    dateiname = fahrzeug.get("foto_dateiname") if fahrzeug else None
+    if not dateiname:
+        return jsonify({"ok": False, "meldung": "Kein Foto hinterlegt."}), 404
+    pfad = os.path.join(FOTO_VERZEICHNIS, dateiname)
+    if not os.path.exists(pfad):
+        return jsonify({"ok": False, "meldung": "Foto-Datei fehlt."}), 404
+    return send_file(pfad)
+
+
+@app.route("/api/vehicles/<int:vehicle_id>/foto", methods=["DELETE"])
+def api_vehicle_foto_loeschen(vehicle_id):
+    """Entfernt das hochgeladene Fahrzeugfoto wieder — Frontend faellt dann
+    auf die Silhouette zurueck."""
+    fahrzeug = vehicle_repository.get_vehicle(vehicle_id)
+    dateiname = fahrzeug.get("foto_dateiname") if fahrzeug else None
+    if dateiname:
+        pfad = os.path.join(FOTO_VERZEICHNIS, dateiname)
+        if os.path.exists(pfad):
+            try:
+                os.remove(pfad)
+            except OSError:
+                pass
+    vehicle_repository.loesche_foto(vehicle_id)
+    return jsonify({"ok": True})
 
 
 @app.route("/api/vehicles/<int:vehicle_id>/cardata/fahrzeugdaten/aktualisieren", methods=["POST"])

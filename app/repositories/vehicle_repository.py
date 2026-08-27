@@ -54,7 +54,13 @@ def _ensure_tables(conn) -> None:
                         ("hu_faellig", "TEXT"),        # Hauptuntersuchung
                         ("service_faellig", "TEXT"),   # naechster Service
                         ("bremsfluessigkeit", "TEXT"),
-                        ("reifen_vorne", "TEXT"), ("reifen_hinten", "TEXT")]:
+                        ("reifen_vorne", "TEXT"), ("reifen_hinten", "TEXT"),
+                        # Eigenes Fahrzeugfoto: nur der Dateiname wird hier
+                        # gespeichert, die Datei selbst liegt unter
+                        # data/fahrzeugfotos/. Rein privates Bild pro Nutzer
+                        # -- kein Markenbild wird mit der Software
+                        # ausgeliefert (siehe Diskussion zum Markenrecht).
+                        ("foto_dateiname", "TEXT")]:
         if spalte not in cols_v:
             try:
                 conn.execute(f"ALTER TABLE vehicles ADD COLUMN {spalte} {typ}")
@@ -124,7 +130,7 @@ def setze_stammdaten(vehicle_id: int, werte: dict) -> None:
     """
     erlaubt = {"vin", "km_stand", "km_stand_datum", "hu_faellig", "nutzungsart", "fahrtenbuch_ab",
                "service_faellig", "bremsfluessigkeit",
-               "reifen_vorne", "reifen_hinten"}
+               "reifen_vorne", "reifen_hinten", "foto_dateiname"}
     felder = {k: v for k, v in werte.items() if k in erlaubt and v not in (None, "")}
     if not felder:
         return
@@ -134,6 +140,21 @@ def setze_stammdaten(vehicle_id: int, werte: dict) -> None:
         setz = ", ".join(f"{k} = ?" for k in felder)
         conn.execute(f"UPDATE vehicles SET {setz} WHERE id = ?",
                      list(felder.values()) + [vehicle_id])
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def loesche_foto(vehicle_id: int) -> None:
+    """Entfernt den Fotoverweis eines Fahrzeugs explizit (setzt NULL).
+
+    Eigene Funktion statt setze_stammdaten(): die generische Funktion
+    ueberspringt bewusst leere Werte, damit ein Teilupdate nichts loescht
+    — hier soll aber genau das passieren."""
+    conn = get_connection()
+    try:
+        _ensure_tables(conn)
+        conn.execute("UPDATE vehicles SET foto_dateiname = NULL WHERE id = ?", (vehicle_id,))
         conn.commit()
     finally:
         conn.close()

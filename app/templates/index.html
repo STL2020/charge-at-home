@@ -8,7 +8,17 @@
 <link rel="apple-touch-icon" href="{{ url_for('static', filename='logo.svg') }}">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<!-- MDI-Icons fuer die Fahrzeugstatus-Chips (Ladestatus, Steckertyp,
+     Verriegelung, Tueren/Fenster) -- selbstgezeichnete Strich-SVGs wie im
+     Rest der App waeren fuer die grosse, wachsende Chip-Vielfalt zu
+     aufwendig geworden; MDI deckt alle benoetigten Symbole ab. -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/MaterialDesign-Webfont/7.4.47/css/materialdesignicons.min.css">
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v={{ pflichtenheft_version }}">
+<!-- Leaflet fuer die Standort-Karte im Dashboard: kostenlos, kein API-Key,
+     kein Google-Branding-Bruch im dunklen Design (siehe Fahrzeugstatus-
+     Kachel). CDN statt Bundling, da nur diese eine Stelle es braucht. -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 </head>
 <body>
 
@@ -217,13 +227,28 @@
         </div>
       </div>
 
-      <!-- ── Reinerlös / Vollkosten-Aufschlüsselung ── -->
+      <!-- ── Mein Reinerlös / Monatsabschluss — ein Abschnitt, zwei Reiter ──
+           Vorher zwei separate Karten mit fast identischer Optik direkt
+           untereinander — wirkte redundant, obwohl die Zahlen inhaltlich
+           unterschiedliche Dinge meinen (Aufschlüsselung vs. Abschluss-
+           Zusammenfassung). Alle bestehenden IDs/Bindungen unveraendert,
+           nur die Huelle umgebaut. -->
       <div class="card" style="margin-bottom:20px;">
-        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; flex-wrap:wrap; gap:8px;">
-          <div class="section-title" style="margin:0; display:flex; align-items:center; gap:8px;">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--amber)" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-            Mein Reinerlös — Aufschlüsselung
-          </div>
+        <div style="display:flex; gap:4px; margin-bottom:16px; border-bottom:1px solid var(--border);">
+          <button class="fzg-tab-btn active" onclick="dashTabWechseln('reinerloes', this)"
+                  style="all:unset; cursor:pointer; font-size:13px; font-weight:600; padding:8px 4px;
+                         margin-right:18px; border-bottom:2px solid var(--akz-geld); color:var(--akz-geld);">
+            Mein Reinerlös
+          </button>
+          <button class="fzg-tab-btn" onclick="dashTabWechseln('abschluss', this)"
+                  style="all:unset; cursor:pointer; font-size:13px; font-weight:600; padding:8px 4px;
+                         border-bottom:2px solid transparent; color:var(--text-tertiary);">
+            Monatsabschluss
+          </button>
+        </div>
+
+        <div class="fzg-tab-panel" id="dash-tab-reinerloes" style="display:block;">
+        <div style="display:flex; align-items:center; justify-content:flex-end; margin-bottom:14px;">
           <a href="#" onclick="showView('fahrzeuge'); return false;" style="font-size:12px; color:var(--text-tertiary);">Vollkostenrechnung →</a>
         </div>
         <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px;">
@@ -282,22 +307,15 @@
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-right:4px;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
           Noch keine PKW-Kosten hinterlegt — die Vollkosten-Bilanz entspricht daher den Erstattungen. Hinterlege Leasing, Versicherung etc. unter <a href="#" onclick="showView('fahrzeuge'); return false;" style="color:var(--amber);">Fahrzeuge</a> für die echte Bilanz.
         </div>
-      </div>
-
-
-      <!-- MONATSABSCHLUSS: Der haeufigste Vorgang ueberhaupt. Zwei Klicks —
-           Monat waehlen, Beleg erzeugen. Alles Noetige steht davor. -->
-      <div class="card" id="monatsabschluss" style="margin-bottom:16px; overflow:hidden;">
-        <div class="karte-kopf">
-          <h2>Monatsabschluss</h2>
-          <div class="karte-filter">
-            <!-- Ohne eigenes Feld: Der Zeitraum kommt jetzt zentral von oben.
-                 Zwei Felder für dasselbe stifteten nur Verwirrung. -->
-            <span id="ma-zeitraum-anzeige" style="font-size:12.5px;
-                  color:var(--text-tertiary);"></span>
-          </div>
         </div>
-        <div style="padding:16px 18px;">
+
+        <!-- MONATSABSCHLUSS: Der haeufigste Vorgang ueberhaupt. Zwei Klicks —
+             Monat waehlen, Beleg erzeugen. Alles Noetige steht davor. -->
+        <div class="fzg-tab-panel" id="dash-tab-abschluss" style="display:none;">
+        <div id="monatsabschluss" style="overflow:hidden;">
+          <div style="display:flex; justify-content:flex-end; margin-bottom:8px;">
+            <span id="ma-zeitraum-anzeige" style="font-size:12.5px; color:var(--text-tertiary);"></span>
+          </div>
           <div id="ma-status" class="hint" style="margin-bottom:12px;">wird geprüft …</div>
           <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin-bottom:14px;">
             <div>
@@ -328,6 +346,7 @@
             </button>
           </div>
           <div id="ma-hinweis" class="hint" style="margin-top:10px;"></div>
+        </div>
         </div>
       </div>
 

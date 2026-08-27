@@ -509,17 +509,17 @@ function renderSessionsTable(sessions, showClassification) {
       <td><span class="badge-fall">${s.source.toUpperCase()}</span></td>
       <td>${statusPill}</td>
       <td style="white-space:nowrap;">
-        <button class="btn btn-sm" onclick="editSession(${s.id})" title="Bearbeiten">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        <button class="row-icon-btn" onclick="editSession(${s.id})" title="Bearbeiten">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
         </button>
-        <button class="btn btn-sm" onclick="previewSessionBeleg(${s.id})" title="Beleg-Vorschau">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+        <button class="row-icon-btn" onclick="previewSessionBeleg(${s.id})" title="Beleg-Vorschau">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
         </button>
-        <a href="/api/documents/ladestrom/single/${s.id}" target="_blank" class="btn btn-sm" title="Einzelbeleg herunterladen">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        <a href="/api/documents/ladestrom/single/${s.id}" target="_blank" class="row-icon-btn" title="Einzelbeleg herunterladen">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
         </a>
-        <button class="btn btn-sm" onclick="deleteSession(${s.id})" title="Löschen">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+        <button class="row-icon-btn danger" onclick="deleteSession(${s.id})" title="Löschen">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
         </button>
       </td>
     `;
@@ -1162,20 +1162,20 @@ function renderTripsTable(trips) {
       <td class="mono">${fmtDe(t.employer_amount_eur, 2)} €</td>
       <td class="mono">${fmtDe(t.diff_amount_eur, 2)} €</td>
       <td style="white-space:nowrap;">
-        <button class="btn btn-sm" onclick="editTrip(${t.id})" title="Bearbeiten">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        <button class="row-icon-btn" onclick="editTrip(${t.id})" title="Bearbeiten">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
         </button>
-        <button class="btn btn-sm" onclick="duplicateTrip(${t.id})" title="Als Vorlage duplizieren">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        <button class="row-icon-btn" onclick="duplicateTrip(${t.id})" title="Als Vorlage duplizieren">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
         </button>
-        <button class="btn btn-sm" onclick="previewTripBeleg(${t.id})" title="Beleg-Vorschau">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+        <button class="row-icon-btn" onclick="previewTripBeleg(${t.id})" title="Beleg-Vorschau">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
         </button>
-        <a href="/api/documents/fahrtkosten-ag/single/${t.id}" target="_blank" class="btn btn-sm" title="Einzelbeleg herunterladen">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        <a href="/api/documents/fahrtkosten-ag/single/${t.id}" target="_blank" class="row-icon-btn" title="Einzelbeleg herunterladen">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
         </a>
-        <button class="btn btn-sm" onclick="deleteTrip(${t.id})" title="Löschen">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+        <button class="row-icon-btn danger" onclick="deleteTrip(${t.id})" title="Löschen">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
         </button>
       </td>
     `;
@@ -6907,6 +6907,22 @@ function _fahrzeugStatusEingeklapptWiederherstellen() {
   }
 }
 
+// Reiter-Umschalter fuer "Mein Reinerlös"/"Monatsabschluss" — beide
+// Bereiche laden ihre Daten bereits unabhaengig ueber den zentralen
+// Zeitraum (zeitraumGewechselt), der Wechsel selbst ist rein optisch.
+function dashTabWechseln(name, btn) {
+  document.querySelectorAll('.fzg-tab-btn').forEach(b => {
+    b.classList.remove('active');
+    b.style.borderBottomColor = 'transparent';
+    b.style.color = 'var(--text-tertiary)';
+  });
+  document.querySelectorAll('.fzg-tab-panel').forEach(p => p.style.display = 'none');
+  btn.classList.add('active');
+  btn.style.borderBottomColor = 'var(--akz-geld)';
+  btn.style.color = 'var(--akz-geld)';
+  document.getElementById('dash-tab-' + name).style.display = 'block';
+}
+
 async function ladeFahrzeugStatusKachel(erzwingen = false) {
   const card = document.getElementById('fahrzeug-status-card');
   const grid = document.getElementById('fahrzeug-status-grid');
@@ -6991,169 +7007,236 @@ function _terminUrgenz(datumStr) {
 
 function _fahrzeugStatusKachelHtml(v, d, kont) {
   d = d || {};
-  // Kachel zeigt ab jetzt IMMER ihren vollen Rahmen — Batteriebalken,
-  // Termine, Standort, Kennzahlen. Fehlt ein einzelner Wert, erscheint an
-  // seiner Stelle ein klar erkennbarer Leerstand ("—", "kein Wert",
-  // "nicht hinterlegt"), statt das ganze Element oder die halbe Kachel
-  // verschwinden zu lassen. Nur so ist auf den ersten Blick zu sehen,
-  // WAS fehlt, statt raten zu muessen, ob die Kachel ueberhaupt lebt.
-  const kachel = (label, val, einheit) => `
-    <div style="background:var(--bg-input); border-radius:var(--radius-sm); padding:12px 14px; border:1px solid var(--border);">
-      <div style="font-size:10px; text-transform:uppercase; letter-spacing:.06em; color:var(--text-tertiary); margin-bottom:6px; font-weight:600;">${label}</div>
-      <div style="font-size:19px; font-weight:700; ${val == null ? 'color:var(--text-tertiary); font-weight:500;' : ''}">${
-        val != null ? val + (einheit ? ` <span style="font-size:12px; font-weight:500; color:var(--text-secondary);">${einheit}</span>` : '') : '—'
-      }</div>
-    </div>`;
-
+  // Kachel zeigt IMMER ihren vollen Rahmen — Kreisanzeige, Chips, Termine,
+  // Standort, Kennzahlen. Fehlt ein einzelner Wert, erscheint an seiner
+  // Stelle ein klar erkennbarer Leerstand statt das Element verschwinden
+  // zu lassen (Prinzip aus S9-27, hier fortgefuehrt).
   const hatStandort = d.lat != null && d.lon != null;
   const hatSoc = d.soc_prozent != null;
-  // Ohne jemals empfangenen Wert wird 0 als neutraler Leerstand angezeigt
-  // (grau, nicht rot) — sobald ein echter Wert ankommt, uebernimmt der die
-  // Anzeige und faerbt sich entsprechend ein.
   const soc = hatSoc ? Math.max(0, Math.min(100, d.soc_prozent)) : 0;
   const farbe = hatSoc ? _akkuFarbe(soc) : 'var(--border)';
+  // Eigene Hex-Variante fuer die Puls-Animation: farbe kann "var(--border)"
+  // sein, das laesst sich nicht mit einem Alpha-Suffix ("...88") kombinieren
+  // wie es fuer den Box-Shadow-Verlauf noetig ist -- braucht einen echten
+  // Hex-Wert als Rueckfall.
+  const pulsFarbe = hatSoc ? farbe : '#3f3f42';
   const mapsLink = hatStandort ? `https://www.google.com/maps?q=${d.lat},${d.lon}` : '';
 
-  // Ladestatus: default "Nicht angesteckt", solange kein Wert bekannt ist
-  // — erst ein tatsaechlich empfangener 'true' schaltet auf "Angesteckt"
-  // um. Kein Wert heisst nicht "unbekannt lassen", sondern "sicherste
-  // Annahme zeigen, bis Gegenteiliges ankommt".
-  const angesteckt = d.angesteckt === true;
-  const ladeBadge = `
-    <span style="display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:600;
-         padding:5px 12px; border-radius:20px;
-         background:${angesteckt ? 'rgba(34,197,94,.14)' : 'var(--bg-input)'};
-         color:${angesteckt ? '#22c55e' : 'var(--text-tertiary)'};
-         border:1px solid ${angesteckt ? 'rgba(34,197,94,.35)' : 'var(--border)'};">
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-        <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
-      </svg>
-      ${angesteckt ? 'Angesteckt' : 'Nicht angesteckt'}
+  // ── Chips ──────────────────────────────────────────────────────────
+  // Ein Chip pro Thema, nicht pro Einzelsensor. "Zu"/"verriegelt" ist der
+  // Normalzustand -- grau, keine gruene Hervorhebung. Nur "offen" wird
+  // orange (chip-warn), das lenkt die Aufmerksamkeit dahin, wo sie
+  // gebraucht wird, statt bei jedem Blick auf ueberall gruen zu treffen.
+  const chip = (icon, text, art) => {
+    const stile = {
+      on:   'background:rgba(34,197,94,.14); color:#22c55e; border:1px solid rgba(34,197,94,.35);',
+      off:  'background:var(--bg-input); color:var(--text-tertiary); border:1px solid var(--border);',
+      warn: 'background:rgba(234,179,8,.14); color:#eab308; border:1px solid rgba(234,179,8,.35);',
+    };
+    return `<span style="display:inline-flex; align-items:center; gap:6px; font-size:11.5px; font-weight:600;
+         padding:4px 11px; border-radius:20px; white-space:nowrap; ${stile[art]}">
+      <i class="mdi ${icon}" style="font-size:13px;" aria-hidden="true"></i> ${text}
     </span>`;
+  };
 
-  // Batteriebalken: IMMER sichtbar. Ohne jemals empfangenen Wert steht er
-  // grau bei 0% mit einem Hinweistext statt farbig eine falsche Zahl
-  // vorzutaeuschen — aber der Rahmen selbst verschwindet nie.
-  const batteriebar = `
-    <div style="position:relative; height:68px; border-radius:16px; overflow:hidden;
-         background:${hatSoc
-           ? 'linear-gradient(90deg, #ef4444 0%, #f97316 28%, #eab308 52%, #84cc16 74%, #22c55e 100%)'
-           : 'var(--bg-input)'};
-         border:${hatSoc ? 'none' : '1px solid var(--border)'};
-         box-shadow:${hatSoc ? `0 10px 26px -8px ${farbe}66` : 'none'};">
-      ${hatSoc ? `
-      <div class="fzg-batteriebar-maske" data-pct="${soc}"
-           style="position:absolute; top:0; right:0; bottom:0; width:100%;
-                  background:var(--bg-input); transition:width 1.2s cubic-bezier(.22,.9,.3,1);"></div>` : ''}
-      <div style="position:relative; z-index:1; height:100%; display:flex; align-items:center;
-           justify-content:space-between; padding:0 22px;">
-        <div style="display:flex; align-items:baseline; gap:7px;">
-          <span style="font-size:${hatSoc ? '32px' : '15px'}; font-weight:800; font-variant-numeric:tabular-nums;
-               color:${hatSoc ? '#fff' : 'var(--text-tertiary)'};
-               ${hatSoc ? 'text-shadow:0 1px 4px rgba(0,0,0,.5);' : ''}">
-            ${hatSoc ? fmtDe(soc,0) : 'Ladestand noch nicht bekannt'}</span>
-          ${hatSoc ? `<span style="font-size:15px; font-weight:700; color:#fff; text-shadow:0 1px 4px rgba(0,0,0,.5);">% Ladestand</span>` : ''}
-        </div>
-        <div style="text-align:right;">
-          <div style="font-size:${hatSoc ? '21px' : '15px'}; font-weight:800;
-               color:${hatSoc ? '#fff' : 'var(--text-tertiary)'};
-               ${hatSoc ? 'text-shadow:0 1px 4px rgba(0,0,0,.5);' : ''}">
-            ${d.reichweite_km != null ? fmtDe(d.reichweite_km,0) + ' km' : '—'}</div>
-          <div style="font-size:10.5px; text-transform:uppercase; letter-spacing:.04em;
-               color:${hatSoc ? 'rgba(255,255,255,.9)' : 'var(--text-tertiary)'};
-               ${hatSoc ? 'text-shadow:0 1px 3px rgba(0,0,0,.45);' : ''}">Reichweite</div>
-        </div>
-      </div>
-    </div>`;
+  const chips = [];
+  if (d.laedt_aktiv_text) {
+    const restText = d.restladedauer_min != null ? ` · noch ${fmtDe(d.restladedauer_min,0)} Min` : '';
+    chips.push(chip('mdi-lightning-bolt', d.laedt_aktiv_text + restText, 'on'));
+  }
+  if (d.steckertyp) {
+    chips.push(chip(d.steckertyp.icon, d.steckertyp.text, d.steckertyp.dc ? 'on' : 'off'));
+  }
+  // "Angesteckt": Default "Nicht angesteckt", solange kein Wert bekannt
+  // ist -- sicherste Annahme, bis Gegenteiliges ankommt.
+  const angesteckt = d.angesteckt === true;
+  chips.push(chip('mdi-power-plug' + (angesteckt ? '' : '-off'),
+                   angesteckt ? 'Angesteckt' : 'Nicht angesteckt', angesteckt ? 'on' : 'off'));
 
-  // Termine: HU, Service, Bremsfluessigkeit — aus den Fahrzeug-Stammdaten
-  // (v), nicht aus den Live-Cardata-Werten (d). Immer alle drei Zeilen
-  // zeigen, auch wenn (noch) nichts hinterlegt ist — sonst verschwindet
-  // der ganze Abschnitt und es wirkt, als gaebe es die Funktion nicht.
-  const termine = [
-    ['HU/TÜV', v.hu_faellig],
-    ['Service', v.service_faellig],
-    ['Bremsflüssigkeit', v.bremsfluessigkeit],
-  ].map(([label, datum]) => {
+  const chipsZeile2 = [];
+  chipsZeile2.push(d.ladeklappe_zu === false
+    ? chip('mdi-lock-open-outline', 'Ladeklappe offen', 'warn')
+    : chip('mdi-lock', 'Ladeklappe zu', 'off'));
+  chipsZeile2.push(d.verriegelt === false
+    ? chip('mdi-car-door-lock', 'Entriegelt', 'warn')
+    : chip('mdi-car-door-lock', 'Verriegelt', 'off'));
+  if (d.tueren_fenster_offen === true) {
+    const anzahl = d.tueren_fenster_anzahl_offen || 1;
+    chipsZeile2.push(chip('mdi-car-door', `${anzahl} ${anzahl === 1 ? 'offen' : 'offen'}`, 'warn'));
+  } else {
+    chipsZeile2.push(chip('mdi-car-door', 'Türen/Fenster zu', 'off'));
+  }
+
+  // ── Foto/Silhouette ────────────────────────────────────────────────
+  // Eigenes, selbst hochgeladenes Foto -- kein Markenbild wird mit der
+  // Software ausgeliefert (Markenrechtsrisiko fuer ein verkauftes
+  // Produkt). Ohne eigenes Foto: gezeichnete Silhouette als Rueckfall.
+  // "onerror" faengt den 404 ab, wenn (noch) kein Foto hochgeladen ist.
+  const fotoHtml = `
+    <label class="fzg-foto-upload" id="fzg-foto-${v.id}" style="position:absolute; top:4px; right:0;
+         width:62%; height:250px; z-index:1; cursor:pointer; display:block;">
+      <img src="/api/vehicles/${v.id}/foto?t=${Date.now()}" alt=""
+           style="width:100%; height:100%; object-fit:contain; display:block;"
+           onerror="this.style.display='none'; document.getElementById('fzg-silhouette-${v.id}').style.display='block';"
+           onload="document.getElementById('fzg-silhouette-${v.id}').style.display='none';"
+           onclick="event.preventDefault(); fahrzeugFotoEntfernen(${v.id});" title="Klicken zum Entfernen">
+      <svg id="fzg-silhouette-${v.id}" viewBox="0 0 130 70" style="display:none; width:45%; height:auto; opacity:.5;">
+        <path d="M12 46 Q18 30 34 28 L46 20 Q58 14 80 16 L96 24 Q112 26 118 38 L118 46 Q118 52 112 52 L106 52 Q106 44 98 44 Q90 44 90 52 L44 52 Q44 44 36 44 Q28 44 28 52 L18 52 Q12 52 12 46 Z" fill="none" stroke="var(--text-tertiary)" stroke-width="1.8"/>
+        <circle cx="36" cy="52" r="7" fill="none" stroke="var(--text-tertiary)" stroke-width="1.8"/>
+        <circle cx="98" cy="52" r="7" fill="none" stroke="var(--text-tertiary)" stroke-width="1.8"/>
+      </svg>
+      <input type="file" accept="image/*" style="position:absolute; inset:0; opacity:0; cursor:pointer;"
+             onchange="fahrzeugFotoHochgeladen(${v.id}, event)">
+    </label>`;
+
+  // ── Termine + Details (eingeklappt, Zustand bleibt ueber Re-Renders
+  // erhalten) ────────────────────────────────────────────────────────
+  window._fzgDetailsOffen = window._fzgDetailsOffen || new Set();
+  const detailsOffen = window._fzgDetailsOffen.has(v.id);
+  const termin = (label, datum) => {
     const u = datum ? _terminUrgenz(datum) : { farbe: 'var(--text-tertiary)', text: 'nicht hinterlegt' };
     return `
       <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;
-           padding:9px 12px; background:var(--bg-input); border-radius:8px; border:1px solid var(--border);">
+           padding:9px 12px; background:var(--bg-input); border-radius:8px; border:1px solid var(--border); margin-bottom:8px;">
         <span style="font-size:12.5px; color:var(--text-secondary);">${label}</span>
         <span style="font-size:12.5px; font-weight:600; color:${u.farbe};">${u.text}</span>
       </div>`;
-  }).join('');
-
-  // Tageskontingent sichtbar statt als fluechtige Meldung beim Fehlschlag —
-  // sonst bleibt unklar, warum "Aktualisieren" plötzlich wirkungslos wird.
-  // Der Datenstrom (MQTT) ist davon unabhaengig und daher der bessere Weg,
-  // sobald das Limit erreicht ist.
-  const limitErreicht = kont && kont.rest <= 0;
-  const kontingentText = kont
-    ? (limitErreicht
-        ? 'Tageslimit erreicht — weiter morgen. Der Datenstrom läuft unabhängig davon weiter.'
-        : `${kont.rest} von ${kont.limit} Abrufen heute übrig`)
-    : '';
+  };
+  const metrik = (label, val, einheit) => `
+    <div style="background:var(--bg-input); border-radius:var(--radius-sm); padding:12px 14px; border:1px solid var(--border);">
+      <div style="font-size:10px; text-transform:uppercase; letter-spacing:.06em; color:var(--text-tertiary); margin-bottom:6px; font-weight:600;">${label}</div>
+      <div style="font-size:17px; font-weight:700; ${val == null ? 'color:var(--text-tertiary); font-weight:500;' : ''}">${
+        val != null ? val + (einheit ? ` <span style="font-size:11px; font-weight:500; color:var(--text-secondary);">${einheit}</span>` : '') : '—'
+      }</div>
+    </div>`;
 
   return `
-    <div class="card fzg-status-karte" style="margin:0;">
-      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; flex-wrap:wrap; gap:8px;">
-        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-          <span style="font-weight:600; font-size:15px;">${v.bezeichnung || 'Fahrzeug'}</span>
-          ${ladeBadge}
+    <div class="card fzg-status-karte" style="margin:0; position:relative; overflow:hidden;">
+
+      <div style="position:relative; z-index:2; display:flex; justify-content:space-between; align-items:flex-end; gap:16px; min-height:76px;">
+        <div>
+          <div style="display:flex; align-items:center; gap:10px; margin-bottom:2px;">
+            <span style="font-weight:600; font-size:15px;">${v.bezeichnung || 'Fahrzeug'}</span>
+          </div>
+          ${v.kennzeichen ? `<div style="font-size:11px; color:var(--text-tertiary); margin-bottom:10px;">${v.kennzeichen}</div>` : '<div style="margin-bottom:6px;"></div>'}
+          <div style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:6px;">${chips.join('')}</div>
+          <div style="display:flex; flex-wrap:wrap; gap:6px;">${chipsZeile2.join('')}</div>
         </div>
-        <div style="display:flex; align-items:center; gap:10px;">
-          <span style="font-size:11px; color:var(--text-tertiary);">${d.stand ? `Stand: ${d.stand.slice(11,16)} Uhr` : 'Noch nie aktualisiert'}</span>
-          <button class="btn btn-sm" onclick="fahrzeugDatenAktualisieren(${v.id}, this)"
-                  ${limitErreicht ? 'disabled title="Tageslimit erreicht"' : 'title="Jetzt abrufen"'}
-                  style="${limitErreicht ? 'opacity:.5; cursor:not-allowed;' : ''}">↻ Aktualisieren</button>
-        </div>
+        ${fotoHtml}
       </div>
-      ${kontingentText ? `
-        <div style="font-size:11.5px; color:${limitErreicht ? '#eab308' : 'var(--text-tertiary)'}; margin-bottom:12px;">
-          ${kontingentText}
-        </div>` : ''}
-      <div style="margin-bottom:16px;">${batteriebar}</div>
-      <div style="display:flex; gap:18px; flex-wrap:wrap; align-items:stretch;">
-        <div style="flex:1 1 300px; min-width:240px; display:flex; flex-direction:column; gap:10px;">
-          <div style="display:flex; flex-direction:column; gap:8px;">${termine}</div>
-          <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:10px;">
-            ${kachel('Kilometerstand', d.km != null ? fmtDe(d.km, 0) : null, 'km')}
-            ${kachel('Ø Verbrauch', d.verbrauch_kwh_100 != null ? fmtDe(d.verbrauch_kwh_100, 1) : null, 'kWh/100km')}
-            ${kachel('Akkukapazität', d.akku_max_kwh != null ? fmtDe(d.akku_max_kwh, 1) : null, 'kWh')}
-            ${kachel('Akkuzustand', d.akku_soh_prozent != null ? fmtDe(d.akku_soh_prozent, 0) : null, '% SoH')}
+
+      <div style="position:relative; z-index:2; display:flex; gap:22px; align-items:center; margin-top:16px; flex-wrap:wrap;">
+        <div style="display:flex; flex-direction:column; align-items:center; flex:none;">
+          <div style="position:relative; width:82px; height:82px;">
+            <svg viewBox="0 0 100 100" width="82" height="82" style="transform:rotate(-90deg);">
+              <circle cx="50" cy="50" r="41" fill="none" stroke="var(--bg-input)" stroke-width="8"/>
+              <circle class="fzg-gauge-fill" data-pct="${soc}" cx="50" cy="50" r="41" fill="none"
+                      stroke="${farbe}" stroke-width="8" stroke-linecap="round"
+                      stroke-dasharray="258" stroke-dashoffset="258"
+                      style="transition:stroke-dashoffset 1.8s cubic-bezier(.16,1,.3,1);"/>
+            </svg>
+            <div class="fzg-gauge-pct" style="position:absolute; inset:0; display:flex; align-items:center;
+                 justify-content:center; font-size:16px; font-weight:800; font-family:var(--font-mono);
+                 color:${hatSoc ? farbe : 'var(--text-tertiary)'};">0%</div>
+          </div>
+          <div style="font-size:9px; color:var(--text-tertiary); margin-top:6px; text-transform:uppercase; letter-spacing:.04em; white-space:nowrap;">
+            ${d.reichweite_km != null ? fmtDe(d.reichweite_km,0) + ' km Reichweite' : 'Reichweite unbekannt'}
           </div>
         </div>
-        <div style="flex:1 1 260px; min-width:220px; max-width:380px;">
-          ${hatStandort ? `
-            <div style="height:100%; min-height:150px; background:var(--bg-input); border-radius:var(--radius-sm);
-                 border:1px solid var(--border); padding:16px; display:flex; flex-direction:column; justify-content:space-between;">
-              <div style="display:flex; gap:10px; align-items:flex-start;">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="${hatSoc ? farbe : 'var(--accent)'}" stroke-width="2"
-                     style="flex:none; margin-top:1px;">
-                  <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>
-                </svg>
-                <div style="font-size:13.5px; line-height:1.5;">
-                  ${d.standort_adresse ? d.standort_adresse : `${fmtDe(d.lat,5)}, ${fmtDe(d.lon,5)}`}
-                </div>
-              </div>
-              <a href="${mapsLink}" target="_blank" rel="noopener"
-                 style="align-self:flex-start; font-size:12px; font-weight:600; color:var(--accent);
-                        text-decoration:none; display:flex; align-items:center; gap:5px;">
-                Route öffnen
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M7 17L17 7M7 7h10v10"/></svg>
-              </a>
-            </div>
-          ` : `
-            <div style="display:flex; align-items:center; justify-content:center; height:100%;
-                 min-height:150px; background:var(--bg-input); border-radius:var(--radius-sm);
-                 border:1px solid var(--border); color:var(--text-tertiary); font-size:12px; text-align:center; padding:12px;">
-              Standort noch nicht bekannt
-            </div>
-          `}
+
+        <a href="${mapsLink || '#'}" ${hatStandort ? 'target="_blank" rel="noopener"' : 'onclick="return false;"'}
+           style="display:flex; align-items:center; gap:12px; text-decoration:none; cursor:${hatStandort ? 'pointer' : 'default'};">
+          <div style="position:relative; width:44px; height:44px; border-radius:9px; flex:none; overflow:hidden;
+               background:radial-gradient(circle at 60% 35%, var(--bg-input), var(--bg-elevated) 70%);">
+            <div style="position:absolute; inset:0; opacity:.5; background-image:radial-gradient(var(--border) 1px, transparent 1px); background-size:9px 9px;"></div>
+            ${hatStandort ? `<div style="position:absolute; left:18px; top:17px; width:9px; height:9px; border-radius:50%; background:${farbe}; animation:fzgMapPuls 2s ease-out infinite;"></div>` : ''}
+          </div>
+          <div style="font-size:12px; color:var(--text-secondary); line-height:1.5; text-shadow:0 1px 6px rgba(0,0,0,.55);">
+            ${hatStandort
+              ? (d.standort_adresse ? d.standort_adresse : `${fmtDe(d.lat,5)}, ${fmtDe(d.lon,5)}`)
+              : '<span style="color:var(--text-tertiary);">Standort noch nicht bekannt</span>'}
+          </div>
+        </a>
+      </div>
+
+      <button class="fzg-details-toggle" onclick="_fahrzeugDetailsUmschalten(${v.id}, this)"
+              style="all:unset; cursor:pointer; position:relative; z-index:2; display:flex; align-items:center; gap:6px;
+                     margin-top:14px; font-size:12px; color:var(--text-tertiary); font-weight:600;">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+             style="transition:transform .2s; transform:rotate(${detailsOffen ? '180deg' : '0deg'});"><polyline points="6 9 12 15 18 9"/></svg>
+        <span>${detailsOffen ? 'Details verbergen' : 'Details anzeigen'}</span>
+      </button>
+      <div class="fzg-details-panel" style="position:relative; z-index:2; overflow:hidden;
+           max-height:${detailsOffen ? '600px' : '0'}; opacity:${detailsOffen ? '1' : '0'};
+           transition:max-height .35s ease, opacity .3s ease; margin-top:${detailsOffen ? '12px' : '0'};">
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;
+             padding:9px 12px; background:var(--bg-input); border-radius:8px; border:1px solid var(--border); margin-bottom:8px;">
+          <span style="font-size:12.5px; color:var(--text-secondary);">Kilometerstand</span>
+          <span style="font-size:12.5px; font-weight:600;">${d.km != null ? fmtDe(d.km,0) + ' km' : '—'}</span>
+        </div>
+        ${termin('HU/TÜV', v.hu_faellig)}
+        ${termin('Service', v.service_faellig)}
+        <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:10px; margin-top:2px;">
+          ${metrik('Ø Verbrauch', d.verbrauch_kwh_100 != null ? fmtDe(d.verbrauch_kwh_100, 1) : null, 'kWh/100km')}
+          ${metrik('Akkukapazität', d.akku_max_kwh != null ? fmtDe(d.akku_max_kwh, 1) : null, 'kWh')}
+          ${metrik('Akkuzustand', d.akku_soh_prozent != null ? fmtDe(d.akku_soh_prozent, 0) : null, '% SoH')}
         </div>
       </div>
-    </div>`;
+
+      ${kont ? `
+        <div style="position:relative; z-index:2; display:flex; align-items:center; justify-content:space-between;
+             gap:10px; margin-top:14px; padding-top:12px; border-top:1px solid var(--border);">
+          <span style="font-size:11px; color:${kont.rest <= 0 ? '#eab308' : 'var(--text-tertiary)'};">
+            ${kont.rest <= 0 ? 'Tageslimit erreicht — der Datenstrom läuft unabhängig davon weiter.' : `${kont.rest} von ${kont.limit} Abrufen heute übrig`}
+          </span>
+          <button class="btn btn-sm" onclick="fahrzeugDatenAktualisieren(${v.id}, this)"
+                  ${kont.rest <= 0 ? 'disabled title="Tageslimit erreicht"' : 'title="Jetzt abrufen"'}
+                  style="${kont.rest <= 0 ? 'opacity:.5; cursor:not-allowed;' : ''}">↻ Aktualisieren</button>
+        </div>` : ''}
+    </div>
+    <style>@keyframes fzgMapPuls { 0%{box-shadow:0 0 0 0 ${pulsFarbe}88;} 70%{box-shadow:0 0 0 9px ${pulsFarbe}00;} 100%{box-shadow:0 0 0 0 ${pulsFarbe}00;} }</style>`;
+}
+
+function _fahrzeugDetailsUmschalten(vehicleId, btn) {
+  window._fzgDetailsOffen = window._fzgDetailsOffen || new Set();
+  const offen = window._fzgDetailsOffen.has(vehicleId);
+  if (offen) window._fzgDetailsOffen.delete(vehicleId);
+  else window._fzgDetailsOffen.add(vehicleId);
+
+  const karte = btn.closest('.fzg-status-karte');
+  const panel = karte.querySelector('.fzg-details-panel');
+  const pfeil = btn.querySelector('svg');
+  const label = btn.querySelector('span');
+  const nunOffen = !offen;
+  panel.style.maxHeight = nunOffen ? '600px' : '0';
+  panel.style.opacity = nunOffen ? '1' : '0';
+  panel.style.marginTop = nunOffen ? '12px' : '0';
+  pfeil.style.transform = nunOffen ? 'rotate(180deg)' : 'rotate(0deg)';
+  label.textContent = nunOffen ? 'Details verbergen' : 'Details anzeigen';
+}
+
+async function fahrzeugFotoHochgeladen(vehicleId, evt) {
+  const datei = evt.target.files[0];
+  if (!datei) return;
+  const formData = new FormData();
+  formData.append('file', datei);
+  try {
+    const r = await fetch(`/api/vehicles/${vehicleId}/foto`, { method: 'POST', body: formData });
+    const d = await r.json();
+    if (!d.ok) { _toast(d.meldung || 'Foto konnte nicht hochgeladen werden'); return; }
+    ladeFahrzeugStatusKachel(true);
+  } catch (e) {
+    _toast('Foto konnte nicht hochgeladen werden');
+  }
+}
+
+async function fahrzeugFotoEntfernen(vehicleId) {
+  try {
+    await fetch(`/api/vehicles/${vehicleId}/foto`, { method: 'DELETE' });
+    ladeFahrzeugStatusKachel(true);
+  } catch (e) {
+    _toast('Foto konnte nicht entfernt werden');
+  }
 }
 
 
@@ -7163,18 +7246,33 @@ function _fahrzeugStatusKachelHtml(v, d, kont) {
 // Ohne den echten Ausgangszustand (100%) gaebe es nichts, von dem aus
 // animiert werden koennte.
 function _fahrzeugStatusBatterienAnimieren() {
-  // Doppeltes rAF: nach dem ersten Frame ist der Ausgangszustand (100%)
-  // sicher gemalt, erst danach loest die Aenderung im zweiten Frame die
-  // CSS-Transition zuverlaessig aus — ein einzelnes rAF reicht bei frisch
-  // eingefuegten Elementen manchmal nicht, der Browser ueberspringt die
-  // Animation dann und springt direkt zum Endwert.
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => {
-      document.querySelectorAll('.fzg-batteriebar-maske').forEach(el => {
-        const pct = parseFloat(el.dataset.pct || '0');
-        el.style.width = Math.max(0, 100 - pct) + '%';
-      });
-    });
+  // Kreisanzeige statt Balken: Hochlauf-Effekt wie bei einem echten
+  // Instrumenten-Selbsttest -- schiesst erst auf 100% hoch, dann
+  // Ease-Kurve zurueck auf den echten Wert. Kein Wert bekannt (0%)
+  // bedeutet keine Animation, nur ein ruhiger grauer Kreis.
+  document.querySelectorAll('.fzg-gauge-fill').forEach(kreis => {
+    const ziel = parseFloat(kreis.dataset.pct || '0');
+    const umfang = 258;
+    const zahlEl = kreis.closest('div').querySelector('.fzg-gauge-pct');
+    if (ziel <= 0) {
+      kreis.style.transition = 'none';
+      kreis.style.strokeDashoffset = umfang;
+      if (zahlEl) zahlEl.textContent = '—';
+      return;
+    }
+    const start = performance.now();
+    function schritt(jetzt) {
+      const dt = jetzt - start;
+      let wert;
+      if (dt < 900) { wert = (dt / 900) * 100; }
+      else if (dt < 2400) { const p = (dt - 900) / 1500; wert = 100 - (100 - ziel) * (1 - Math.pow(1 - p, 3)); }
+      else { wert = ziel; }
+      kreis.style.transition = 'none';
+      kreis.style.strokeDashoffset = umfang - (wert / 100) * umfang;
+      if (zahlEl) zahlEl.textContent = Math.round(wert) + '%';
+      if (dt < 2400) requestAnimationFrame(schritt);
+    }
+    requestAnimationFrame(schritt);
   });
 }
 

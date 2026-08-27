@@ -4,6 +4,8 @@ data/*.db-journal
 data/belege/
 data/sicherungen/
 data/ocpp_raw.log
+# Eigene Fahrzeugfotos der Nutzer -- rein privat, niemals im Repo.
+data/fahrzeugfotos/
 
 # Python
 __pycache__/

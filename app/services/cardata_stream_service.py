@@ -498,9 +498,73 @@ def verarbeite_nachricht(vehicle_id: int, roh: str) -> dict:
     elif akku_alt:
         fahrzeugdaten_gefunden["akku_max_kwh"] = akku_alt
 
+    # Beide moeglichen Deskriptoren pruefen — welcher tatsaechlich sendet,
+    # ist je Fahrzeug unterschiedlich (siehe Kommentar bei der Definition
+    # in cardata_service.py). Der erste, der in DIESER Nachricht einen
+    # Wert liefert, gewinnt.
     angesteckt = wahrheitswert(_cds.DESCRIPTOR_ANGESTECKT)
+    if angesteckt is None:
+        angesteckt = wahrheitswert(_cds.DESCRIPTOR_ANGESTECKT_ALT)
     if angesteckt is not None:
         fahrzeugdaten_gefunden["angesteckt"] = angesteckt
+
+    # Ladevorgang im Detail
+    ladestatus_roh = werte.get(_cds.DESCRIPTOR_LADESTATUS)
+    if ladestatus_roh is not None:
+        ladestatus_text = ladestatus_roh.get("value") if isinstance(ladestatus_roh, dict) else ladestatus_roh
+        if ladestatus_text is not None:
+            # Leerer String statt None fuer "nicht ladend" (NOCHARGING/
+            # unbekannt) -- WICHTIG: die Merge-Regel in
+            # _speichere_fahrzeugdaten() ueberschreibt NUR mit Werten, die
+            # "is not None" sind. Mit None wuerde "Ladevorgang beendet"
+            # niemals ankommen und ein veralteter "Laedt aktiv"-Chip bliebe
+            # stehen, obwohl laengst nicht mehr geladen wird. "" ist ein
+            # gueltiger, expliziter Wert und loescht den Chip korrekt.
+            fahrzeugdaten_gefunden["laedt_aktiv_text"] = (
+                _cds.LADESTATUS_ANZEIGE.get(str(ladestatus_text).strip().upper()) or "")
+
+    restladedauer = zahl(_cds.DESCRIPTOR_RESTLADEDAUER)
+    if restladedauer is not None:
+        fahrzeugdaten_gefunden["restladedauer_min"] = restladedauer
+
+    steckertyp_roh = werte.get(_cds.DESCRIPTOR_STECKERTYP)
+    if steckertyp_roh is not None:
+        steckertyp_text = steckertyp_roh.get("value") if isinstance(steckertyp_roh, dict) else steckertyp_roh
+        steckertyp_anzeige = _cds._steckertyp_anzeige(steckertyp_text)
+        if steckertyp_anzeige is not None:
+            fahrzeugdaten_gefunden["steckertyp"] = steckertyp_anzeige
+
+    # Verriegelung
+    ladeklappe = wahrheitswert(_cds.DESCRIPTOR_LADEKLAPPE)
+    if ladeklappe is not None:
+        fahrzeugdaten_gefunden["ladeklappe_zu"] = ladeklappe
+    verriegelt = wahrheitswert(_cds.DESCRIPTOR_VERRIEGELUNG)
+    if verriegelt is not None:
+        fahrzeugdaten_gefunden["verriegelt"] = verriegelt
+
+    # Tueren/Fenster: acht Einzelwerte, wie im REST-Pfad. Fenster nutzen den
+    # Zustandstext-Umwandler statt eines reinen Bools (CLOSED/OPEN/
+    # INTERMEDIATE), siehe _cds._fenster_offen().
+    tuer_deskriptoren = {
+        "tuer_vl": _cds.DESCRIPTOR_TUER_VL, "tuer_vr": _cds.DESCRIPTOR_TUER_VR,
+        "tuer_hl": _cds.DESCRIPTOR_TUER_HL, "tuer_hr": _cds.DESCRIPTOR_TUER_HR,
+    }
+    for feld_name, deskriptor in tuer_deskriptoren.items():
+        wert = wahrheitswert(deskriptor)
+        if wert is not None:
+            fahrzeugdaten_gefunden[feld_name] = wert
+
+    fenster_deskriptoren = {
+        "fenster_vl": _cds.DESCRIPTOR_FENSTER_VL, "fenster_vr": _cds.DESCRIPTOR_FENSTER_VR,
+        "fenster_hl": _cds.DESCRIPTOR_FENSTER_HL, "fenster_hr": _cds.DESCRIPTOR_FENSTER_HR,
+    }
+    for feld_name, deskriptor in fenster_deskriptoren.items():
+        eintrag = werte.get(deskriptor)
+        if eintrag is not None:
+            roh_wert = eintrag.get("value") if isinstance(eintrag, dict) else eintrag
+            wert = _cds._fenster_offen(roh_wert)
+            if wert is not None:
+                fahrzeugdaten_gefunden[feld_name] = wert
 
     cbs_wert = werte.get(_cds.DESCRIPTOR_CBS)
     if cbs_wert is not None:
