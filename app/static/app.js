@@ -6901,12 +6901,20 @@ async function ladeFahrzeugStatusKachel(erzwingen = false) {
         d = await (await hole(`/api/vehicles/${v.id}/cardata/fahrzeugdaten`)).json();
       } catch (e) {}
 
-      kacheln.push(_fahrzeugStatusKachelHtml(v, d));
+      // Tageskontingent sichtbar mitfuehren statt nur als fluechtige Meldung
+      // beim Fehlschlag zu zeigen — sonst bleibt unklar, warum "Aktualisieren"
+      // wirkungslos bleibt, sobald das Limit erreicht ist.
+      let kont = null;
+      try {
+        kont = await (await hole(`/api/vehicles/${v.id}/cardata/kontingent`)).json();
+      } catch (e) {}
+
+      kacheln.push(_fahrzeugStatusKachelHtml(v, d, kont));
       // Signatur ohne "stand" (Zeitstempel wuerde bei jedem Zyklus wechseln,
       // auch wenn sich sonst nichts geaendert hat) — nur was sich sichtbar
       // auswirkt, insbesondere lat/lon, geht in den Vergleich ein.
       const { stand, ...ohneStand } = d || {};
-      signaturTeile.push(v.id + ':' + JSON.stringify(ohneStand));
+      signaturTeile.push(v.id + ':' + JSON.stringify(ohneStand) + ':' + (kont ? kont.rest : ''));
     }
 
     if (!kacheln.length) { card.style.display = 'none'; return; }
@@ -6952,7 +6960,7 @@ function _terminUrgenz(datumStr) {
   return { farbe, text: `${anzeige} · ${text}` };
 }
 
-function _fahrzeugStatusKachelHtml(v, d) {
+function _fahrzeugStatusKachelHtml(v, d, kont) {
   const kachel = (label, val, einheit) => val == null ? '' : `
     <div style="background:var(--bg-input); border-radius:var(--radius-sm); padding:12px 14px; border:1px solid var(--border);">
       <div style="font-size:10px; text-transform:uppercase; letter-spacing:.06em; color:var(--text-tertiary); margin-bottom:6px; font-weight:600;">${label}</div>
@@ -7023,6 +7031,17 @@ function _fahrzeugStatusKachelHtml(v, d) {
       </div>`;
   }).join('');
 
+  // Tageskontingent sichtbar statt als fluechtige Meldung beim Fehlschlag —
+  // sonst bleibt unklar, warum "Aktualisieren" plötzlich wirkungslos wird.
+  // Der Datenstrom (MQTT) ist davon unabhaengig und daher der bessere Weg,
+  // sobald das Limit erreicht ist.
+  const limitErreicht = kont && kont.rest <= 0;
+  const kontingentText = kont
+    ? (limitErreicht
+        ? 'Tageslimit erreicht — weiter morgen. Der Datenstrom läuft unabhängig davon weiter.'
+        : `${kont.rest} von ${kont.limit} Abrufen heute übrig`)
+    : '';
+
   return `
     <div class="card fzg-status-karte" style="margin:0;">
       <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; flex-wrap:wrap; gap:8px;">
@@ -7032,9 +7051,15 @@ function _fahrzeugStatusKachelHtml(v, d) {
         </div>
         <div style="display:flex; align-items:center; gap:10px;">
           ${d && d.stand ? `<span style="font-size:11px; color:var(--text-tertiary);">Stand: ${d.stand.slice(11,16)} Uhr</span>` : ''}
-          <button class="btn btn-sm" onclick="fahrzeugDatenAktualisieren(${v.id}, this)" title="Jetzt abrufen">↻ Aktualisieren</button>
+          <button class="btn btn-sm" onclick="fahrzeugDatenAktualisieren(${v.id}, this)"
+                  ${limitErreicht ? 'disabled title="Tageslimit erreicht"' : 'title="Jetzt abrufen"'}
+                  style="${limitErreicht ? 'opacity:.5; cursor:not-allowed;' : ''}">↻ Aktualisieren</button>
         </div>
       </div>
+      ${kontingentText ? `
+        <div style="font-size:11.5px; color:${limitErreicht ? '#eab308' : 'var(--text-tertiary)'}; margin-bottom:12px;">
+          ${kontingentText}
+        </div>` : ''}
       ${hatDaten ? `
         ${batteriebar ? `<div style="margin-bottom:16px;">${batteriebar}</div>` : ''}
         <div style="display:flex; gap:18px; flex-wrap:wrap; align-items:stretch;">
@@ -7107,7 +7132,16 @@ async function fahrzeugDatenAktualisieren(vehicleId, btn) {
   try {
     const d = await (await fetch(`/api/vehicles/${vehicleId}/cardata/fahrzeugdaten/aktualisieren`,
                                  { method: 'POST' })).json();
-    if (!d.ok) { _toast(d.meldung || 'Abruf fehlgeschlagen'); return; }
+    if (!d.ok) {
+      _toast(d.meldung || 'Abruf fehlgeschlagen');
+      // BUG BEHOBEN (28.08.): Bei einem Fehlschlag (z. B. Tageslimit
+      // erreicht) wurde bisher NICHT neu gerendert — das verbrauchte
+      // Kontingent blieb in der Kachel unsichtbar, und "Stand" schien
+      // "eingefroren", ohne erkennbaren Grund. Jetzt zeigt die Kachel
+      // auch bei einem Fehlschlag sofort den aktuellen Kontingent-Stand.
+      ladeFahrzeugStatusKachel(true);
+      return;
+    }
     _toast('Fahrzeugdaten aktualisiert');
     ladeFahrzeugStatusKachel(true);
   } catch (e) {

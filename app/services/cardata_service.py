@@ -314,15 +314,41 @@ def stelle_container_sicher(vehicle_id: int) -> dict:
     falls noetig.
 
     Die Container-ID wird gespeichert; ein erneuter Aufruf verbraucht dann
-    kein weiteres Kontingent."""
+    kein weiteres Kontingent.
+
+    BUG BEHOBEN (28.08.): Ein bestehender Container wurde bisher immer
+    unveraendert weiterverwendet, auch wenn CONTAINER_DESCRIPTORS sich seit
+    seiner Anlage geaendert hatte. Neu hinzugekommene Deskriptoren (etwa
+    'maxEnergy' oder 'isPlugged') wurden dadurch von BMW nie ausgeliefert —
+    nicht ueber den Stream (der haengt am Portal, nicht am Container) und
+    nicht ueber den manuellen Abruf, weil der Container schlicht nicht
+    danach gefragt hat. Jetzt wird bei jedem Aufruf verglichen, ob sich die
+    gewuenschten Deskriptoren geaendert haben; falls ja, wird der alte
+    Container (best effort) geloescht und ein neuer mit der aktuellen
+    Liste angelegt."""
     from repositories import vehicle_bmw_repository as bmw_repo
-    vorhandene = bmw_repo.get(vehicle_id)["container_id"]
-    if vorhandene:
+    aktuelle_deskriptoren = json.dumps(sorted(CONTAINER_DESCRIPTORS))
+    daten = bmw_repo.get(vehicle_id)
+    vorhandene = daten["container_id"]
+    gespeicherte_deskriptoren = daten.get("container_deskriptoren") or ""
+
+    if vorhandene and gespeicherte_deskriptoren == aktuelle_deskriptoren:
         return {"ok": True, "container_id": vorhandene, "neu": False}
 
     token = auth.hole_access_token(vehicle_id)
     if not token:
         return {"ok": False, "meldung": "Nicht angemeldet."}
+
+    if vorhandene:
+        # Best effort: alten Container aufraeumen, damit die pro Konto
+        # begrenzte Anzahl (max. 10) nicht durch veraltete Container
+        # aufgebraucht wird. Schlaegt das fehl, wird trotzdem ein neuer
+        # angelegt — ein verwaister alter Container ist unschoen, aber
+        # kein Grund, den Fortschritt zu blockieren.
+        try:
+            _request("DELETE", f"/customers/containers/{vorhandene}", token, vehicle_id)
+        except Exception:
+            pass
 
     antwort = _request("POST", "/customers/containers", token, vehicle_id, body={
         "name": "eChargeHome Fahrtenbuch",
@@ -336,7 +362,7 @@ def stelle_container_sicher(vehicle_id: int) -> dict:
            or antwort["daten"].get("id") or "")
     if not cid:
         return {"ok": False, "meldung": "BMW lieferte keine Container-ID zurück."}
-    bmw_repo.set_felder(vehicle_id, container_id=cid)
+    bmw_repo.set_felder(vehicle_id, container_id=cid, container_deskriptoren=aktuelle_deskriptoren)
     event_log_service.log_event("bmw", "info", f"CarData-Container angelegt: {cid}")
     return {"ok": True, "container_id": cid, "neu": True}
 

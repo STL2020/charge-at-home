@@ -39,11 +39,23 @@ def _ensure_table(conn) -> None:
         );
     """)
     conn.commit()
+    # Migration fuer bereits bestehende Datenbanken: 'CREATE TABLE IF NOT
+    # EXISTS' legt bei schon vorhandener Tabelle keine neue Spalte an.
+    # BUG-Hintergrund: der Container merkte sich nie, mit welchen
+    # Deskriptoren er angelegt wurde — kamen spaeter neue hinzu (wie
+    # 'maxEnergy' oder 'isPlugged' heute), blieb der alte, unvollstaendige
+    # Container bestehen und BMW lieferte die neuen Felder nie aus, auch
+    # nicht ueber den manuellen Abruf.
+    spalten = {r["name"] for r in conn.execute("PRAGMA table_info(vehicle_bmw_connections)")}
+    if "container_deskriptoren" not in spalten:
+        conn.execute("ALTER TABLE vehicle_bmw_connections ADD COLUMN container_deskriptoren TEXT")
+        conn.commit()
 
 
 FELDER = ("client_id", "gcid", "access_token", "id_token", "refresh_token",
           "token_gueltig_bis", "refresh_erneuert_am", "device_code",
-          "code_verifier", "container_id", "stream_aktiv", "stream_host",
+          "code_verifier", "container_id", "container_deskriptoren",
+          "stream_aktiv", "stream_host",
           "stream_port", "letzter_abruf", "fzg_daten",
           "stream_puffer", "stream_letzter_stand")
 
