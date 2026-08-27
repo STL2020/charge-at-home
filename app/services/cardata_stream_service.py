@@ -97,6 +97,29 @@ _zustand = {
 _client = None
 _thread = None
 
+# ── Protokoll fuer die Oberflaeche ──────────────────────────────────────────
+# Ringpuffer im Arbeitsspeicher, damit sich jede Verbindungsstufe direkt in
+# der App verfolgen laesst — kein Putty, kein docker exec noetig. Bewusst
+# nicht in der Datenbank: reine Laufzeit-Diagnose, kein Datensatz mit
+# Aufbewahrungspflicht, und ein Ringpuffer im Speicher genuegt dafuer.
+_PROTOKOLL_MAX = 300
+_protokoll: list[str] = []
+
+
+def _protokoll_schreiben(zeile: str) -> None:
+    zeitstempel = datetime.now().strftime("%H:%M:%S")
+    _protokoll.append(f"[{zeitstempel}] {zeile}")
+    if len(_protokoll) > _PROTOKOLL_MAX:
+        del _protokoll[:len(_protokoll) - _PROTOKOLL_MAX]
+
+
+def protokoll_lesen() -> list[str]:
+    return list(_protokoll)
+
+
+def protokoll_leeren() -> None:
+    _protokoll.clear()
+
 
 def status() -> dict:
     """Zustand fuer die Anzeige.
@@ -189,6 +212,7 @@ def starte() -> dict:
     _zustand["laeuft"] = True
     _zustand["fehler"] = ""
     _zustand["versuch_seit"] = datetime.now().isoformat(timespec="seconds")
+    _protokoll_schreiben(f"Stream wird gestartet (GCID {gcid}, VIN {vin}) …")
     _thread = threading.Thread(target=_schleife, args=(gcid, vin), daemon=True)
     _thread.start()
     event_log_service.log_event("bmw", "info", "CarData-Stream gestartet.")
@@ -255,6 +279,7 @@ def _schleife(gcid: str, vin: str) -> None:
                     _zustand["abonniert"] = None   # zuruecksetzen, Antwort steht noch aus
                     _zustand["fehler"] = ""
                     _zustand["verbindungen"] = _zustand.get("verbindungen", 0) + 1
+                    _protokoll_schreiben(f"✓ Verbunden (Code {rc}). Abonniere Thema {thema} …")
                     c.subscribe(thema, qos=1)
                     if not erstverbindung["erledigt"]:
                         erstverbindung["erledigt"] = True
@@ -263,6 +288,7 @@ def _schleife(gcid: str, vin: str) -> None:
                 else:
                     _zustand["verbunden"] = False
                     _zustand["fehler"] = f"Verbindung abgelehnt (Code {rc})"
+                    _protokoll_schreiben(f"✕ Verbindung abgelehnt (Code {rc}).")
 
             def bei_abonnement(c, userdata, mid, reason_codes, properties=None):
                 # BUG BEHOBEN (28.08.): Frueher wurde subscribe() aufgerufen,
@@ -274,24 +300,35 @@ def _schleife(gcid: str, vin: str) -> None:
                                and getattr(code, "value", code) >= 128
                                for code in reason_codes)
                 _zustand["abonniert"] = not abgelehnt
+                codes = [getattr(code, "value", code) for code in reason_codes]
                 if abgelehnt:
-                    codes = [getattr(code, "value", code) for code in reason_codes]
+                    _protokoll_schreiben(f"✕ Abonnement abgelehnt (Code {codes}).")
                     event_log_service.log_event("bmw", "warning",
                         f"Stream: Abonnement von Thema '{thema}' abgelehnt "
                         f"(Code {codes}). Vermutlich GCID/VIN-Kombination "
                         f"falsch oder Fahrzeug nicht als Hauptnutzer "
                         f"zugeordnet.")
                 else:
+                    _protokoll_schreiben(f"✓ Abonnement bestätigt (Code {codes}). "
+                                        f"Warte auf Nachrichten von BMW …")
                     event_log_service.log_event("bmw", "info",
                         f"Stream: Abonnement von Thema '{thema}' bestätigt.")
 
             def bei_trennung(c, userdata, flags, rc, props=None):
                 _zustand["verbunden"] = False
+                _protokoll_schreiben(f"Verbindung getrennt (Code {rc}).")
 
             def bei_nachricht(c, userdata, msg):
                 try:
-                    verarbeite_nachricht(msg.payload.decode("utf-8"))
+                    roh = msg.payload.decode("utf-8")
+                    # Ganz bewusst gekuerzt, nicht weggelassen: die Ansicht in
+                    # der App soll auch bei vielen Nachrichten benutzbar
+                    # bleiben, aber der Inhalt muss erkennbar sein.
+                    vorschau = roh if len(roh) <= 1000 else roh[:1000] + " …(gekürzt)"
+                    _protokoll_schreiben(f"★ Nachricht auf '{msg.topic}': {vorschau}")
+                    verarbeite_nachricht(roh)
                 except Exception as e:
+                    _protokoll_schreiben(f"✕ Nachricht nicht verarbeitbar ({type(e).__name__}).")
                     event_log_service.log_event("bmw", "warning",
                         f"Stream-Nachricht nicht verarbeitet: {type(e).__name__}")
 
@@ -300,6 +337,7 @@ def _schleife(gcid: str, vin: str) -> None:
             client.on_disconnect = bei_trennung
             client.on_message = bei_nachricht
 
+            _protokoll_schreiben(f"Verbinde zu {mqtt_host()}:{mqtt_port()} als {gcid} …")
             client.connect(mqtt_host(), mqtt_port(), keepalive=60)
             _client = client
             client.loop_start()
@@ -320,12 +358,14 @@ def _schleife(gcid: str, vin: str) -> None:
         except Exception as e:
             _zustand["verbunden"] = False
             _zustand["fehler"] = f"{type(e).__name__}: {e}"
+            _protokoll_schreiben(f"✕ Fehler: {_zustand['fehler'][:300]}")
             event_log_service.log_event("bmw", "warning",
                 f"Stream-Fehler: {_zustand['fehler'][:200]}")
             time.sleep(wartezeit)
             wartezeit = min(300, wartezeit * 2)   # bis zu fuenf Minuten
 
     _zustand["verbunden"] = False
+    _protokoll_schreiben("Stream angehalten.")
 
 
 # ── Nachrichten ────────────────────────────────────────────────────────────

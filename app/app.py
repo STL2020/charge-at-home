@@ -60,7 +60,7 @@ def handle_404(exc):
     # Für nicht-API-Routen: normale 404-Seite oder zur App weiterleiten
     return jsonify({"error": "not_found"}), 404
 
-PFLICHTENHEFT_VERSION = "12.52"
+PFLICHTENHEFT_VERSION = "12.53"
 
 # Fassung, die dem Anwender gezeigt wird. Die Pflichtenheft-Nummer daneben ist
 # die interne Baunummer — beide zusammen machen Rückfragen eindeutig.
@@ -143,6 +143,7 @@ PROJECT_STATUS = [
     {"sprint": 8, "id": "S8-02", "modul": "BMW Telematik", "text": "CarData-Stream: Host/Port einstellbar statt fest im Code (Streaming-Zugangsdaten aus dem BMW-Portal), Statusanzeige meldet nach 45s ohne Verbindung einen echten Fehler statt endlos 'wird aufgebaut'", "status": "fertig", "view": "einstellungen"},
     {"sprint": 8, "id": "S8-03", "modul": "Diagnose", "text": "Eigenstaendiges Diagnose-Werkzeug mqtt_diagnose.py: separate Anmeldung mit explizit angefordertem Streaming-Scope, protokolliert jede Verbindungsstufe (Connect/Subscribe/Nachricht) einzeln in Datei und auf dem Bildschirm", "status": "fertig", "view": None},
     {"sprint": 8, "id": "S8-04", "modul": "BMW Telematik", "text": "CarData-Stream: SUBACK-Pruefung nachgeruestet — subscribe() wurde aufgerufen, ohne je die Antwort von BMW auszuwerten; 'Verbunden' konnte also bei im Stillen abgelehntem Thema-Abonnement stehen bleiben, ohne dass Fahrten je ankamen. Status unterscheidet jetzt 'verbunden, Abonnement offen/bestaetigt/abgelehnt'", "status": "fertig", "view": "einstellungen"},
+    {"sprint": 8, "id": "S8-05", "modul": "Diagnose", "text": "Live-Protokoll der Stream-Verbindung direkt in der App (Einstellungen -> BMW), kein Terminal/Putty mehr noetig: jede Verbindungsstufe (Connect/Subscribe/Nachricht/Fehler) im Ringpuffer, automatische Aktualisierung alle 5s nach Muster der bestehenden OCPP-Rohdaten-Anzeige", "status": "fertig", "view": "einstellungen"},
 
 ]
 
@@ -4012,6 +4013,23 @@ def api_cardata_stream_verbindung():
     return jsonify({"ok": True,
                     "host": cardata_stream_service.mqtt_host(),
                     "port": cardata_stream_service.mqtt_port()})
+
+
+@app.route("/api/cardata/stream/protokoll", methods=["GET"])
+def api_cardata_stream_protokoll():
+    """Live-Protokoll der Stream-Verbindung — direkt in der App statt im
+    Terminal. Jede Verbindungsstufe (Connect, Subscribe, Nachricht, Fehler)
+    landet hier, nicht nur die spärlichen Einträge im allgemeinen
+    Ereignisprotokoll."""
+    from services import cardata_stream_service
+    return jsonify({"log_tail": cardata_stream_service.protokoll_lesen()})
+
+
+@app.route("/api/cardata/stream/protokoll", methods=["DELETE"])
+def api_cardata_stream_protokoll_leeren():
+    from services import cardata_stream_service
+    cardata_stream_service.protokoll_leeren()
+    return jsonify({"ok": True})
 
 
 @app.route("/api/cardata/stream", methods=["POST"])

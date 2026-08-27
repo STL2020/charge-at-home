@@ -2185,6 +2185,13 @@ function showSettingsTab(tab, btn) {
     const el = document.getElementById('stab-' + t);
     if (el) el.style.display = 'none';
   });
+  // Live-Protokoll-Refresh anhalten, wenn der BMW-Bereich verlassen wird —
+  // sonst laeuft der Timer im Hintergrund weiter, auch auf Tabs, die ihn
+  // gar nicht anzeigen.
+  if (tab !== 'bmw' && _streamLogAutoRefreshTimer) {
+    clearInterval(_streamLogAutoRefreshTimer);
+    _streamLogAutoRefreshTimer = null;
+  }
   const active = document.getElementById('stab-' + tab);
   if (active) active.style.display = '';
   document.querySelectorAll('.settings-tab').forEach(b => b.classList.remove('active'));
@@ -7226,7 +7233,71 @@ async function aktualisiereThemaVorschau() {
   } catch (e) {}
 }
 
+// ─── Live-Protokoll — direkt in der App statt in Terminal/Putty ───────────
+let _streamLogAutoRefreshTimer = null;
+
+function toggleStreamProtokoll() {
+  const pre = document.getElementById('stream-log-tail');
+  const btn = document.getElementById('stream-log-toggle-btn');
+  const refreshBtn = document.getElementById('stream-log-refresh-btn');
+  const clearBtn = document.getElementById('stream-log-clear-btn');
+  const autoLabel = document.getElementById('stream-log-autorefresh-label');
+  const show = pre.style.display === 'none';
+
+  if (show) {
+    btn.textContent = 'Protokoll ausblenden';
+    refreshBtn.style.display = 'inline-block';
+    clearBtn.style.display = 'inline-block';
+    autoLabel.style.display = 'inline';
+    refreshStreamProtokoll();
+    _streamLogAutoRefreshTimer = setInterval(refreshStreamProtokoll, 5000);
+  } else {
+    pre.style.display = 'none';
+    document.getElementById('stream-log-empty').style.display = 'none';
+    btn.textContent = 'Protokoll anzeigen';
+    refreshBtn.style.display = 'none';
+    clearBtn.style.display = 'none';
+    autoLabel.style.display = 'none';
+    if (_streamLogAutoRefreshTimer) {
+      clearInterval(_streamLogAutoRefreshTimer);
+      _streamLogAutoRefreshTimer = null;
+    }
+  }
+}
+
+async function refreshStreamProtokoll() {
+  const pre = document.getElementById('stream-log-tail');
+  const emptyEl = document.getElementById('stream-log-empty');
+  try {
+    const d = await (await hole('/api/cardata/stream/protokoll')).json();
+    const zeilen = d.log_tail || [];
+    if (!zeilen.length) {
+      pre.style.display = 'none';
+      emptyEl.style.display = 'block';
+      return;
+    }
+    emptyEl.style.display = 'none';
+    // Neueste unten, wie ein "tail -f" — aber am unteren Rand automatisch
+    // mitscrollen, damit man nicht nach jeder Aktualisierung selbst
+    // herunterscrollen muss.
+    const warUntenGescrollt = pre.scrollHeight - pre.scrollTop - pre.clientHeight < 30;
+    pre.style.display = 'block';
+    pre.textContent = zeilen.join('\n');
+    if (warUntenGescrollt) pre.scrollTop = pre.scrollHeight;
+  } catch (e) {
+    pre.style.display = 'block';
+    pre.textContent = 'Protokoll konnte nicht geladen werden.';
+  }
+}
+
+async function leereStreamProtokoll() {
+  if (!confirm('Protokoll wirklich leeren?')) return;
+  await fetch('/api/cardata/stream/protokoll', { method: 'DELETE' });
+  refreshStreamProtokoll();
+}
+
 async function loadStreamZustand() {
+
 
   const box = document.getElementById('stream-zustand');
   const cb = document.getElementById('cardata-stream');
