@@ -60,7 +60,7 @@ def handle_404(exc):
     # Für nicht-API-Routen: normale 404-Seite oder zur App weiterleiten
     return jsonify({"error": "not_found"}), 404
 
-PFLICHTENHEFT_VERSION = "13.5"
+PFLICHTENHEFT_VERSION = "13.6"
 
 # Fassung, die dem Anwender gezeigt wird. Die Pflichtenheft-Nummer daneben ist
 # die interne Baunummer — beide zusammen machen Rückfragen eindeutig.
@@ -164,6 +164,7 @@ PROJECT_STATUS = [
     {"sprint": 9, "id": "S9-15", "modul": "Dashboard", "text": "BUG BEHOBEN: Kartenvorschau baute sich beim automatischen 10s-Dashboard-Refresh jedes Mal komplett neu auf (iframe-Reload), auch wenn sich am Standort nichts geaendert hatte -- sichtbares Flackern. Aenderungserkennung ueber eine Datensignatur eingebaut: die Kachel wird nur neu gerendert, wenn sich Werte tatsaechlich unterscheiden; manuelles Aktualisieren erzwingt weiterhin einen Render, damit die Uhrzeit sichtbar mitgeht.", "status": "fertig", "view": "dashboard"},
     {"sprint": 9, "id": "S9-16", "modul": "BMW Telematik", "text": "BUG BEHOBEN: Akkukapazitaet zeigte bei Stephans Fahrzeug dauerhaft 0,0 kWh. Der primaere Deskriptor (batterySizeMax) liefert bei manchen Fahrzeugen/Konfigurationen zuverlaessig 0 statt eines echten Werts oder eines fehlenden Feldes -- eine Hochvoltbatterie mit 0 kWh gibt es nicht. Fallback auf den robusteren Alternativ-Deskriptor (maxEnergy) eingebaut, greift automatisch wenn der erste Wert leer oder 0 ist. Mit simulierten BMW-Rohdaten bestaetigt.", "status": "fertig", "view": "dashboard"},
     {"sprint": 9, "id": "S9-17", "modul": "Dashboard", "text": "Statusleiste (Wallbox/CarData-Pillen, Zeitraum-Filter) an die oberste Position des Dashboards verschoben -- vor Schnellzugriff und Fahrzeugstatus. Fahrzeugstatus-Kachel einklappbar gemacht (Zustand wird im Browser gemerkt). Optische Ueberarbeitung: gezeichnetes Batteriesymbol mit farbcodierter, animierter Fuellstandsanzeige (rot/gelb/gruen je Ladestand) und ein Reichweitenring als Donut-Diagramm, beide mit sanfter Eintritts-Animation beim Erscheinen.", "status": "fertig", "view": "dashboard"},
+    {"sprint": 9, "id": "S9-18", "modul": "Dashboard", "text": "Ladestand-Anzeige durch ein durchgaengiges Gauge im Stil professioneller Flotten-Dashboards ersetzt: ein Farbverlauf (rot -> orange -> gelb -> gruen) ueber die volle Balkenbreite, von dem eine Maske den noch nicht erreichten Teil abdeckt und beim Laden zurueckfaehrt -- der sichtbare Farbverlauf 'waechst' dadurch wirklich von rot nach gruen mit, statt nur eine einzelne Schwellenfarbe zu zeigen. Ladestand-Prozent und Reichweite jetzt gross im selben Balken vereint statt getrennter Symbole. Zusaetzlich eine Live-Uhr mit Datum oben im Dashboard-Kopf.", "status": "fertig", "view": "dashboard"},
 
 ]
 

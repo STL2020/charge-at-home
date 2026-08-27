@@ -4319,7 +4319,24 @@ document.addEventListener('DOMContentLoaded', () => {
   // Zwischenspeicher fuer Loxone-Verbindungsdaten aktivieren. Der Aufruf
   // fehlte bisher komplett, wodurch auch der Passwort-Cache wirkungslos war.
   initWallboxPasswordPersistence();
+  _dashUhrStarten();
 });
+
+// Live-Uhr im Dashboard-Kopf — aktualisiert sich selbst, unabhaengig vom
+// 10-Sekunden-Datenrefresh, damit sie wirklich jede Minute mitgeht.
+function _dashUhrStarten() {
+  const zeitEl = document.getElementById('dash-uhr-zeit');
+  const datumEl = document.getElementById('dash-uhr-datum');
+  if (!zeitEl || !datumEl) return;
+  const aktualisieren = () => {
+    const jetzt = new Date();
+    zeitEl.textContent = jetzt.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+    datumEl.textContent = jetzt.toLocaleDateString('de-DE',
+      { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' });
+  };
+  aktualisieren();
+  setInterval(aktualisieren, 15000);
+}
 
 // ─── Karten-Anzeige nach Routenberechnung (Google Maps) ─────────────────────
 function _showTripMap(startAddr, endAddr) {
@@ -6941,45 +6958,31 @@ function _fahrzeugStatusKachelHtml(v, d) {
     ? `https://www.google.com/maps?q=${d.lat},${d.lon}`
     : '';
 
-  // Batterie-Symbol: eigens gezeichnet statt eines Fremd-Icons, damit
-  // Fuellstand UND Farbe unmittelbar zusammenpassen. Die Fuellung startet
-  // bei 0% Breite und wird gleich nach dem Einfuegen auf den Zielwert
-  // animiert (siehe ladeFahrzeugStatusKachel) — daher data-pct statt
-  // direkt der fertigen Breite.
-  const batterie = soc != null ? `
-    <div style="display:flex; align-items:center; gap:14px;">
-      <div style="position:relative; width:76px; height:38px; flex:none;">
-        <svg width="76" height="38" viewBox="0 0 76 38" style="position:absolute; inset:0;">
-          <rect x="1" y="1" width="66" height="36" rx="7" fill="none" stroke="var(--border)" stroke-width="2.5"/>
-          <rect x="68" y="12" width="6" height="14" rx="2" fill="var(--border)"/>
-        </svg>
-        <div style="position:absolute; left:5px; top:5px; bottom:5px; width:0%;
-             border-radius:4px; background:${farbe}; transition:width 1.1s cubic-bezier(.22,.9,.3,1);"
-             class="fzg-batterie-fuellung" data-pct="${soc}"></div>
-      </div>
-      <div>
-        <div style="font-size:26px; font-weight:800; line-height:1; color:${farbe};">${fmtDe(soc, 0)}<span style="font-size:14px; font-weight:600;">%</span></div>
-        <div style="font-size:11px; color:var(--text-tertiary); margin-top:3px;">Ladestand</div>
-      </div>
-    </div>` : '';
-
-  // Reichweitenring: Ring-Fortschritt gemessen an einer typischen
-  // Vollreichweite (aus Akkukapazitaet und Verbrauch geschaetzt, sonst
-  // 500 km als neutrale Referenz) — reine Optik, keine Abrechnungsgroesse.
-  const vollReichweite = (d && d.akku_max_kwh && d.verbrauch_kwh_100)
-    ? (d.akku_max_kwh / d.verbrauch_kwh_100) * 100 : 500;
-  const reichweiteAnteil = d && d.reichweite_km != null
-    ? Math.max(4, Math.min(100, Math.round(d.reichweite_km / vollReichweite * 100))) : null;
-  const ring = reichweiteAnteil != null ? `
-    <div style="position:relative; width:92px; height:92px; flex:none;">
-      <div style="width:100%; height:100%; border-radius:50%;
-           background:conic-gradient(${farbe} ${reichweiteAnteil * 3.6}deg, var(--bg-input) 0deg);
-           display:flex; align-items:center; justify-content:center;">
-        <div style="width:72px; height:72px; border-radius:50%; background:var(--bg-elevated);
-             display:flex; flex-direction:column; align-items:center; justify-content:center;">
-          <div style="font-size:17px; font-weight:800;">${fmtDe(d.reichweite_km, 0)}</div>
-          <div style="font-size:9px; color:var(--text-tertiary); text-transform:uppercase; letter-spacing:.04em;">km Reichweite</div>
+  // Batteriebalken: EIN grosses Gauge statt Symbol + separatem Ring,
+  // angelehnt an professionelle Flotten-Dashboards. Der Farbverlauf
+  // (rot -> orange -> gelb -> gruen) liegt fest ueber die gesamte Breite;
+  // eine Maske deckt den noch nicht erreichten Teil von rechts ab und
+  // wird nach dem Einfuegen auf die Zielbreite animiert — so "waechst"
+  // die sichtbare Farbe wirklich von rot ueber orange nach gruen, statt
+  // nur eine einzelne Schwellenfarbe zu zeigen.
+  const batteriebar = soc != null ? `
+    <div style="position:relative; height:68px; border-radius:16px; overflow:hidden;
+         background:linear-gradient(90deg, #ef4444 0%, #f97316 28%, #eab308 52%, #84cc16 74%, #22c55e 100%);
+         box-shadow:0 10px 26px -8px ${farbe}66;">
+      <div class="fzg-batteriebar-maske" data-pct="${soc}"
+           style="position:absolute; top:0; right:0; bottom:0; width:100%;
+                  background:var(--bg-input); transition:width 1.2s cubic-bezier(.22,.9,.3,1);"></div>
+      <div style="position:relative; z-index:1; height:100%; display:flex; align-items:center;
+           justify-content:space-between; padding:0 22px;">
+        <div style="display:flex; align-items:baseline; gap:7px;">
+          <span style="font-size:32px; font-weight:800; color:#fff; text-shadow:0 1px 4px rgba(0,0,0,.5); font-variant-numeric:tabular-nums;">${fmtDe(soc,0)}</span>
+          <span style="font-size:15px; font-weight:700; color:#fff; text-shadow:0 1px 4px rgba(0,0,0,.5);">% Ladestand</span>
         </div>
+        ${d.reichweite_km != null ? `
+          <div style="text-align:right;">
+            <div style="font-size:21px; font-weight:800; color:#fff; text-shadow:0 1px 4px rgba(0,0,0,.5);">${fmtDe(d.reichweite_km,0)} km</div>
+            <div style="font-size:10.5px; color:rgba(255,255,255,.9); text-shadow:0 1px 3px rgba(0,0,0,.45); text-transform:uppercase; letter-spacing:.04em;">Reichweite</div>
+          </div>` : ''}
       </div>
     </div>` : '';
 
@@ -6993,13 +6996,8 @@ function _fahrzeugStatusKachelHtml(v, d) {
         </div>
       </div>
       ${hatDaten ? `
+        ${batteriebar ? `<div style="margin-bottom:16px;">${batteriebar}</div>` : ''}
         <div style="display:flex; gap:18px; flex-wrap:wrap; align-items:stretch;">
-          <div style="flex:0 0 auto; display:flex; align-items:center; gap:20px;
-               background:var(--bg-input); border:1px solid var(--border); border-radius:var(--radius-sm);
-               padding:14px 20px;">
-            ${ring}
-            ${batterie}
-          </div>
           <div style="flex:1 1 300px; min-width:240px; display:grid;
                grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:10px;">
             ${kachel('Kilometerstand', d.km != null ? fmtDe(d.km, 0) : null, 'km')}
@@ -7033,15 +7031,23 @@ function _fahrzeugStatusKachelHtml(v, d) {
     </div>`;
 }
 
-// Batteriefuellung erst NACH dem Einfuegen ins DOM auf den Zielwert setzen,
-// sonst gibt es keinen Ausgangszustand, von dem aus animiert werden koennte
-// (die CSS-Transition braucht einen echten Wertsprung, keinen bereits
-// fertigen Endzustand beim ersten Rendern).
+// Maske erst NACH dem Einfuegen ins DOM auf die Zielbreite verkleinern —
+// sie startet bei 100% (deckt alles ab) und faehrt auf (100-Ladestand)%
+// zurueck, wodurch der Farbverlauf von links nach rechts sichtbar wird.
+// Ohne den echten Ausgangszustand (100%) gaebe es nichts, von dem aus
+// animiert werden koennte.
 function _fahrzeugStatusBatterienAnimieren() {
+  // Doppeltes rAF: nach dem ersten Frame ist der Ausgangszustand (100%)
+  // sicher gemalt, erst danach loest die Aenderung im zweiten Frame die
+  // CSS-Transition zuverlaessig aus — ein einzelnes rAF reicht bei frisch
+  // eingefuegten Elementen manchmal nicht, der Browser ueberspringt die
+  // Animation dann und springt direkt zum Endwert.
   requestAnimationFrame(() => {
-    document.querySelectorAll('.fzg-batterie-fuellung').forEach(el => {
-      const pct = parseFloat(el.dataset.pct || '0');
-      el.style.width = Math.max(2, pct) + '%';
+    requestAnimationFrame(() => {
+      document.querySelectorAll('.fzg-batteriebar-maske').forEach(el => {
+        const pct = parseFloat(el.dataset.pct || '0');
+        el.style.width = Math.max(0, 100 - pct) + '%';
+      });
     });
   });
 }

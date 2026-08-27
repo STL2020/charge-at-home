@@ -94,9 +94,16 @@
         <div class="page-title">Dashboard</div>
         <div class="page-sub">Übersicht deiner Wallboxen und Ladevorgänge</div>
       </div>
+      <!-- Live-Uhr: haelt das Dashboard sichtbar "lebendig", ohne dass
+           dafuer irgendetwas neu geladen werden muss. -->
+      <div id="dash-uhr" style="margin-left:auto; text-align:right; margin-right:22px;">
+        <div id="dash-uhr-zeit" style="font-family:var(--font-mono); font-weight:700; font-size:22px;
+             letter-spacing:.02em; font-variant-numeric:tabular-nums;">--:--</div>
+        <div id="dash-uhr-datum" style="font-size:11.5px; color:var(--text-tertiary); margin-top:1px;"></div>
+      </div>
       <!-- Fassung sichtbar machen: Bei Rückfragen ist die erste Frage immer,
            welche Fassung läuft. -->
-      <div style="margin-left:auto; text-align:right; font-size:11px;
+      <div style="text-align:right; font-size:11px;
            color:var(--text-tertiary); line-height:1.5;">
         <div style="font-family:var(--font-mono); font-weight:600;">
           eCharge@Home {{ release_version }}</div>
