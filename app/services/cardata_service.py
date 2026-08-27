@@ -79,6 +79,10 @@ DESCRIPTOR_WOCHE = "vehicle.vehicle.averageWeeklyDistanceLongTerm"
 # Hauptuntersuchung, Service, Bremsfluessigkeit.
 DESCRIPTOR_CBS = "vehicle.status.conditionBasedServices"
 DESCRIPTOR_MELDUNGEN = "vehicle.status.checkControlMessages"
+# Angesteckt/laedt — der einzige Live-Status, der wirklich zur Ladeabrechnung
+# gehoert statt zur Fernbedienung (siehe Diskussion: Tueren/Fenster bewusst
+# nicht erfasst, das deckt die BMW-App bereits ab).
+DESCRIPTOR_ANGESTECKT = "vehicle.powertrain.tractionBattery.charging.port.anyPosition.isPlugged"
 
 CONTAINER_DESCRIPTORS = [
     # Fahrterfassung
@@ -87,6 +91,7 @@ CONTAINER_DESCRIPTORS = [
     # Fahrzeugdaten
     DESCRIPTOR_VERBRAUCH, DESCRIPTOR_AKKU_MAX, DESCRIPTOR_AKKU_MAX_ALT, DESCRIPTOR_AKKU_SOH,
     DESCRIPTOR_SOC, DESCRIPTOR_REICHWEITE, DESCRIPTOR_SERVICE, DESCRIPTOR_WOCHE,
+    DESCRIPTOR_ANGESTECKT,
     # Wartung
     DESCRIPTOR_CBS, DESCRIPTOR_MELDUNGEN,
 ]
@@ -345,6 +350,21 @@ def _zahl(wert) -> float | None:
         return None
 
 
+def _bool(wert) -> bool | None:
+    """Wandelt BMWs Wahrheitswerte (echtes bool, 'true'/'false' als Text,
+    oder 'True'/'False') in ein Python-bool um. None, wenn der Wert fehlt."""
+    if wert is None:
+        return None
+    if isinstance(wert, bool):
+        return wert
+    text = str(wert).strip().lower()
+    if text in ("true", "1"):
+        return True
+    if text in ("false", "0"):
+        return False
+    return None
+
+
 def _kombiniere_akkukapazitaet(feld) -> float | None:
     """Akkukapazitaet aus zwei moeglichen Deskriptoren.
 
@@ -418,6 +438,7 @@ def lese_telematik(vehicle_id: int, vin: str) -> dict:
         "reichweite_km": _zahl(feld(DESCRIPTOR_REICHWEITE)[0]),
         "service_in_km": _zahl(feld(DESCRIPTOR_SERVICE)[0]),
         "woche_km": _zahl(feld(DESCRIPTOR_WOCHE)[0]),
+        "angesteckt": _bool(feld(DESCRIPTOR_ANGESTECKT)[0]),
         # Wartungstermine live statt aus dem Archiv
         "wartung": _lies_wartungstermine(feld(DESCRIPTOR_CBS)[0]),
         "roh": roh,
@@ -499,7 +520,7 @@ def status(vehicle_id: int) -> dict:
 
 FAHRZEUGDATEN_FELDER = (
     "verbrauch_kwh_100", "akku_max_kwh", "akku_soh_prozent", "soc_prozent",
-    "reichweite_km", "service_in_km", "woche_km", "km",
+    "reichweite_km", "service_in_km", "woche_km", "km", "angesteckt",
 )
 
 
@@ -528,17 +549,43 @@ def _speichere_fahrzeugdaten(vehicle_id: int, daten: dict) -> None:
     Grundlage fuer die Status-Kachel im Dashboard.
 
     Sie fallen beim Telematik-Abruf ohnehin an; getrennt abzurufen wuerde
-    nur unnoetig Kontingent verbrauchen."""
+    nur unnoetig Kontingent verbrauchen.
+
+    BUG BEHOBEN (28.08.): Diese Funktion hat den kompletten Datensatz bei
+    jedem Abruf ERSETZT statt zu ERGAENZEN. Liefert BMW bei einem Abruf nur
+    einen Teil der Felder (durchaus ueblich — nicht jeder Wert kommt bei
+    jeder Anfrage mit), gingen zuvor bekannte, weiterhin gueltige Werte
+    (z. B. Ladestand, Reichweite, Akkukapazitaet) ersatzlos verloren, auch
+    wenn sich am Fahrzeug nichts geaendert hatte. Jetzt wird auf den
+    bestehenden Datensatz aufgesetzt: nur tatsaechlich gelieferte Felder
+    werden aktualisiert, der Rest bleibt erhalten."""
     from repositories import vehicle_bmw_repository as bmw_repo
-    werte = {f: daten.get(f) for f in FAHRZEUGDATEN_FELDER if daten.get(f) is not None}
-    if not werte:
-        return
-    werte["stand"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    neue_werte = {f: daten.get(f) for f in FAHRZEUGDATEN_FELDER if daten.get(f) is not None}
     if daten.get("lat") is not None:
-        werte["lat"] = daten["lat"]
+        neue_werte["lat"] = daten["lat"]
     if daten.get("lon") is not None:
-        werte["lon"] = daten["lon"]
-    bmw_repo.set_felder(vehicle_id, fzg_daten=json.dumps(werte, ensure_ascii=False))
+        neue_werte["lon"] = daten["lon"]
+    if not neue_werte:
+        return
+
+    bestehend = fahrzeugdaten(vehicle_id)
+    bestehend.update(neue_werte)
+    bestehend["stand"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    # Adresse einmal hier aufloesen statt bei jedem Dashboard-Aufruf neu —
+    # sonst muesste die Status-Kachel bei jeder Anzeige einen externen
+    # Geocoding-Abruf ausloesen. adresse_aus_koordinaten() ist ohnehin auf
+    # gerundete Koordinaten gecacht, ein Doppel-Abruf fuer denselben Standort
+    # kostet also nichts Zusaetzliches.
+    if bestehend.get("lat") is not None and bestehend.get("lon") is not None:
+        try:
+            from services import geocoding_service
+            bestehend["standort_adresse"] = geocoding_service.adresse_aus_koordinaten(
+                bestehend["lat"], bestehend["lon"])
+        except Exception:
+            pass  # Adresse ist Beiwerk — Koordinaten allein reichen als Rueckfall
+
+    bmw_repo.set_felder(vehicle_id, fzg_daten=json.dumps(bestehend, ensure_ascii=False))
 
 
 def fahrzeugdaten(vehicle_id: int) -> dict:

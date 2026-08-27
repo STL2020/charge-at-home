@@ -71,6 +71,12 @@
          title="Offline-Hilfe in neuem Tab öffnen">? Hilfe</a>
       <a onclick="openImpressum()" data-i18n="impressum.link">Impressum</a>
     </div>
+    <!-- Versionsangabe unten links statt oben im Dashboard-Kopf — dort
+         stand sie der neuen Uhr im Weg und wirkte wie nachtraeglich
+         angeklebt. Hier ist sie weiterhin auffindbar, stoert aber nicht. -->
+    <div style="font-size:10px; color:var(--text-tertiary); margin-top:8px; font-family:var(--font-mono);">
+      eCharge@Home {{ release_version }} · Build {{ pflichtenheft_version }}
+    </div>
   </div>
 </aside>
 
@@ -96,18 +102,10 @@
       </div>
       <!-- Live-Uhr: haelt das Dashboard sichtbar "lebendig", ohne dass
            dafuer irgendetwas neu geladen werden muss. -->
-      <div id="dash-uhr" style="margin-left:auto; text-align:right; margin-right:22px;">
+      <div id="dash-uhr" style="margin-left:auto; text-align:right;">
         <div id="dash-uhr-zeit" style="font-family:var(--font-mono); font-weight:700; font-size:22px;
              letter-spacing:.02em; font-variant-numeric:tabular-nums;">--:--</div>
         <div id="dash-uhr-datum" style="font-size:11.5px; color:var(--text-tertiary); margin-top:1px;"></div>
-      </div>
-      <!-- Fassung sichtbar machen: Bei Rückfragen ist die erste Frage immer,
-           welche Fassung läuft. -->
-      <div style="text-align:right; font-size:11px;
-           color:var(--text-tertiary); line-height:1.5;">
-        <div style="font-family:var(--font-mono); font-weight:600;">
-          eCharge@Home {{ release_version }}</div>
-        <div>Build {{ pflichtenheft_version }}</div>
       </div>
     </div>
     <div class="content">

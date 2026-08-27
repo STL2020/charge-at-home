@@ -6937,6 +6937,21 @@ function _akkuFarbe(prozent) {
   return '#22c55e';
 }
 
+function _terminUrgenz(datumStr) {
+  // Faerbt ein Datum danach ein, wie dringend es ist -- rot ueberfaellig
+  // oder binnen 30 Tagen, gelb binnen 90 Tagen, sonst neutral.
+  if (!datumStr) return { farbe: 'var(--text-tertiary)', text: '' };
+  const datum = new Date(datumStr);
+  if (isNaN(datum.getTime())) return { farbe: 'var(--text-tertiary)', text: '' };
+  const tage = Math.round((datum - new Date()) / 86400000);
+  let farbe = '#22c55e', text = `in ${tage} Tagen`;
+  if (tage < 0) { farbe = '#ef4444'; text = `überfällig seit ${Math.abs(tage)} Tagen`; }
+  else if (tage <= 30) { farbe = '#ef4444'; text = `in ${tage} Tagen`; }
+  else if (tage <= 90) { farbe = '#eab308'; text = `in ${tage} Tagen`; }
+  const anzeige = datum.toLocaleDateString('de-DE', { day:'2-digit', month:'2-digit', year:'numeric' });
+  return { farbe, text: `${anzeige} · ${text}` };
+}
+
 function _fahrzeugStatusKachelHtml(v, d) {
   const kachel = (label, val, einheit) => val == null ? '' : `
     <div style="background:var(--bg-input); border-radius:var(--radius-sm); padding:12px 14px; border:1px solid var(--border);">
@@ -6948,23 +6963,27 @@ function _fahrzeugStatusKachelHtml(v, d) {
   const hatStandort = d && d.lat != null && d.lon != null;
   const soc = d && d.soc_prozent != null ? Math.max(0, Math.min(100, d.soc_prozent)) : null;
   const farbe = _akkuFarbe(soc);
+  const mapsLink = hatStandort ? `https://www.google.com/maps?q=${d.lat},${d.lon}` : '';
 
-  // Kein API-Key noetig: derselbe kostenlose Google-Maps-Embed wie bei der
-  // Routenvorschau in Fahrten — nur mit einem Punkt statt einer Route.
-  const mapUrl = hatStandort
-    ? `https://maps.google.com/maps?q=${d.lat},${d.lon}&z=15&output=embed`
-    : '';
-  const mapsLink = hatStandort
-    ? `https://www.google.com/maps?q=${d.lat},${d.lon}`
-    : '';
+  // Ladestatus: das einzige Live-Signal, das wirklich zur Abrechnung
+  // gehoert (laedt gerade / angesteckt), statt zur Fernbedienung.
+  const ladeBadge = d && d.angesteckt != null ? `
+    <span style="display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:600;
+         padding:5px 12px; border-radius:20px;
+         background:${d.angesteckt ? 'rgba(34,197,94,.14)' : 'var(--bg-input)'};
+         color:${d.angesteckt ? '#22c55e' : 'var(--text-tertiary)'};
+         border:1px solid ${d.angesteckt ? 'rgba(34,197,94,.35)' : 'var(--border)'};">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+        <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+      </svg>
+      ${d.angesteckt ? 'Angesteckt' : 'Nicht angesteckt'}
+    </span>` : '';
 
   // Batteriebalken: EIN grosses Gauge statt Symbol + separatem Ring,
   // angelehnt an professionelle Flotten-Dashboards. Der Farbverlauf
   // (rot -> orange -> gelb -> gruen) liegt fest ueber die gesamte Breite;
   // eine Maske deckt den noch nicht erreichten Teil von rechts ab und
-  // wird nach dem Einfuegen auf die Zielbreite animiert — so "waechst"
-  // die sichtbare Farbe wirklich von rot ueber orange nach gruen, statt
-  // nur eine einzelne Schwellenfarbe zu zeigen.
+  // wird nach dem Einfuegen auf die Zielbreite animiert.
   const batteriebar = soc != null ? `
     <div style="position:relative; height:68px; border-radius:16px; overflow:hidden;
          background:linear-gradient(90deg, #ef4444 0%, #f97316 28%, #eab308 52%, #84cc16 74%, #22c55e 100%);
@@ -6986,10 +7005,31 @@ function _fahrzeugStatusKachelHtml(v, d) {
       </div>
     </div>` : '';
 
+  // Termine: HU, Service, Bremsfluessigkeit — aus den Fahrzeug-Stammdaten
+  // (v), nicht aus den Live-Cardata-Werten (d). Genau das hat bisher auf
+  // dem Dashboard gefehlt, obwohl die Daten laengst im Fahrzeug-Datensatz
+  // stehen (siehe Archiv-Import). Nur zeigen, was tatsaechlich gesetzt ist.
+  const termine = [
+    ['HU/TÜV', v.hu_faellig],
+    ['Service', v.service_faellig],
+    ['Bremsflüssigkeit', v.bremsfluessigkeit],
+  ].filter(([, datum]) => !!datum).map(([label, datum]) => {
+    const u = _terminUrgenz(datum);
+    return `
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;
+           padding:9px 12px; background:var(--bg-input); border-radius:8px; border:1px solid var(--border);">
+        <span style="font-size:12.5px; color:var(--text-secondary);">${label}</span>
+        <span style="font-size:12.5px; font-weight:600; color:${u.farbe};">${u.text}</span>
+      </div>`;
+  }).join('');
+
   return `
     <div class="card fzg-status-karte" style="margin:0;">
-      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;">
-        <div style="font-weight:600; font-size:15px;">${v.bezeichnung || 'Fahrzeug'}</div>
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; flex-wrap:wrap; gap:8px;">
+        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+          <span style="font-weight:600; font-size:15px;">${v.bezeichnung || 'Fahrzeug'}</span>
+          ${ladeBadge}
+        </div>
         <div style="display:flex; align-items:center; gap:10px;">
           ${d && d.stand ? `<span style="font-size:11px; color:var(--text-tertiary);">Stand: ${d.stand.slice(11,16)} Uhr</span>` : ''}
           <button class="btn btn-sm" onclick="fahrzeugDatenAktualisieren(${v.id}, this)" title="Jetzt abrufen">↻ Aktualisieren</button>
@@ -6998,29 +7038,38 @@ function _fahrzeugStatusKachelHtml(v, d) {
       ${hatDaten ? `
         ${batteriebar ? `<div style="margin-bottom:16px;">${batteriebar}</div>` : ''}
         <div style="display:flex; gap:18px; flex-wrap:wrap; align-items:stretch;">
-          <div style="flex:1 1 300px; min-width:240px; display:grid;
-               grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:10px;">
-            ${kachel('Kilometerstand', d.km != null ? fmtDe(d.km, 0) : null, 'km')}
-            ${kachel('Nächster Service', d.service_in_km != null ? fmtDe(d.service_in_km, 0) : null, 'km')}
-            ${kachel('Ø Verbrauch', d.verbrauch_kwh_100 != null ? fmtDe(d.verbrauch_kwh_100, 1) : null, 'kWh/100km')}
-            ${kachel('Akkukapazität', d.akku_max_kwh != null ? fmtDe(d.akku_max_kwh, 1) : null, 'kWh')}
-            ${kachel('Akkuzustand', d.akku_soh_prozent != null ? fmtDe(d.akku_soh_prozent, 0) : null, '% SoH')}
-            ${kachel('Ø pro Woche', d.woche_km != null ? fmtDe(d.woche_km, 0) : null, 'km')}
+          <div style="flex:1 1 300px; min-width:240px; display:flex; flex-direction:column; gap:10px;">
+            ${termine ? `<div style="display:flex; flex-direction:column; gap:8px;">${termine}</div>` : ''}
+            <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:10px;">
+              ${kachel('Kilometerstand', d.km != null ? fmtDe(d.km, 0) : null, 'km')}
+              ${kachel('Ø Verbrauch', d.verbrauch_kwh_100 != null ? fmtDe(d.verbrauch_kwh_100, 1) : null, 'kWh/100km')}
+              ${kachel('Akkukapazität', d.akku_max_kwh != null ? fmtDe(d.akku_max_kwh, 1) : null, 'kWh')}
+              ${kachel('Akkuzustand', d.akku_soh_prozent != null ? fmtDe(d.akku_soh_prozent, 0) : null, '% SoH')}
+            </div>
           </div>
-          <div style="flex:1 1 280px; min-width:220px; max-width:420px;">
+          <div style="flex:1 1 260px; min-width:220px; max-width:380px;">
             ${hatStandort ? `
-              <div style="position:relative; border-radius:var(--radius-sm); overflow:hidden;
-                   border:1px solid var(--border); height:100%; min-height:180px;">
-                <iframe src="${mapUrl}" loading="lazy" style="width:100%; height:100%; min-height:180px;
-                        border:none; display:block;"></iframe>
+              <div style="height:100%; min-height:150px; background:var(--bg-input); border-radius:var(--radius-sm);
+                   border:1px solid var(--border); padding:16px; display:flex; flex-direction:column; justify-content:space-between;">
+                <div style="display:flex; gap:10px; align-items:flex-start;">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="${farbe || 'var(--accent)'}" stroke-width="2"
+                       style="flex:none; margin-top:1px;">
+                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>
+                  </svg>
+                  <div style="font-size:13.5px; line-height:1.5;">
+                    ${d.standort_adresse ? d.standort_adresse : `${fmtDe(d.lat,5)}, ${fmtDe(d.lon,5)}`}
+                  </div>
+                </div>
                 <a href="${mapsLink}" target="_blank" rel="noopener"
-                   style="position:absolute; bottom:8px; right:8px; font-size:11px; padding:4px 8px;
-                          background:var(--bg-elevated); border:1px solid var(--border); border-radius:6px;
-                          text-decoration:none; color:var(--text-primary);">In Google Maps öffnen</a>
+                   style="align-self:flex-start; font-size:12px; font-weight:600; color:var(--accent);
+                          text-decoration:none; display:flex; align-items:center; gap:5px;">
+                  Route öffnen
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M7 17L17 7M7 7h10v10"/></svg>
+                </a>
               </div>
             ` : `
               <div style="display:flex; align-items:center; justify-content:center; height:100%;
-                   min-height:180px; background:var(--bg-input); border-radius:var(--radius-sm);
+                   min-height:150px; background:var(--bg-input); border-radius:var(--radius-sm);
                    border:1px solid var(--border); color:var(--text-tertiary); font-size:12px; text-align:center; padding:12px;">
                 Standort noch nicht bekannt
               </div>
@@ -7030,6 +7079,7 @@ function _fahrzeugStatusKachelHtml(v, d) {
       ` : `<div class="hint">Noch keine Daten — auf „Aktualisieren" tippen, um jetzt abzurufen.</div>`}
     </div>`;
 }
+
 
 // Maske erst NACH dem Einfuegen ins DOM auf die Zielbreite verkleinern —
 // sie startet bei 100% (deckt alles ab) und faehrt auf (100-Ladestand)%
