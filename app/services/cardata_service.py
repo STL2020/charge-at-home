@@ -178,13 +178,30 @@ def hole_fahrzeuge() -> dict:
     token = auth.hole_access_token()
     if not token:
         return {"ok": False, "meldung": "Nicht angemeldet."}
-    antwort = _request("GET", "/customers/vehicles/mappings", token)
-    if not antwort["ok"]:
-        return {"ok": False, "meldung": antwort["meldung"]}
-    roh = antwort["daten"]
-    liste = roh.get("mappings", roh if isinstance(roh, list) else [])
-    return {"ok": True, "fahrzeuge": [
-        {"vin": f.get("vin"), "typ": f.get("mappingType", "")} for f in liste]}
+    # BMW hat den Endpunkt im Lauf der Zeit umbenannt. Die Reihenfolge geht
+    # von der aktuellen Fassung zu aelteren — der erste Treffer gewinnt.
+    versuche = [
+        "/customers/vehicles/mappings",
+        "/customers/vehicles",
+        "/customer/vehicles/mappings",
+    ]
+    letzte_meldung = ""
+    for pfad in versuche:
+        antwort = _request("GET", pfad, token)
+        if antwort["ok"]:
+            roh = antwort["daten"]
+            liste = (roh.get("mappings") or roh.get("vehicles")
+                     or (roh if isinstance(roh, list) else []))
+            fahrzeuge = [{"vin": f.get("vin"), "typ": f.get("mappingType", "")}
+                         for f in liste if isinstance(f, dict) and f.get("vin")]
+            if fahrzeuge:
+                return {"ok": True, "fahrzeuge": fahrzeuge}
+            letzte_meldung = ("Das Konto liefert keine Fahrzeuge. Ist der Wagen "
+                              "als Hauptnutzer zugeordnet?")
+        else:
+            letzte_meldung = antwort["meldung"]
+
+    return {"ok": False, "meldung": letzte_meldung or "Abruf fehlgeschlagen."}
 
 
 # ── Container ──────────────────────────────────────────────────────────────

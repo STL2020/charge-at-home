@@ -4923,6 +4923,34 @@ function setVehicleAntrieb(btn, antrieb) {
 async // Fahrzeug aus dem BMW-CarData-Archiv anlegen. Das ZIP enthält
 // Fahrgestellnummer, Kilometerstand und die Wartungstermine — die
 // muss niemand abtippen.
+// Fahrzeug aus der laufenden CarData-Verbindung anlegen. Nutzt die
+// hinterlegte Fahrgestellnummer und die zuletzt abgerufenen Werte —
+// kein Archiv, keine Wartezeit.
+async function fahrzeugAusBmw() {
+  _toast('Frage BMW-Daten ab …');
+  try {
+    const d = await (await fetch('/api/vehicles/aus-bmw',
+                                 { method: 'POST' })).json();
+    if (!d.ok) {
+      _toast(d.fehler || 'Fahrzeugdaten nicht verfügbar');
+      return;
+    }
+    if (d.duenn) {
+      _toast('Fahrzeug angelegt — für Kilometerstand und Wartungstermine '
+           + 'bitte einmal „Fahrten abrufen" ausführen');
+    } else {
+      const teile = [];
+      if (d.km_stand) teile.push(`${Number(d.km_stand).toLocaleString('de-DE')} km`);
+      if (d.hu_faellig) teile.push(`HU ${d.hu_faellig.split('-').reverse().join('.')}`);
+      _toast((d.neu ? 'Fahrzeug angelegt' : 'Fahrzeug aktualisiert')
+           + (teile.length ? ' — ' + teile.join(', ') : ''));
+    }
+    loadVehiclesGrid();
+  } catch (e) {
+    _toast('Abruf fehlgeschlagen');
+  }
+}
+
 async function fahrzeugAusArchiv(input) {
   const datei = input.files && input.files[0];
   if (!datei) return;

@@ -914,14 +914,11 @@
   <section class="view" id="view-fahrzeuge">
     <div class="topbar">
       <div><div class="page-title">Fahrzeuge</div><div class="page-sub">Fahrzeuge verwalten, Kosten hinterlegen & Vollkostenrechnung</div></div>
-      <!-- Aus dem BMW-Archiv: legt das Fahrzeug samt Fahrgestellnummer,
-           Kilometerstand und Wartungsterminen an. -->
-      <input type="file" id="vehicle-archiv-datei" accept=".zip"
-             style="display:none;" onchange="fahrzeugAusArchiv(this)">
-      <button class="btn btn-sm"
-              onclick="document.getElementById('vehicle-archiv-datei').click()"
-              title="Fahrzeugdaten aus dem BMW-CarData-Archiv übernehmen">
-        Aus BMW-Archiv
+      <!-- Aus der laufenden CarData-Verbindung — der Normalfall.
+           Braucht keine Archiv-Anforderung und keine Wartezeit. -->
+      <button class="btn btn-sm bmw-funktion" onclick="fahrzeugAusBmw()"
+              title="Fahrzeugdaten aus der BMW-Verbindung übernehmen">
+        Aus BMW-Portal
       </button>
       <button class="btn btn-primary" onclick="openVehicleModal()">+ Fahrzeug hinzufügen</button>
     </div>

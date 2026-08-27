@@ -60,7 +60,7 @@ def handle_404(exc):
     # Für nicht-API-Routen: normale 404-Seite oder zur App weiterleiten
     return jsonify({"error": "not_found"}), 404
 
-PFLICHTENHEFT_VERSION = "12.36"
+PFLICHTENHEFT_VERSION = "12.37"
 
 # Fassung, die dem Anwender gezeigt wird. Die Pflichtenheft-Nummer daneben ist
 # die interne Baunummer — beide zusammen machen Rückfragen eindeutig.
@@ -1940,6 +1940,52 @@ def api_vehicles_list():
     person_id = request.args.get("person_id", type=int)
     vehicles = vehicle_repository.list_vehicles(person_id)
     return jsonify({"vehicles": vehicles})
+
+
+@app.route("/api/vehicles/aus-bmw", methods=["POST"])
+def api_vehicle_aus_bmw():
+    """Legt das Fahrzeug aus den zuletzt abgerufenen CarData-Werten an.
+
+    Braucht keine Fahrzeugliste vom Konto: Die Fahrgestellnummer steht in
+    den Einstellungen, die Werte im letzten Telematik-Abruf. Damit
+    funktioniert es auch, wenn BMW die Fahrzeugliste verweigert — was bei
+    Zweitnutzern regelmaessig vorkommt.
+    """
+    if not edition_service.funktion_verfuegbar("bmw"):
+        return jsonify(edition_service.gesperrt_hinweis("bmw")), 402
+
+    vin = (settings_repository.get_setting("cardata_vin") or "").strip()
+    if not vin:
+        return jsonify({"ok": False,
+                        "fehler": "Keine Fahrgestellnummer hinterlegt. Bitte "
+                                  "zuerst unter Einstellungen → BMW eintragen."}), 400
+
+    daten = cardata_service.fahrzeugdaten(vin) or {}
+    wartung = daten.get("wartung") or {}
+
+    werte = {
+        "vin": vin,
+        "bezeichnung": "BMW",
+        "km_stand": int(daten["km"]) if daten.get("km") else None,
+        "km_stand_datum": (daten.get("zeitpunkt") or "")[:10] or None,
+        "hu_faellig": wartung.get("hu_faellig"),
+        "service_faellig": wartung.get("service_faellig"),
+        "bremsfluessigkeit": wartung.get("bremsfluessigkeit"),
+    }
+    werte = {k: v for k, v in werte.items() if v is not None}
+
+    vorher = vehicle_repository.list_vehicles()
+    bekannt = any(v.get("vin") == vin for v in vorher)
+    vid = vehicle_repository.anlegen_aus_bmw(werte)
+
+    event_log_service.log_event("bmw", "info",
+        f"Fahrzeug {'aktualisiert' if bekannt else 'angelegt'}: {vin}")
+
+    # Hinweis, wenn ausser der Nummer nichts bekannt ist
+    duenn = len(werte) <= 2
+    return jsonify({"ok": True, "neu": not bekannt, "vehicle_id": vid,
+                    "duenn": duenn,
+                    **{k: v for k, v in werte.items() if k != "bezeichnung"}})
 
 
 @app.route("/api/vehicles/aus-archiv", methods=["POST"])
