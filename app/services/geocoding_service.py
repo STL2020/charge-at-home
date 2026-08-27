@@ -17,6 +17,7 @@ import urllib.parse
 import urllib.request
 
 PHOTON_URL = "https://photon.komoot.io/api/"
+NOMINATIM_URL = "https://nominatim.openstreetmap.org/"
 OSRM_URL   = "https://router.project-osrm.org/route/v1/driving/"
 USER_AGENT  = "ChargeAtHomeBillingEngine/1.0"
 TIMEOUT     = 10
@@ -117,8 +118,14 @@ def adresse_aus_koordinaten(lat: float, lon: float) -> str:
     im Fahrtenbuch '50.57912, 7.22698' — fuer einen Beleg unbrauchbar, weil
     niemand daran den Zweck der Fahrt erkennt.
 
-    Bei einem Fehler wird die Koordinate zurueckgegeben; eine Fahrt ohne
-    Adresse ist immer noch besser als eine verworfene Fahrt.
+    Zwei unabhaengige Dienste statt einem: Photon (Komoot) zuerst, bei
+    Fehlschlag OpenStreetMaps eigener Nominatim-Dienst. Faellt einer der
+    beiden aus oder ist von einem bestimmten Netz aus nicht erreichbar,
+    springt der andere ein — beide kostenlos, kein API-Key, keine
+    Registrierung noetig.
+
+    Bei einem Fehler in BEIDEN wird die Koordinate zurueckgegeben; eine
+    Fahrt ohne Adresse ist immer noch besser als eine verworfene Fahrt.
     """
     if lat is None or lon is None:
         return ""
@@ -130,6 +137,28 @@ def adresse_aus_koordinaten(lat: float, lon: float) -> str:
         return _adress_speicher[schluessel]
 
     fallback = f"{float(lat):.5f}, {float(lon):.5f}"
+
+    treffer = _reverse_photon(lat, lon) or _reverse_nominatim(lat, lon)
+    if treffer:
+        ergebnis, strasse_fuer_check, ort_fuer_check = treffer
+    else:
+        ergebnis, strasse_fuer_check, ort_fuer_check = fallback, "", ""
+
+    # Liegt der Punkt in der eigenen Strasse, die hinterlegte Wohnadresse
+    # einsetzen. GPS ist auf wenige Meter genau — das reicht nicht fuer die
+    # Hausnummer, und dann steht die des Nachbarn im Fahrtenbuch.
+    eigene = _eigene_adresse_wenn_passend(strasse_fuer_check, ort_fuer_check)
+    if eigene:
+        ergebnis = eigene
+
+    _adress_speicher[schluessel] = ergebnis
+    return ergebnis
+
+
+def _reverse_photon(lat: float, lon: float) -> tuple[str, str, str] | None:
+    """Rueckwaertssuche ueber Photon. None bei jedem Fehlschlag — der
+    Aufrufer entscheidet dann selbst ueber den naechsten Versuch.
+    Liefert (formatierte Adresse, Strassenname, Ort) bei Erfolg."""
     params = urllib.parse.urlencode({"lat": lat, "lon": lon, "lang": "de"})
     # Photon hat zwei Endpunkte: '/api' fuer die Suche nach Namen und
     # '/reverse' fuer Koordinaten. Beide liegen direkt unter der Wurzel —
@@ -143,16 +172,13 @@ def adresse_aus_koordinaten(lat: float, lon: float) -> str:
         with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
             daten = json.loads(resp.read().decode("utf-8"))
     except Exception:
-        return fallback
+        return None
 
     merkmale = daten.get("features") or []
     if not merkmale:
-        return fallback
+        return None
 
     e = merkmale[0].get("properties", {})
-
-    # Strasse mit Hausnummer, dann Ort — das ist die Form, die auf einem
-    # Beleg erwartet wird.
     strasse = e.get("street") or e.get("name") or ""
     nummer = e.get("housenumber") or ""
     ort = e.get("city") or e.get("town") or e.get("village") or e.get("county") or ""
@@ -170,18 +196,56 @@ def adresse_aus_koordinaten(lat: float, lon: float) -> str:
             if e.get(k):
                 teile.append(e[k])
                 break
+    if not teile:
+        return None
+    return ", ".join(teile), strasse, ort
 
-    ergebnis = ", ".join(teile) if teile else fallback
 
-    # Liegt der Punkt in der eigenen Strasse, die hinterlegte Wohnadresse
-    # einsetzen. GPS ist auf wenige Meter genau — das reicht nicht fuer die
-    # Hausnummer, und dann steht die des Nachbarn im Fahrtenbuch.
-    eigene = _eigene_adresse_wenn_passend(strasse, ort)
-    if eigene:
-        ergebnis = eigene
+def _reverse_nominatim(lat: float, lon: float) -> tuple[str, str, str] | None:
+    """Rueckwaertssuche ueber OpenStreetMaps eigenen Nominatim-Dienst —
+    Rueckfall, falls Photon nicht erreichbar ist oder nichts liefert.
+    Liefert (formatierte Adresse, Strassenname, Ort) bei Erfolg.
 
-    _adress_speicher[schluessel] = ergebnis
-    return ergebnis
+    Nominatims Nutzungsbedingungen verlangen eine erkennbare
+    User-Agent-Kennung (siehe USER_AGENT) und maximal eine Anfrage pro
+    Sekunde — bei diesem Einsatzzweck (vereinzelte Fahrten, keine
+    Massenabfrage) unproblematisch."""
+    params = urllib.parse.urlencode({
+        "format": "jsonv2", "lat": lat, "lon": lon,
+        "accept-language": "de", "zoom": 18,
+    })
+    url = f"{NOMINATIM_URL.rstrip('/')}/reverse?{params}"
+    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+    try:
+        with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
+            daten = json.loads(resp.read().decode("utf-8"))
+    except Exception:
+        return None
+
+    adr = daten.get("address") or {}
+    if not adr:
+        return None
+
+    strasse = adr.get("road") or adr.get("pedestrian") or adr.get("footway") or ""
+    nummer = adr.get("house_number") or ""
+    ort = (adr.get("city") or adr.get("town") or adr.get("village")
+           or adr.get("municipality") or adr.get("county") or "")
+    plz = adr.get("postcode") or ""
+
+    teile = []
+    if strasse:
+        teile.append(f"{strasse} {nummer}".strip())
+    if ort:
+        teile.append(f"{plz} {ort}".strip())
+    if teile:
+        return ", ".join(teile), strasse, ort
+
+    # Letzter Rueckfall innerhalb Nominatims eigener Antwort: der volle,
+    # von Nominatim selbst formatierte Anzeigename.
+    anzeige = daten.get("display_name")
+    if anzeige:
+        return anzeige, "", ""
+    return None
 
 
 def _strassenkern(text: str) -> str:

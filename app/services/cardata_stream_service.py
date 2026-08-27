@@ -402,7 +402,21 @@ def verarbeite_nachricht(vehicle_id: int, roh: str) -> dict:
     BMW schickt je Ereignis ein JSON mit den geaenderten Datenpunkten.
     Breiten- und Laengengrad kommen manchmal getrennt — deshalb werden
     Teilwerte je Fahrzeug zwischengespeichert, bis beide vorliegen.
-    """
+
+    BUG BEHOBEN (28.08.): Diese Funktion hat bisher AUSSCHLIESSLICH
+    Breitengrad/Laengengrad/Kilometerstand ausgewertet — alle anderen
+    Datenpunkte in derselben Nachricht (Reichweite, Akkukapazitaet,
+    Ladestand, Verbrauch, Angesteckt-Status …) wurden stillschweigend
+    verworfen. Der Datenstrom lieferte diese Werte nachweislich
+    fortlaufend (siehe Protokoll-Auszug vom 27.08., in dem
+    kombiRemainingElectricRange und maxEnergy mehrfach ankommen), die
+    Status-Kachel im Dashboard konnte sie aber nur ueber den separaten,
+    manuellen "Aktualisieren"-Abruf bekommen — nie aus dem laufenden
+    Strom. Jetzt werden zusaetzlich alle Fahrzeugdaten-Deskriptoren aus
+    jeder Nachricht extrahiert und ueber dieselbe (mittlerweile
+    zusammenfuehrende statt ueberschreibende) Speicherfunktion abgelegt,
+    die auch der manuelle Abruf nutzt — die Kachel aktualisiert sich
+    dadurch laufend, nicht nur auf Knopfdruck."""
     try:
         d = json.loads(roh)
     except Exception:
@@ -432,9 +446,74 @@ def verarbeite_nachricht(vehicle_id: int, roh: str) -> dict:
         except (TypeError, ValueError):
             return None
 
+    def wahrheitswert(schluessel):
+        eintrag = werte.get(schluessel)
+        if eintrag is None:
+            return None
+        if isinstance(eintrag, dict):
+            eintrag = eintrag.get("value")
+        if isinstance(eintrag, bool):
+            return eintrag
+        text = str(eintrag).strip().lower()
+        return True if text == "true" else False if text == "false" else None
+
+    # Alle fuer die Status-Kachel relevanten Deskriptoren aus DERSELBEN
+    # Nachricht mitnehmen — unabhaengig davon, ob sie LAT/LON/KM enthaelt.
+    from services import cardata_service as _cds
+    fahrzeugdaten_gefunden = {}
+    zahl_deskriptoren = {
+        "verbrauch_kwh_100": _cds.DESCRIPTOR_VERBRAUCH,
+        "akku_soh_prozent": _cds.DESCRIPTOR_AKKU_SOH,
+        "soc_prozent": _cds.DESCRIPTOR_SOC,
+        "reichweite_km": _cds.DESCRIPTOR_REICHWEITE,
+        "service_in_km": _cds.DESCRIPTOR_SERVICE,
+        "woche_km": _cds.DESCRIPTOR_WOCHE,
+    }
+    for feld, deskriptor in zahl_deskriptoren.items():
+        wert = zahl(deskriptor)
+        if wert is not None:
+            fahrzeugdaten_gefunden[feld] = wert
+
+    # Akkukapazitaet: dieselbe Rueckfalllogik wie beim manuellen Abruf —
+    # batterySizeMax liefert bei diesem Fahrzeug zuverlaessig 0.
+    akku_primaer = zahl(_cds.DESCRIPTOR_AKKU_MAX)
+    akku_alt = zahl(_cds.DESCRIPTOR_AKKU_MAX_ALT)
+    if akku_primaer:
+        fahrzeugdaten_gefunden["akku_max_kwh"] = akku_primaer
+    elif akku_alt:
+        fahrzeugdaten_gefunden["akku_max_kwh"] = akku_alt
+
+    angesteckt = wahrheitswert(_cds.DESCRIPTOR_ANGESTECKT)
+    if angesteckt is not None:
+        fahrzeugdaten_gefunden["angesteckt"] = angesteckt
+
+    cbs_wert = werte.get(_cds.DESCRIPTOR_CBS)
+    if cbs_wert is not None:
+        cbs_roh = cbs_wert.get("value") if isinstance(cbs_wert, dict) else cbs_wert
+        try:
+            wartung = _cds._lies_wartungstermine(cbs_roh)
+            if wartung:
+                from repositories import vehicle_repository
+                vehicle_repository.setze_stammdaten(vehicle_id, wartung)
+        except Exception:
+            pass
+
     lat, lon, km = zahl(LAT), zahl(LON), zahl(KM)
+    if km is not None:
+        fahrzeugdaten_gefunden["km"] = km
+    if lat is not None:
+        fahrzeugdaten_gefunden["lat"] = lat
+    if lon is not None:
+        fahrzeugdaten_gefunden["lon"] = lon
+
+    if fahrzeugdaten_gefunden:
+        try:
+            _cds._speichere_fahrzeugdaten(vehicle_id, fahrzeugdaten_gefunden)
+        except Exception:
+            pass  # Status-Kachel ist Beiwerk — Fahrterkennung laeuft trotzdem weiter
+
     if lat is None and lon is None and km is None:
-        return {"ok": True, "relevant": False}
+        return {"ok": True, "relevant": bool(fahrzeugdaten_gefunden)}
 
     gepuffert = _lade_puffer(vehicle_id)
     if lat is not None:
