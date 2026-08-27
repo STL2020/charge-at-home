@@ -172,6 +172,21 @@ def aktiviert() -> bool:
 def setze_aktiv(an: bool) -> None:
     settings_repository.set_setting("cardata_stream_aktiv", "1" if an else "0")
     if an:
+        # BUG BEHOBEN (28.08.): Diese Ausschliesslichkeit gab es bisher nur
+        # im Frontend (beim Anklicken der Checkbox) — nicht hier, wo sie
+        # tatsaechlich verlaesslich waere. Blieb 'cardata_auto' aus
+        # irgendeinem Grund auf '1' stehen (z.B. aus einer Zeit vor dem
+        # Umstieg auf den Stream), liefen nach einem Neustart BEIDE
+        # Mechanismen gleichzeitig: der periodische Abruf erneuert dabei
+        # ueber denselben Login regelmaessig Access- und ID-Token — und ein
+        # frisch ausgestellter ID-Token trennt offenbar die laufende
+        # Stream-Sitzung (beobachtet: "Normal disconnection", danach
+        # "Bad user name or password" bei jedem Rekonnektversuch mit dem
+        # jetzt veralteten Token). Deshalb hier hart erzwungen, nicht nur
+        # per Bedienoberflaeche.
+        from services import cardata_service
+        settings_repository.set_setting("cardata_auto", "0")
+        cardata_service.stoppe_automatik()
         starte()
     else:
         stoppe()

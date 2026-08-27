@@ -60,7 +60,7 @@ def handle_404(exc):
     # Für nicht-API-Routen: normale 404-Seite oder zur App weiterleiten
     return jsonify({"error": "not_found"}), 404
 
-PFLICHTENHEFT_VERSION = "12.54"
+PFLICHTENHEFT_VERSION = "12.55"
 
 # Fassung, die dem Anwender gezeigt wird. Die Pflichtenheft-Nummer daneben ist
 # die interne Baunummer — beide zusammen machen Rückfragen eindeutig.
@@ -145,6 +145,7 @@ PROJECT_STATUS = [
     {"sprint": 8, "id": "S8-04", "modul": "BMW Telematik", "text": "CarData-Stream: SUBACK-Pruefung nachgeruestet — subscribe() wurde aufgerufen, ohne je die Antwort von BMW auszuwerten; 'Verbunden' konnte also bei im Stillen abgelehntem Thema-Abonnement stehen bleiben, ohne dass Fahrten je ankamen. Status unterscheidet jetzt 'verbunden, Abonnement offen/bestaetigt/abgelehnt'", "status": "fertig", "view": "einstellungen"},
     {"sprint": 8, "id": "S8-05", "modul": "Diagnose", "text": "Live-Protokoll der Stream-Verbindung direkt in der App (Einstellungen -> BMW), kein Terminal/Putty mehr noetig: jede Verbindungsstufe (Connect/Subscribe/Nachricht/Fehler) im Ringpuffer, automatische Aktualisierung alle 5s nach Muster der bestehenden OCPP-Rohdaten-Anzeige", "status": "fertig", "view": "einstellungen"},
     {"sprint": 8, "id": "S8-06", "modul": "BMW Telematik", "text": "CarData-Stream: erzwungene Token-Erneuerung nach wiederholten Verbindungsfehlschlaegen — beobachtet in Produktion (echtes Protokoll): nach 'Normal disconnection' (vermutlich zweite Sitzung mit gleichem Konto) wurden alle Rekonnektversuche mit dem als 'noch gueltig' gebuchten, tatsaechlich aber toten Token wiederholt, endlos 'Bad user name or password'. Ab dem 2. Fehlschlag in Folge wird jetzt zwangsweise erneuert.", "status": "fertig", "view": "einstellungen"},
+    {"sprint": 8, "id": "S8-07", "modul": "BMW Telematik", "text": "Server-seitige Ausschliesslichkeit Stream vs. periodischer Abruf — bisher nur im Frontend beim Anklicken der Checkbox hergestellt. War 'cardata_auto' aus einer Zeit vor dem Umstieg auf den Stream noch auf '1' gespeichert, liefen nach jedem Neustart BEIDE Mechanismen gleichzeitig: der periodische Abruf erneuert ueber denselben Login regelmaessig Access- und ID-Token und kappt damit vermutlich die laufende Stream-Sitzung (Ursache fuer den in S8-06 behobenen Fehlerfall). Jetzt bei setze_aktiv() UND beim Neustart hart erzwungen.", "status": "fertig", "view": "einstellungen"},
 
 ]
 
@@ -4623,11 +4624,20 @@ def api_extern_ocpp_import():
 
 
 if __name__ == "__main__":
-    # Automatischen CarData-Abruf wieder aufnehmen, falls eingeschaltet.
-    # Der Timer laeuft im Flask-Prozess mit; ein eigener Dienst waere fuer
-    # einen HTTP-Aufruf alle 30 Minuten unverhaeltnismaessig.
+    # Automatischen CarData-Abruf wieder aufnehmen, falls eingeschaltet —
+    # ABER: der Stream hat Vorrang. Beide gleichzeitig fuehren dazu, dass der
+    # periodische Abruf ueber denselben Login regelmaessig einen neuen
+    # ID-Token ausstellt und damit die laufende Stream-Sitzung kappt (siehe
+    # BUG-Hinweis unten bei cardata_stream_service.starte()). Bisher wurde
+    # diese Ausschliesslichkeit nur beim Anklicken der Checkbox im Browser
+    # hergestellt, nicht beim Wiederaufnehmen nach einem Neustart — genau
+    # dieser Fall trat auf, wenn 'cardata_auto' aus einer Zeit vor dem
+    # Umstieg auf den Stream noch auf '1' stand.
     try:
-        if (settings_repository.get_setting("cardata_auto") or "0") == "1":
+        stream_aktiv = (settings_repository.get_setting("cardata_stream_aktiv") or "0") == "1"
+        if stream_aktiv:
+            settings_repository.set_setting("cardata_auto", "0")
+        elif (settings_repository.get_setting("cardata_auto") or "0") == "1":
             cardata_service.starte_automatik()
     except Exception:
         pass
