@@ -1,9 +1,0 @@
-<svg width="36" height="36" viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg">
-  <!-- Helle Variante: identische Geometrie, dunklerer Grünton für Kontrast
-       auf weißem Grund. -->
-  <g fill="none" stroke="#15803d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M5 15.5 18 5.5l13 10"/>
-    <path d="M8 17.5v12.5h20V17.5"/>
-  </g>
-  <path d="M19.6 17.2h4.2l-6.6 8.6.9-5.6h-4l6.3-8.4z" fill="#15803d"/>
-</svg>

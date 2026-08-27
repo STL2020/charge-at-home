@@ -49,6 +49,7 @@ def _ensure_tables(conn) -> None:
                         #                    Kilometerpauschale oder Arbeitgeber-
                         #                    erstattung. Luecken sind unerheblich.
                         ("nutzungsart", "TEXT DEFAULT 'reisekosten'"),
+                        ("fahrtenbuch_ab", "TEXT"),
                         ("km_stand_datum", "TEXT"),
                         ("hu_faellig", "TEXT"),        # Hauptuntersuchung
                         ("service_faellig", "TEXT"),   # naechster Service
@@ -121,7 +122,7 @@ def setze_stammdaten(vehicle_id: int, werte: dict) -> None:
     bleibt stehen. So ueberschreibt ein Teilupdate keine Angaben, die
     aus einer anderen Quelle stammen.
     """
-    erlaubt = {"vin", "km_stand", "km_stand_datum", "hu_faellig", "nutzungsart",
+    erlaubt = {"vin", "km_stand", "km_stand_datum", "hu_faellig", "nutzungsart", "fahrtenbuch_ab",
                "service_faellig", "bremsfluessigkeit",
                "reifen_vorne", "reifen_hinten"}
     felder = {k: v for k, v in werte.items() if k in erlaubt and v not in (None, "")}

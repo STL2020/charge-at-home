@@ -1108,13 +1108,20 @@ function renderTripsTable(trips) {
     // Fahrtart als farbiges Kennzeichen — im Fahrtenbuch stehen alle Fahrten,
     // die Unterscheidung muss auf einen Blick erkennbar sein.
     const art = t.fahrtart || 'dienstlich';
-    const artTag = art === 'privat'
-      ? '<span class="trip-tag trip-tag-privat">privat</span>'
-      : art === 'arbeitsweg'
-        ? '<span class="trip-tag trip-tag-weg">Arbeitsweg</span>'
-        : art === 'offen'
-          ? '<span class="trip-tag trip-tag-offen">noch zuzuordnen</span>'
-          : '<span class="trip-tag trip-tag-dienst">dienstlich</span>';
+    // Umschalter statt Etikett: Die Zuordnung ist der häufigste Handgriff
+    // in dieser Liste — sie gehört direkt dorthin, nicht ins Formular.
+    const artTag = `<div class="toggle-pair toggle-mini">
+        <button class="${art === 'dienstlich' ? 'on' : ''}"
+                onclick="setzeFahrtart(${t.id}, 'dienstlich', this)"
+                title="Dienstlich — wird erstattet">dienstl.</button>
+        <button class="${art === 'privat' ? 'on' : ''}"
+                onclick="setzeFahrtart(${t.id}, 'privat', this)"
+                title="Privat — keine Erstattung">privat</button>
+      </div>` + (art === 'offen'
+        ? '<div class="trip-tag trip-tag-offen" style="margin-top:3px;">noch zuzuordnen</div>'
+        : art === 'arbeitsweg'
+          ? '<div class="trip-tag trip-tag-weg" style="margin-top:3px;">Arbeitsweg</div>'
+          : '');
     // Erstattungssatz ebenfalls als Kennzeichen
     const satzTag = art === 'offen'
       ? '<span class="trip-tag trip-tag-neutral">Satz offen</span>'
@@ -1318,6 +1325,27 @@ async function duplicateTrip(tripId) {
   window.scrollTo(0, document.getElementById('new-trip-form').offsetTop - 20);
 }
 
+// Fahrtart direkt aus der Liste setzen. Private Fahrten bekommen zwingend
+// 0,00 €/km — sie dürfen nie erstattet werden.
+async function setzeFahrtart(tripId, art, btn) {
+  // Sofort umschalten, damit es sich flüssig anfühlt
+  const paar = btn.parentNode;
+  paar.querySelectorAll('button').forEach(b => b.classList.remove('on'));
+  btn.classList.add('on');
+
+  try {
+    const r = await fetch('/api/trips/sammel-fahrtart', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ trip_ids: [tripId], fahrtart: art })
+    });
+    if (!r.ok) throw new Error();
+    loadTrips();
+  } catch (e) {
+    _toast('Konnte nicht gespeichert werden');
+    loadTrips();      // zurück auf den echten Stand
+  }
+}
+
 async function editTrip(tripId) {
   const resp = await hole('/api/trips');
   const data = await resp.json();
@@ -1352,17 +1380,26 @@ async function editTrip(tripId) {
   }
   updateTripPreview();
 
-  // Zum Formular scrollen — nicht an den Seitenanfang. Bei einer langen
-  // Fahrtenliste lag das Formular sonst außerhalb des Sichtfelds und man
-  // musste erst suchen, wohin der Klick geführt hat.
+  // Bei der zweispaltigen Ansicht steht das Formular bereits im Blick —
+  // dann genügt ein kurzes Hervorheben. Auf schmalen Bildschirmen liegt
+  // es über der Liste, dort wird hingescrollt.
   const form = document.getElementById('new-trip-form');
   if (form) {
-    form.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    // Kurz hervorheben, damit klar ist, worauf sich das Formular bezieht
+    const zweispaltig = window.innerWidth > 1200;
+    if (!zweispaltig) {
+      form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
     form.style.transition = 'box-shadow .3s';
     form.style.boxShadow = '0 0 0 2px var(--amber)';
-    setTimeout(() => { form.style.boxShadow = ''; }, 1200);
+    setTimeout(() => { form.style.boxShadow = ''; }, 1000);
   }
+
+  // Die bearbeitete Zeile in der Liste kennzeichnen
+  document.querySelectorAll('#trips-tbody tr').forEach(tr =>
+    tr.classList.remove('zeile-aktiv'));
+  const zeile = document.querySelector(`#trips-tbody input[data-id="${tripId}"]`)
+                        ?.closest('tr');
+  if (zeile) zeile.classList.add('zeile-aktiv');
 }
 
 async function deleteTrip(tripId) {
@@ -4935,6 +4972,11 @@ function setVehicleNutzung(btn, art) {
     + 'Kilometerpauschale (§ 9 EStG) oder die Erstattung durch den '
     + 'Arbeitgeber. Nur dienstliche Fahrten zählen; private müssen nicht '
     + 'erfasst werden. Der übliche Fall beim eigenen PKW.';
+
+  // Startdatum nur beim Fahrtenbuch — bei Reisekosten gibt es keine
+  // Lückenlosigkeit, die einen Stichtag bräuchte.
+  const block = document.getElementById('vehicle-start-block');
+  if (block) block.style.display = art === 'fahrtenbuch' ? 'block' : 'none';
 }
 
 function setVehicleAntrieb(btn, antrieb) {
@@ -5058,6 +5100,7 @@ async function editVehicle(id) {
   setzen('vehicle-service', v.service_faellig);
   setzen('vehicle-bremsfluessigkeit', v.bremsfluessigkeit);
   setzen('vehicle-reifen', v.reifen_vorne);
+  setzen('vehicle-fb-start', v.fahrtenbuch_ab);
   _vehicleNutzung = v.nutzungsart || 'reisekosten';
   const nutzToggle = document.getElementById('vehicle-nutzung-toggle');
   if (nutzToggle) {
@@ -5093,6 +5136,7 @@ async function saveVehicle() {
     bremsfluessigkeit: holen('vehicle-bremsfluessigkeit'),
     reifen_vorne: holen('vehicle-reifen'),
     nutzungsart: _vehicleNutzung,
+    fahrtenbuch_ab: holen('vehicle-fb-start'),
   };
   Object.entries(zusatz).forEach(([k, v]) => { if (v) body[k] = v; });
 
@@ -7098,8 +7142,25 @@ async function cardataStreamSchalten(cb) {
       _toast('Datenstrom nur in der Vollversion');
       return;
     }
-    _toast(cb.checked ? 'Datenstrom wird aufgebaut …' : 'Datenstrom angehalten');
+    if (cb.checked) {
+      // Der Abruf wird überflüssig: Der Strom liefert Position und
+      // Kilometerstand in der Meldung mit — ohne Kontingentverbrauch.
+      const sel = document.getElementById('cardata-intervall');
+      if (sel && sel.value !== '0') {
+        sel.value = '0';
+        await fetch('/api/cardata/automatik', {
+          method: 'POST', headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ aktiv: false, intervall_min: 0 })
+        });
+        _toast('Datenstrom aktiv — der regelmäßige Abruf wurde abgeschaltet');
+      } else {
+        _toast('Datenstrom wird aufgebaut …');
+      }
+    } else {
+      _toast('Datenstrom angehalten — regelmäßigen Abruf nicht vergessen');
+    }
     setTimeout(loadStreamZustand, 2500);
+    setTimeout(loadKontingent, 2600);
   } catch (e) {
     _toast('Umschalten fehlgeschlagen');
   }
@@ -7112,6 +7173,12 @@ async function loadStreamZustand() {
   try {
     const d = await (await hole('/api/cardata/stream')).json();
     if (cb) cb.checked = !!d.aktiv;
+
+    // Beim Abrufintervall vermerken, dass es nicht mehr gebraucht wird
+    const intervallHinweis = document.getElementById('intervall-ueberfluessig');
+    if (intervallHinweis) {
+      intervallHinweis.style.display = d.aktiv ? 'block' : 'none';
+    }
 
     if (!d.aktiv) { box.style.display = 'none'; return; }
     box.style.display = 'block';
@@ -7186,6 +7253,16 @@ async function saveBmwDuplikate() {
 
 // Protokoll als Text in die Zwischenablage — für Rückfragen und Fehlersuche
 // oft der schnellste Weg, den Zustand weiterzugeben.
+// Protokoll als Datei herunterladen. Der Zeitraum richtet sich nach dem
+// gewählten Filter, damit nicht Monate alter Ballast mitkommt.
+function protokollHerunterladen() {
+  const tage = document.getElementById('protokoll-tage')?.value || 7;
+  const quelle = document.getElementById('protokoll-quelle')?.value || '';
+  const p = new URLSearchParams({ tage });
+  if (quelle) p.set('quelle', quelle);
+  window.location = '/api/events/export?' + p.toString();
+}
+
 async function protokollKopieren() {
   const tbody = document.getElementById('protokoll-tbody')
              || document.querySelector('#view-protokoll tbody');

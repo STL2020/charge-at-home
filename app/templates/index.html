@@ -706,7 +706,51 @@
         </div>
       </div>
 
-      <div class="card" id="new-trip-form" style="display:none; margin-bottom:20px;">
+
+      <!-- Zweispaltig: Liste links, Bearbeitung rechts. Vorher lag das
+           Formular über der Liste — bei vielen Fahrten musste man nach
+           jedem Klick hochscrollen und wusste nicht, welche Fahrt man
+           gerade bearbeitet. -->
+      <div class="trips-split">
+      <div class="card trips-liste">
+        <div class="section-title">Erfasste Fahrten</div>
+
+        <!-- Auswahl-Bar Fahrten (identisch zu Ladesessions) -->
+        <!-- BMW-Import: nur sichtbar, wenn die CarData-Verbindung steht -->
+
+        <div id="trips-selection-bar" style="display:none; background:var(--accent-soft); border:1px solid var(--accent); border-radius:var(--radius-sm); padding:10px 14px; margin-bottom:12px; align-items:center; gap:12px; flex-wrap:wrap;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+          <span id="trips-selection-bar-text" style="font-size:13px; font-weight:600;"></span>
+          <button class="btn btn-sm btn-primary" onclick="generateTripSelectionBeleg()">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            Beleg aus Auswahl erzeugen
+          </button>
+          <span style="width:1px; height:22px; background:var(--border-strong); margin:0 2px;"></span>
+          <span style="font-size:12px; color:var(--text-secondary);">Einstufen:</span>
+          <button class="btn btn-sm" onclick="sammelFahrtart('dienstlich')">dienstlich</button>
+          <button class="btn btn-sm" onclick="sammelFahrtart('privat')">privat</button>
+          <span style="width:1px; height:22px; background:var(--border-strong); margin:0 2px;"></span>
+          <span style="font-size:12px; color:var(--text-secondary);">Erstattung:</span>
+          <button class="btn btn-sm" onclick="sammelSatz(0.15)">0,15 €</button>
+          <button class="btn btn-sm" onclick="sammelSatz(0.30)">0,30 €</button>
+          <button class="btn btn-sm" onclick="sammelSatz(0)">keine</button>
+          <span style="width:1px; height:22px; background:var(--border-strong); margin:0 2px;"></span>
+          <button class="btn btn-sm" onclick="deleteSelectedTrips()" style="color:var(--danger); border-color:var(--danger);">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+            Löschen
+          </button>
+          <button class="btn btn-sm" onclick="clearTripSelection()">Auswahl aufheben</button>
+        </div>
+
+        <table><thead><tr>
+          <th style="width:32px;"><input type="checkbox" id="trip-select-all" onchange="toggleSelectAllTrips(this)" title="Alle aus-/abwählen"></th>
+          <th>Datum</th><th>Route</th><th>Anlass</th><th>km</th><th>Satz</th><th>Erstattung AG</th><th>Differenz FA</th><th>Aktionen</th>
+        </tr></thead>
+          <tbody id="trips-tbody"><tr><td colspan="9" class="hint">Lade Fahrten …</td></tr></tbody>
+        </table>
+      </div>
+
+      <div class="card trips-detail" id="new-trip-form" style="display:none;">
         <div class="section-title" id="trip-form-title">Neue Fahrt</div>
 
         <!-- 2-Spalten-Layout: Felder links, Karte rechts -->
@@ -854,43 +898,6 @@
           <button class="btn btn-primary" onclick="saveTrip()">Fahrt speichern</button>
         </div>
       </div>
-
-      <div class="card">
-        <div class="section-title">Erfasste Fahrten</div>
-
-        <!-- Auswahl-Bar Fahrten (identisch zu Ladesessions) -->
-        <!-- BMW-Import: nur sichtbar, wenn die CarData-Verbindung steht -->
-
-        <div id="trips-selection-bar" style="display:none; background:var(--accent-soft); border:1px solid var(--accent); border-radius:var(--radius-sm); padding:10px 14px; margin-bottom:12px; align-items:center; gap:12px; flex-wrap:wrap;">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
-          <span id="trips-selection-bar-text" style="font-size:13px; font-weight:600;"></span>
-          <button class="btn btn-sm btn-primary" onclick="generateTripSelectionBeleg()">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-            Beleg aus Auswahl erzeugen
-          </button>
-          <span style="width:1px; height:22px; background:var(--border-strong); margin:0 2px;"></span>
-          <span style="font-size:12px; color:var(--text-secondary);">Einstufen:</span>
-          <button class="btn btn-sm" onclick="sammelFahrtart('dienstlich')">dienstlich</button>
-          <button class="btn btn-sm" onclick="sammelFahrtart('privat')">privat</button>
-          <span style="width:1px; height:22px; background:var(--border-strong); margin:0 2px;"></span>
-          <span style="font-size:12px; color:var(--text-secondary);">Erstattung:</span>
-          <button class="btn btn-sm" onclick="sammelSatz(0.15)">0,15 €</button>
-          <button class="btn btn-sm" onclick="sammelSatz(0.30)">0,30 €</button>
-          <button class="btn btn-sm" onclick="sammelSatz(0)">keine</button>
-          <span style="width:1px; height:22px; background:var(--border-strong); margin:0 2px;"></span>
-          <button class="btn btn-sm" onclick="deleteSelectedTrips()" style="color:var(--danger); border-color:var(--danger);">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
-            Löschen
-          </button>
-          <button class="btn btn-sm" onclick="clearTripSelection()">Auswahl aufheben</button>
-        </div>
-
-        <table><thead><tr>
-          <th style="width:32px;"><input type="checkbox" id="trip-select-all" onchange="toggleSelectAllTrips(this)" title="Alle aus-/abwählen"></th>
-          <th>Datum</th><th>Route</th><th>Anlass</th><th>km</th><th>Satz</th><th>Erstattung AG</th><th>Differenz FA</th><th>Aktionen</th>
-        </tr></thead>
-          <tbody id="trips-tbody"><tr><td colspan="9" class="hint">Lade Fahrten …</td></tr></tbody>
-        </table>
       </div>
     </div>
   </section>
@@ -1019,6 +1026,22 @@
             </button>
           </div>
           <div id="vehicle-nutzung-hint" class="hint" style="margin-top:8px;"></div>
+
+          <!-- Beginn der Aufzeichnung. Beim Fahrtenbuch entscheidend: Was
+               davor liegt, darf nicht als Lücke gelten. Ein Fahrtenbuch
+               beginnt zu einem Stichtag — davor gilt die 1-%-Regel. -->
+          <div id="vehicle-start-block" style="margin-top:12px; display:none;">
+            <label class="field-label" for="vehicle-fb-start">
+              Fahrtenbuch geführt ab
+            </label>
+            <input type="date" id="vehicle-fb-start" style="width:100%">
+            <div class="hint" style="margin-top:5px;">
+              Fahrten vor diesem Datum werden bei der Vollständigkeitsprüfung
+              nicht berücksichtigt. Ein Fahrtenbuch muss zeitnah geführt
+              werden — nachträglich erstellte Aufzeichnungen erkennt das
+              Finanzamt nicht an.
+            </div>
+          </div>
         </div>
 
         <!-- Fahrzeugdaten und Termine. Werden beim BMW-Abruf befüllt,
@@ -2194,6 +2217,11 @@
                   <option value="120">alle 2 Stunden (12 Abrufe/Tag)</option>
                 </select>
               </div>
+              <div class="hint" id="intervall-ueberfluessig" style="margin-top:6px;
+                   display:none; color:var(--text-tertiary);">
+                <b>Nicht mehr nötig</b> — der Datenstrom liefert Position und
+                Kilometerstand in der Meldung mit, ohne Kontingentverbrauch.
+              </div>
               <div class="hint" style="margin-top:6px;">
                 Aus Position und Kilometerstand entstehen Fahrten: Steht das
                 Fahrzeug beim nächsten Abruf woanders, war eine Fahrt dazwischen.
@@ -2803,6 +2831,18 @@
               title="Alle sichtbaren Einträge in die Zwischenablage">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:5px;vertical-align:middle;"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
         Protokoll kopieren
+      </button>
+      <!-- Herunterladen statt kopieren: Bei einer Rückfrage lässt sich
+           eine Datei anhängen, ohne Zeilen abzutippen. -->
+      <button class="btn btn-sm" onclick="protokollHerunterladen()"
+              title="Als Textdatei speichern — für Rückfragen">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2"
+             style="margin-right:5px;vertical-align:middle;">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+        </svg>
+        Herunterladen
       </button>
     </div>
     <div class="content">

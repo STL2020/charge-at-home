@@ -58,6 +58,7 @@ _zustand = {
     "letzte_nachricht": None,
     "fehler": "",
     "nachrichten": 0,
+    "verbindungen": 0,
 }
 _client = None
 _thread = None
@@ -71,6 +72,7 @@ def status() -> dict:
         "verbunden": _zustand["verbunden"],
         "letzte_nachricht": _zustand["letzte_nachricht"],
         "nachrichten": _zustand["nachrichten"],
+        "verbindungen": _zustand.get("verbindungen", 0),
         "fehler": _zustand["fehler"],
         "host": MQTT_HOST,
         "port": MQTT_PORT,
@@ -101,6 +103,10 @@ def starte() -> dict:
 
     if _zustand["laeuft"]:
         return {"ok": True, "meldung": "Stream läuft bereits."}
+    # Ein noch laufender Thread aus einem frueheren Start muss erst enden,
+    # sonst gibt es zwei Verbindungen — BMW zaehlt die als zwei Sitzungen.
+    if _thread is not None and _thread.is_alive():
+        return {"ok": True, "meldung": "Vorheriger Stream wird noch beendet."}
 
     try:
         import paho.mqtt.client  # noqa: F401
@@ -169,13 +175,21 @@ def _schleife(gcid: str, vin: str) -> None:
 
             thema = f"{gcid}/{vin}"
 
+            # Nur die erste Verbindung protokollieren. MQTT baut nach jeder
+            # Unterbrechung selbst neu auf — jedes Mal eine Meldung zu
+            # schreiben fuellt das Protokoll, ohne etwas auszusagen.
+            erstverbindung = {"erledigt": False}
+
             def bei_verbindung(c, userdata, flags, rc, props=None):
                 if rc == 0:
                     _zustand["verbunden"] = True
                     _zustand["fehler"] = ""
+                    _zustand["verbindungen"] = _zustand.get("verbindungen", 0) + 1
                     c.subscribe(thema, qos=1)
-                    event_log_service.log_event("bmw", "info",
-                        f"Stream verbunden — Thema {thema}")
+                    if not erstverbindung["erledigt"]:
+                        erstverbindung["erledigt"] = True
+                        event_log_service.log_event("bmw", "info",
+                            f"Stream verbunden — Thema {thema}")
                 else:
                     _zustand["verbunden"] = False
                     _zustand["fehler"] = f"Verbindung abgelehnt (Code {rc})"

@@ -836,6 +836,23 @@ input[type="date"] {
 .pruef-row:first-of-type { border-top: none; }
 
 /* ── Kennzeichen in der Fahrtenliste ─────────────────────────────────────── */
+/* Kompakte Umschalter in der Fahrtenliste. Die Zuordnung dienstlich/privat
+   ist der häufigste Handgriff — sie gehört in die Zeile, nicht ins Formular. */
+.toggle-mini { display: inline-flex; }
+.toggle-mini button {
+  font-size: 11px; padding: 3px 9px; line-height: 1.4;
+  border: 1px solid var(--border); background: var(--bg-input);
+  color: var(--text-tertiary); cursor: pointer;
+  transition: background .15s, color .15s;
+}
+.toggle-mini button:first-child { border-radius: 5px 0 0 5px; }
+.toggle-mini button:last-child  { border-radius: 0 5px 5px 0; margin-left: -1px; }
+.toggle-mini button.on {
+  background: var(--accent); border-color: var(--accent); color: #fff;
+  font-weight: 600; position: relative; z-index: 1;
+}
+.toggle-mini button:hover:not(.on) { color: var(--text-primary); }
+
 .trip-tag { display: inline-block; font-size: 9px; font-weight: 700; padding: 2px 7px;
   border-radius: 9px; letter-spacing: .03em; white-space: nowrap; }
 .trip-tag-dienst  { background: var(--success-soft); color: var(--success); }
@@ -1254,3 +1271,41 @@ input.feld-fehler { border-color: var(--danger); }
 
 /* Auf grossen Bildschirmen bleibt der Menueknopf verborgen */
 .mobil-kopf { display: none; }
+
+
+/* ── Fahrten: Liste links, Bearbeitung rechts ────────────────────────────
+   Vorher stand das Formular über der Liste. Bei vielen Einträgen bedeutete
+   jeder Klick auf eine Fahrt: hochscrollen, bearbeiten, wieder runter. Und
+   man sah nicht, welche Fahrt gerade offen war. */
+.trips-split {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+}
+.trips-liste { flex: 1 1 auto; min-width: 0; }
+
+.trips-detail {
+  flex: 0 0 400px;
+  position: sticky;
+  top: 16px;
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+}
+
+/* Schmale Bildschirme: untereinander, Formular oben — dort wird es
+   gebraucht, sobald es sichtbar ist. */
+@media (max-width: 1200px) {
+  .trips-split { flex-direction: column-reverse; }
+  .trips-detail {
+    flex: 1 1 auto; width: 100%; position: static;
+    max-height: none; margin-bottom: 16px;
+  }
+}
+
+/* Die gerade bearbeitete Zeile hervorheben — sonst verliert man bei
+   zweispaltiger Ansicht den Bezug zwischen Liste und Formular. */
+#trips-tbody tr.zeile-aktiv,
+#sessions-tbody tr.zeile-aktiv {
+  background: var(--amber-soft);
+  box-shadow: inset 3px 0 0 var(--amber);
+}

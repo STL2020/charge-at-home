@@ -60,7 +60,7 @@ def handle_404(exc):
     # Für nicht-API-Routen: normale 404-Seite oder zur App weiterleiten
     return jsonify({"error": "not_found"}), 404
 
-PFLICHTENHEFT_VERSION = "12.46"
+PFLICHTENHEFT_VERSION = "12.49"
 
 # Fassung, die dem Anwender gezeigt wird. Die Pflichtenheft-Nummer daneben ist
 # die interne Baunummer — beide zusammen machen Rückfragen eindeutig.
@@ -1350,6 +1350,52 @@ def api_ocpp_raw_log_delete():
         return jsonify({"error": str(exc)}), 500
 
 
+@app.route("/api/events/export", methods=["GET"])
+def api_events_export():
+    """Protokoll als Textdatei herunterladen.
+
+    Fuer Rueckfragen: Wer ein Problem meldet, kann die Datei anhaengen
+    statt Zeilen abzutippen. Der Zeitraum laesst sich begrenzen, damit
+    nicht Monate alter Ballast mitkommt.
+    """
+    from flask import Response
+    tage = request.args.get("tage", type=int) or 7
+    quelle = (request.args.get("quelle") or "").strip()
+
+    conn = get_connection()
+    try:
+        bedingungen = ["created_at >= datetime('now', ?)"]
+        werte = [f"-{max(1, min(365, tage))} days"]
+        if quelle:
+            bedingungen.append("source = ?")
+            werte.append(quelle)
+
+        zeilen = conn.execute(
+            f"""SELECT created_at, source, level, message
+                FROM event_log WHERE {' AND '.join(bedingungen)}
+                ORDER BY created_at""", werte).fetchall()
+    finally:
+        conn.close()
+
+    kopf = [
+        "eCharge@Home — Protokollauszug",
+        f"Erstellt:  {datetime.now().strftime('%d.%m.%Y %H:%M:%S')}",
+        f"Zeitraum:  letzte {tage} Tage" + (f" · Quelle: {quelle}" if quelle else ""),
+        f"Version:   {PFLICHTENHEFT_VERSION}",
+        f"Einträge:  {len(zeilen)}",
+        "=" * 78,
+        "",
+    ]
+    inhalt = "\n".join(kopf) + "\n".join(
+        f"{z['created_at']}  {(z['level'] or '').upper():7}  "
+        f"{(z['source'] or ''):12}  {z['message']}"
+        for z in zeilen)
+
+    name = f"echarge-protokoll-{datetime.now().strftime('%Y%m%d-%H%M')}.txt"
+    return Response(inhalt, mimetype="text/plain; charset=utf-8",
+                    headers={"Content-Disposition": f'attachment; filename="{name}"'})
+
+
 @app.route("/api/event-log/clear", methods=["DELETE"])
 def api_event_log_clear():
     """Löscht alle Einträge im Event-Log (Protokoll leeren)."""
@@ -2044,7 +2090,7 @@ def api_vehicles_add():
     # damit von Hand gepflegte Werte beim Bearbeiten erhalten bleiben.
     zusatz = {k: data[k] for k in
               ("vin", "km_stand", "km_stand_datum", "hu_faellig",
-               "service_faellig", "bremsfluessigkeit", "nutzungsart",
+               "service_faellig", "bremsfluessigkeit", "nutzungsart", "fahrtenbuch_ab",
                "reifen_vorne", "reifen_hinten")
               if data.get(k)}
 
