@@ -65,6 +65,13 @@ DESCRIPTOR_REICHWEITE = "vehicle.drivetrain.electricEngine.kombiRemainingElectri
 DESCRIPTOR_SERVICE = "vehicle.status.serviceDistance.next"
 DESCRIPTOR_WOCHE = "vehicle.vehicle.averageWeeklyDistanceLongTerm"
 
+# Wartungstermine ueber die Live-Schnittstelle. Bisher standen sie nur im
+# Datenarchiv — auf das man nach der Anforderung Stunden warten muss.
+# 'conditionBasedServices' liefert dieselben Angaben sofort: naechste
+# Hauptuntersuchung, Service, Bremsfluessigkeit.
+DESCRIPTOR_CBS = "vehicle.status.conditionBasedServices"
+DESCRIPTOR_MELDUNGEN = "vehicle.status.checkControlMessages"
+
 CONTAINER_DESCRIPTORS = [
     # Fahrterfassung
     DESCRIPTOR_KM, DESCRIPTOR_LAT, DESCRIPTOR_LON,
@@ -72,6 +79,8 @@ CONTAINER_DESCRIPTORS = [
     # Fahrzeugdaten
     DESCRIPTOR_VERBRAUCH, DESCRIPTOR_AKKU_MAX, DESCRIPTOR_AKKU_SOH,
     DESCRIPTOR_SOC, DESCRIPTOR_REICHWEITE, DESCRIPTOR_SERVICE, DESCRIPTOR_WOCHE,
+    # Wartung
+    DESCRIPTOR_CBS, DESCRIPTOR_MELDUNGEN,
 ]
 
 # Unterhalb dieser Distanz gilt eine Aenderung als Messrauschen bzw.
@@ -277,8 +286,50 @@ def lese_telematik(vin: str) -> dict:
         "reichweite_km": _zahl(feld(DESCRIPTOR_REICHWEITE)[0]),
         "service_in_km": _zahl(feld(DESCRIPTOR_SERVICE)[0]),
         "woche_km": _zahl(feld(DESCRIPTOR_WOCHE)[0]),
+        # Wartungstermine live statt aus dem Archiv
+        "wartung": _lies_wartungstermine(feld(DESCRIPTOR_CBS)[0]),
         "roh": roh,
     }
+
+
+def _lies_wartungstermine(wert) -> dict:
+    """Wandelt 'conditionBasedServices' in Termine um.
+
+    BMW liefert eine Liste je Wartungsposition mit Typ, Faelligkeitsdatum
+    und Restkilometern. Die Bezeichnungen weichen je nach Sprache ab,
+    deshalb wird auf Schluesselwoerter geprueft statt auf exakte Namen.
+    """
+    if not wert:
+        return {}
+    posten = wert
+    if isinstance(posten, str):
+        try:
+            posten = json.loads(posten)
+        except Exception:
+            return {}
+    if isinstance(posten, dict):
+        posten = posten.get("items") or posten.get("services") or []
+    if not isinstance(posten, list):
+        return {}
+
+    ergebnis: dict = {}
+    for p in posten:
+        if not isinstance(p, dict):
+            continue
+        typ = str(p.get("type") or p.get("name") or "").lower()
+        datum = (p.get("dateTime") or p.get("date") or "")[:10]
+        rest_km = p.get("distance") or p.get("remainingDistance")
+        if not datum and not rest_km:
+            continue
+        if "vehicle_check" in typ or "untersuchung" in typ or "inspect" in typ:
+            ergebnis["hu_faellig"] = datum
+        elif "brake_fluid" in typ or "brems" in typ:
+            ergebnis["bremsfluessigkeit"] = datum
+        elif "oil" in typ or "service" in typ or "check" in typ:
+            ergebnis["service_faellig"] = datum
+            if rest_km:
+                ergebnis["service_in_km"] = rest_km
+    return ergebnis
 
 
 def _lade_letzten_stand(vin: str) -> dict:
@@ -309,6 +360,14 @@ def pruefe_fahrt(vin: str, user_id: int, vehicle_id: int | None = None) -> dict:
     # Fahrzeugdaten mitspeichern — sie kommen ohnehin im selben Abruf und
     # ersparen spaeter einen zusaetzlichen Aufruf vom Tageskontingent.
     _speichere_fahrzeugdaten(vin, jetzt)
+
+    # Fahrzeug in der Verwaltung anlegen oder auffrischen. Damit muss
+    # niemand auf das Datenarchiv warten — Kilometerstand und Wartungs-
+    # termine stehen sofort zur Verfuegung.
+    try:
+        _fahrzeug_pflegen(vin, jetzt)
+    except Exception:
+        pass   # Stammdaten sind Beiwerk, die Fahrterkennung laeuft weiter
 
     vorher = _lade_letzten_stand(vin)
     # Zeitstempel des Fahrzeugs bevorzugen: Der Fahrt-Ende-Wert stammt vom
@@ -496,6 +555,32 @@ FAHRZEUGDATEN_FELDER = (
     "verbrauch_kwh_100", "akku_max_kwh", "akku_soh_prozent", "soc_prozent",
     "reichweite_km", "service_in_km", "woche_km", "km",
 )
+
+
+def _fahrzeug_pflegen(vin: str, daten: dict) -> None:
+    """Legt das Fahrzeug an oder frischt es auf — aus dem Live-Abruf.
+
+    Bisher entstand das Fahrzeug nur beim Archiv-Import. Wer die Live-
+    Anbindung nutzt, musste trotzdem erst Stunden auf das Datenarchiv
+    warten. Die Angaben kommen aber im selben Abruf mit.
+    """
+    from repositories import vehicle_repository
+
+    wartung = daten.get("wartung") or {}
+    werte = {
+        "vin": vin,
+        "bezeichnung": "BMW",
+        "km_stand": int(daten["km"]) if daten.get("km") else None,
+        "km_stand_datum": (daten.get("zeitpunkt") or "")[:10] or None,
+        "hu_faellig": wartung.get("hu_faellig"),
+        "service_faellig": wartung.get("service_faellig"),
+        "bremsfluessigkeit": wartung.get("bremsfluessigkeit"),
+    }
+    # Leere Werte gar nicht erst uebergeben — sonst wuerden vorhandene
+    # Angaben aus dem Archiv wieder geleert.
+    werte = {k: v for k, v in werte.items() if v is not None}
+    if len(werte) > 2:      # mehr als vin und bezeichnung
+        vehicle_repository.anlegen_aus_bmw(werte)
 
 
 def _speichere_fahrzeugdaten(vin: str, daten: dict) -> None:
@@ -745,7 +830,7 @@ def importiere_ladesessions(vin: str, user_id: int,
     # Getrennte Zaehler: Ohne sie bleibt unklar, warum ein Import nichts
     # uebernimmt — die haeufigste Rueckfrage bei jedem Datenimport.
     neu = uebersprungen = doppelt = 0
-    ohne_zeit = ohne_energie = bereits_da = 0
+    ohne_zeit = ohne_energie = bereits_da = heimladungen = 0
     for s in sessions:
         start = s.get("startTime")
         if not start:
@@ -776,12 +861,28 @@ def importiere_ladesessions(vin: str, user_id: int,
         zuhause = _ist_heimladung(s, heim)
         wb_id = wb_heim if zuhause else wb_extern
 
-        # DOPPELERFASSUNG: Wer eine eigene Wallbox betreibt, hat dieselbe
-        # Heimladung bereits ueber OCPP oder den Loxone-Import erfasst.
-        # Die Pruefung laesst sich abschalten — dann kommt alles herein und
-        # der Anwender raeumt selbst auf. Das ist eine Entscheidung ueber die
-        # eigenen Daten und gehoert deshalb nicht in die Software hinein
-        # verdrahtet.
+        # HEIMLADUNGEN werden standardmaessig NICHT uebernommen.
+        #
+        # Der Grund ist steuerlich: Abgerechnet wird der Strom aus der
+        # eigenen Wallbox, und den misst deren Zaehler — bei MID-Geraeten
+        # eichrechtlich belastbar. BMW meldet dagegen einen vom Fahrzeug
+        # geschaetzten Wert. Beides zusammen ergibt eine Doppelerfassung
+        # mit zwei unterschiedlichen Zahlen fuer denselben Vorgang.
+        #
+        # Externe Ladungen sind etwas anderes: Die misst keine eigene
+        # Wallbox, und fuer sie liegen Belege von Ladekarte oder Anbieter
+        # vor. Dort ist die BMW-Angabe eine sinnvolle Ergaenzung.
+        #
+        # Wer keine eigene Wallbox betreibt, schaltet 'bmw_heimladungen'
+        # ein — dann kommt alles herein.
+        heim_uebernehmen = (settings_repository.get_setting("bmw_heimladungen") == "1")
+        if zuhause and not heim_uebernehmen:
+            uebersprungen += 1
+            heimladungen += 1
+            continue
+
+        # Zusaetzlicher Schutz, falls Heimladungen doch gewuenscht sind:
+        # bereits von der Wallbox erfasste Zeitraeume nicht doppelt anlegen.
         if (zuhause and ueberschneidung_pruefen
                 and _heimladung_bereits_erfasst(start_dt, ende_dt, wb_heim)):
             uebersprungen += 1
@@ -895,9 +996,11 @@ def importiere_ladesessions(vin: str, user_id: int,
     # ist die Aufschluesselung entscheidend.
     event_log_service.log_event("bmw", "info",
         f"Ladehistorie verarbeitet: {len(sessions)} empfangen · {neu} übernommen · "
+        f"{heimladungen} Heimladungen (Wallbox misst selbst) · "
         f"{bereits_da} bereits vorhanden · {doppelt} von der Wallbox erfasst · "
         f"{ohne_energie} ohne Energiefluss · {ohne_zeit} ohne Zeitstempel")
     return {"ok": True, "neu": neu, "gefunden": len(sessions),
+            "heimladungen": heimladungen,
             "uebersprungen": uebersprungen, "doppelt": doppelt,
             "bereits_da": bereits_da, "ohne_energie": ohne_energie,
             "ohne_zeit": ohne_zeit}

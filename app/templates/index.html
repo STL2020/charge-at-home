@@ -914,6 +914,15 @@
   <section class="view" id="view-fahrzeuge">
     <div class="topbar">
       <div><div class="page-title">Fahrzeuge</div><div class="page-sub">Fahrzeuge verwalten, Kosten hinterlegen & Vollkostenrechnung</div></div>
+      <!-- Aus dem BMW-Archiv: legt das Fahrzeug samt Fahrgestellnummer,
+           Kilometerstand und Wartungsterminen an. -->
+      <input type="file" id="vehicle-archiv-datei" accept=".zip"
+             style="display:none;" onchange="fahrzeugAusArchiv(this)">
+      <button class="btn btn-sm"
+              onclick="document.getElementById('vehicle-archiv-datei').click()"
+              title="Fahrzeugdaten aus dem BMW-CarData-Archiv übernehmen">
+        Aus BMW-Archiv
+      </button>
       <button class="btn btn-primary" onclick="openVehicleModal()">+ Fahrzeug hinzufügen</button>
     </div>
     <div class="content">
@@ -2172,14 +2181,29 @@
 
           <label style="display:flex; align-items:center; gap:8px; font-size:12.5px;
                  cursor:pointer; margin-bottom:14px;">
-            <input type="checkbox" id="bmw-dupl-pruefen" style="width:auto; margin:0;"
-                   onchange="saveBmwDuplikate()" checked>
-            Heimladungen überspringen, die die Wallbox bereits erfasst hat
+            <input type="checkbox" id="bmw-heimladungen" style="width:auto; margin:0;"
+                   onchange="saveBmwHeimladungen()">
+            Auch Heimladungen aus der BMW-App übernehmen
           </label>
           <div class="hint" style="margin:-10px 0 14px 26px;">
-            Abschalten, wenn du alles importieren und selbst aussortieren möchtest.
-            Es ist deine Datenbank — die Software soll dir nichts vorenthalten.
+            <b>Standardmäßig aus.</b> Abgerechnet wird der Strom aus Ihrer Wallbox —
+            und den misst deren Zähler, bei MID-Geräten eichrechtlich belastbar.
+            BMW meldet dagegen einen vom Fahrzeug geschätzten Wert. Beides zusammen
+            ergäbe zwei unterschiedliche Zahlen für denselben Ladevorgang.
+            <br><br>
+            <b>Externe Ladungen kommen unabhängig davon immer herein.</b> Dort misst
+            keine eigene Wallbox, und die Belege liefert die Ladekarte.
+            <br><br>
+            Einschalten, wenn Sie <b>keine eigene Wallbox</b> betreiben — dann ist
+            die BMW-Angabe Ihre einzige Quelle.
           </div>
+
+          <label style="display:flex; align-items:center; gap:8px; font-size:12.5px;
+                 cursor:pointer; margin-bottom:14px;" id="bmw-dupl-zeile">
+            <input type="checkbox" id="bmw-dupl-pruefen" style="width:auto; margin:0;"
+                   onchange="saveBmwDuplikate()" checked>
+            Dabei überspringen, was die Wallbox schon erfasst hat
+          </label>
 
           <div class="section-title" style="font-size:13px;">Strompreise beim externen Laden</div>
           <div class="hint" style="margin-bottom:10px;">

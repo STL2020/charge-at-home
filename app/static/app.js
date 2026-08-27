@@ -2146,7 +2146,7 @@ function showSettingsTab(tab, btn) {
   if (tab === 'person') {
     loadPersons();
   }
-  if (tab === 'bmw') { cardataStatusLaden(); cardataFahrzeugdatenLaden(); loadLadepreise(); loadHeimadresse(); loadBmwDuplikate(); }
+  if (tab === 'bmw') { cardataStatusLaden(); cardataFahrzeugdatenLaden(); loadLadepreise(); loadHeimadresse(); loadBmwDuplikate(); loadBmwHeimladungen(); }
   if (tab === 'lizenz') editionAnzeigen();
   if (tab === 'system') { backupStatusLaden(); demodatenStatus(); }
   if (tab === 'hilfe') hilfeLaden();
@@ -4920,6 +4920,34 @@ function setVehicleAntrieb(btn, antrieb) {
   }
 }
 
+async // Fahrzeug aus dem BMW-CarData-Archiv anlegen. Das ZIP enthält
+// Fahrgestellnummer, Kilometerstand und die Wartungstermine — die
+// muss niemand abtippen.
+async function fahrzeugAusArchiv(input) {
+  const datei = input.files && input.files[0];
+  if (!datei) return;
+  _toast('Archiv wird gelesen …');
+  const daten = new FormData();
+  daten.append('datei', datei);
+  try {
+    const d = await (await fetch('/api/vehicles/aus-archiv',
+                                 { method: 'POST', body: daten })).json();
+    if (d.ok) {
+      const teile = [];
+      if (d.km_stand) teile.push(`${Number(d.km_stand).toLocaleString('de-DE')} km`);
+      if (d.hu_faellig) teile.push(`HU ${d.hu_faellig.split('-').reverse().join('.')}`);
+      _toast(d.neu ? `Fahrzeug angelegt${teile.length ? ' — ' + teile.join(', ') : ''}`
+                   : `Fahrzeug aktualisiert${teile.length ? ' — ' + teile.join(', ') : ''}`);
+      loadVehiclesGrid();
+    } else {
+      _toast(d.fehler || 'Archiv konnte nicht gelesen werden');
+    }
+  } catch (e) {
+    _toast('Import fehlgeschlagen');
+  }
+  input.value = '';   // damit dieselbe Datei erneut gewählt werden kann
+}
+
 async function openVehicleModal() {
   _editingVehicleId = null;
   document.getElementById('vehicle-modal-title').textContent = 'Fahrzeug hinzufügen';
@@ -5218,7 +5246,12 @@ async function resolveAllDuplicates(strategy) {
       body: JSON.stringify({ strategy })
     });
     const d = await r.json();
-    _toast(`${d.removed} doppelte Session(s) entfernt`);
+    if (d.verbleibend > 0) {
+      _toast(`${d.removed} entfernt — ${d.verbleibend} Konflikte bleiben. `
+           + `Bitte einzeln prüfen.`);
+    } else {
+      _toast(`${d.removed} doppelte Ladevorgänge entfernt`);
+    }
     loadSessions();
   } catch(e) {
     alert('Fehler bei der automatischen Auflösung.');
@@ -6932,6 +6965,37 @@ async function cardataImportZuruecksetzen() {
   } catch (e) {
     _toast('Zurücksetzen fehlgeschlagen');
   }
+}
+
+// Heimladungen aus der BMW-App übernehmen — standardmäßig aus, weil die
+// eigene Wallbox der belastbare Messnachweis ist.
+async function loadBmwHeimladungen() {
+  try {
+    const d = await (await fetch('/api/settings/bmw-heimladungen')).json();
+    const cb = document.getElementById('bmw-heimladungen');
+    if (cb) cb.checked = !!d.uebernehmen;
+    _zeigeDuplikatSchalter();
+  } catch (e) {}
+}
+
+async function saveBmwHeimladungen() {
+  const cb = document.getElementById('bmw-heimladungen');
+  await fetch('/api/settings/bmw-heimladungen', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ uebernehmen: cb.checked })
+  });
+  _toast(cb.checked
+    ? 'Heimladungen werden mit importiert'
+    : 'Nur externe Ladungen — die Wallbox misst zuhause selbst');
+  _zeigeDuplikatSchalter();
+}
+
+// Die Duplikatprüfung ist nur sinnvoll, wenn Heimladungen überhaupt
+// hereinkommen — sonst steht dort eine Einstellung ohne Wirkung.
+function _zeigeDuplikatSchalter() {
+  const an = document.getElementById('bmw-heimladungen')?.checked;
+  const zeile = document.getElementById('bmw-dupl-zeile');
+  if (zeile) zeile.style.display = an ? 'flex' : 'none';
 }
 
 // Doppelerfassungs-Prüfung ein-/ausschalten

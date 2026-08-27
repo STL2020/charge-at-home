@@ -60,7 +60,7 @@ def handle_404(exc):
     # Für nicht-API-Routen: normale 404-Seite oder zur App weiterleiten
     return jsonify({"error": "not_found"}), 404
 
-PFLICHTENHEFT_VERSION = "12.34"
+PFLICHTENHEFT_VERSION = "12.36"
 
 # Fassung, die dem Anwender gezeigt wird. Die Pflichtenheft-Nummer daneben ist
 # die interne Baunummer — beide zusammen machen Rückfragen eindeutig.
@@ -1885,13 +1885,29 @@ def api_sessions_duplicate_resolve():
     else:
         to_remove = duplicate_service.resolve_all_keep_wallbox(sessions)
     removed = 0
+    fehler = []
     for sid in to_remove:
         try:
             session_repository.delete_session(sid)
             removed += 1
-        except Exception:
-            pass
-    return jsonify({"ok": True, "removed": removed, "removed_ids": to_remove})
+        except Exception as e:
+            # Frueher wurde hier stumm weitergemacht. Schlug das Loeschen
+            # fehl, blieb die Session bestehen — und die Warnung kam beim
+            # naechsten Seitenaufruf wieder, ohne dass jemand wusste warum.
+            fehler.append(f"#{sid}: {type(e).__name__}")
+
+    if fehler:
+        event_log_service.log_event("system", "warning",
+            f"Doppelte Ladevorgänge: {len(fehler)} konnten nicht entfernt "
+            f"werden ({', '.join(fehler[:3])}).")
+
+    # Nachpruefen: Sind wirklich keine Konflikte mehr da? Wenn doch, hat
+    # die Aufloesung nicht gegriffen und der Anwender soll das erfahren.
+    rest = duplicate_service.find_overlapping_sessions(
+        session_repository.list_sessions(user_id=user["id"]))
+    return jsonify({"ok": True, "removed": removed, "removed_ids": to_remove,
+                    "verbleibend": len(rest),
+                    "fehler": fehler[:5] if fehler else None})
 
 
 @app.route("/api/sessions/duplicate-check", methods=["GET"])
@@ -1924,6 +1940,52 @@ def api_vehicles_list():
     person_id = request.args.get("person_id", type=int)
     vehicles = vehicle_repository.list_vehicles(person_id)
     return jsonify({"vehicles": vehicles})
+
+
+@app.route("/api/vehicles/aus-archiv", methods=["POST"])
+def api_vehicle_aus_archiv():
+    """Legt ein Fahrzeug aus dem BMW-CarData-Archiv an.
+
+    Das ZIP enthaelt Fahrgestellnummer, Kilometerstand und die
+    Wartungstermine (Condition Based Service). Ohne diesen Weg muesste
+    der Anwender alles abtippen — die Termine hat er sonst nur in der
+    BMW-App.
+    """
+    datei = request.files.get("datei")
+    if not datei or not datei.filename:
+        return jsonify({"ok": False, "fehler": "Keine Datei erhalten."}), 400
+    if not datei.filename.lower().endswith(".zip"):
+        return jsonify({"ok": False,
+                        "fehler": "Bitte das ZIP aus dem BMW-Portal wählen."}), 400
+
+    import tempfile, os as _os
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".zip")
+    try:
+        datei.save(tmp.name)
+        tmp.close()
+        daten = cardata_archiv_service.lies_fahrzeugdaten(tmp.name)
+        if not daten or not daten.get("vin"):
+            return jsonify({"ok": False,
+                            "fehler": "Im Archiv wurden keine Fahrzeugdaten "
+                                      "gefunden."}), 400
+
+        # Schon vorhanden? Dann wird aufgefrischt statt doppelt angelegt.
+        vorher = vehicle_repository.list_vehicles()
+        bekannt = any(v.get("vin") == daten["vin"] for v in vorher)
+
+        daten.setdefault("bezeichnung", "BMW")
+        vid = vehicle_repository.anlegen_aus_bmw(daten)
+
+        event_log_service.log_event("bmw", "info",
+            f"Fahrzeug aus Archiv {'aktualisiert' if bekannt else 'angelegt'}: "
+            f"{daten['vin']} · {daten.get('km_stand', '?')} km")
+        return jsonify({"ok": True, "neu": not bekannt, "vehicle_id": vid,
+                        **{k: v for k, v in daten.items() if k != "bezeichnung"}})
+    finally:
+        try:
+            _os.unlink(tmp.name)
+        except Exception:
+            pass
 
 
 @app.route("/api/vehicles", methods=["POST"])
@@ -4012,6 +4074,28 @@ def api_settings_heimadresse():
         "adresse": settings_repository.get_setting("heim_adresse") or "",
         "erkannt": cardata_service._heimadresse(),
     })
+
+
+@app.route("/api/settings/bmw-heimladungen", methods=["GET", "POST"])
+def api_bmw_heimladungen():
+    """Ob Heimladungen aus der BMW-App uebernommen werden.
+
+    Standard ist AUS: Der Strom aus der eigenen Wallbox wird von deren
+    Zaehler gemessen — bei MID-Geraeten eichrechtlich belastbar. Die
+    BMW-Angabe ist eine Fahrzeugschaetzung und taugt nicht als zweiter
+    Nachweis fuer denselben Vorgang. Externe Ladungen kommen unabhaengig
+    davon immer herein.
+    """
+    if request.method == "GET":
+        return jsonify({"uebernehmen":
+                        settings_repository.get_setting("bmw_heimladungen") == "1"})
+
+    daten = request.get_json(force=True, silent=True) or {}
+    an = bool(daten.get("uebernehmen"))
+    settings_repository.set_setting("bmw_heimladungen", "1" if an else "0")
+    event_log_service.log_event("system", "info",
+        f"BMW-Heimladungen: {'werden übernommen' if an else 'werden übersprungen'}")
+    return jsonify({"ok": True, "uebernehmen": an})
 
 
 @app.route("/api/settings/bmw-duplikate", methods=["GET", "POST"])
