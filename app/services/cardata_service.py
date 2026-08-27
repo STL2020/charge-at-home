@@ -62,6 +62,11 @@ DESCRIPTOR_TRIP_SOC = "vehicle.trip.segment.end.drivetrain.batteryManagement.hvS
 # wertvoll: der echte Durchschnittsverbrauch ersetzt den bisherigen Schaetzwert.
 DESCRIPTOR_VERBRAUCH = "vehicle.drivetrain.avgElectricRangeConsumption"
 DESCRIPTOR_AKKU_MAX = "vehicle.drivetrain.batteryManagement.batterySizeMax"
+# Fallback: batterySizeMax liefert bei manchen Fahrzeugen/Konfigurationen
+# zuverlaessig 0 statt eines echten Werts oder eines fehlenden Feldes (siehe
+# BUG-Hinweis bei _kombiniere_akkukapazitaet). maxEnergy gilt in der
+# Community als das verlaesslichere Aequivalent fuer dieselbe Kenngroesse.
+DESCRIPTOR_AKKU_MAX_ALT = "vehicle.drivetrain.batteryManagement.maxEnergy"
 DESCRIPTOR_AKKU_SOH = "vehicle.powertrain.electric.battery.stateOfHealth.displayed"
 DESCRIPTOR_SOC = "vehicle.powertrain.electric.battery.stateOfCharge.displayed"
 DESCRIPTOR_REICHWEITE = "vehicle.drivetrain.electricEngine.kombiRemainingElectricRange"
@@ -80,7 +85,7 @@ CONTAINER_DESCRIPTORS = [
     DESCRIPTOR_KM, DESCRIPTOR_LAT, DESCRIPTOR_LON,
     DESCRIPTOR_TRIP_KM, DESCRIPTOR_TRIP_ZEIT, DESCRIPTOR_TRIP_SOC,
     # Fahrzeugdaten
-    DESCRIPTOR_VERBRAUCH, DESCRIPTOR_AKKU_MAX, DESCRIPTOR_AKKU_SOH,
+    DESCRIPTOR_VERBRAUCH, DESCRIPTOR_AKKU_MAX, DESCRIPTOR_AKKU_MAX_ALT, DESCRIPTOR_AKKU_SOH,
     DESCRIPTOR_SOC, DESCRIPTOR_REICHWEITE, DESCRIPTOR_SERVICE, DESCRIPTOR_WOCHE,
     # Wartung
     DESCRIPTOR_CBS, DESCRIPTOR_MELDUNGEN,
@@ -340,6 +345,21 @@ def _zahl(wert) -> float | None:
         return None
 
 
+def _kombiniere_akkukapazitaet(feld) -> float | None:
+    """Akkukapazitaet aus zwei moeglichen Deskriptoren.
+
+    BUG BEHOBEN (28.08.): batterySizeMax lieferte bei manchen Fahrzeugen
+    zuverlaessig 0 statt eines echten Werts — eine Hochvoltbatterie mit
+    0 kWh gibt es nicht, das ist immer ein fehlender/nicht unterstuetzter
+    Wert, keine echte Angabe. maxEnergy gilt als das robustere Aequivalent
+    (siehe DESCRIPTOR_AKKU_MAX_ALT-Kommentar) und wird als Rueckfalloption
+    genutzt, wenn die erste Quelle leer oder 0 ist."""
+    primaer = _zahl(feld(DESCRIPTOR_AKKU_MAX)[0])
+    if primaer:
+        return primaer
+    return _zahl(feld(DESCRIPTOR_AKKU_MAX_ALT)[0])
+
+
 def lese_telematik(vehicle_id: int, vin: str) -> dict:
     """Aktuelle Werte des Containers dieses Fahrzeugs (1 Aufruf vom Tageslimit)."""
     token = auth.hole_access_token(vehicle_id)
@@ -392,7 +412,7 @@ def lese_telematik(vehicle_id: int, vin: str) -> dict:
         "trip_soc": _zahl(trip_soc),
         # Fahrzeugdaten
         "verbrauch_kwh_100": _zahl(feld(DESCRIPTOR_VERBRAUCH)[0]),
-        "akku_max_kwh": _zahl(feld(DESCRIPTOR_AKKU_MAX)[0]),
+        "akku_max_kwh": _kombiniere_akkukapazitaet(feld),
         "akku_soh_prozent": _zahl(feld(DESCRIPTOR_AKKU_SOH)[0]),
         "soc_prozent": _zahl(feld(DESCRIPTOR_SOC)[0]),
         "reichweite_km": _zahl(feld(DESCRIPTOR_REICHWEITE)[0]),

@@ -983,6 +983,14 @@ table td.mono, .mono { font-family: var(--font-mono); }
 @keyframes sp-puls { 0%,100% { opacity: 1 } 50% { opacity: .35 } }
 @media (prefers-reduced-motion: reduce) { .sp-dot.aktiv { animation: none } }
 
+/* ─── Fahrzeugstatus-Kachel: dezenter Auftritt statt hartem Einblenden ───── */
+.fzg-status-karte { animation: fzg-einblenden .45s cubic-bezier(.22,.9,.3,1); }
+@keyframes fzg-einblenden {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) { .fzg-status-karte { animation: none; } }
+
 /* ─── Kartenkopf mit Filtern ───────────────────────────────────────────────
    Titel links, Steuerung rechts — die Filter gehören zur Tabelle und stehen
    deshalb an ihr, nicht darüber im luftleeren Raum. */

@@ -6838,7 +6838,30 @@ async function ladeKosten100km() {
 // gemeldeten Werte (aus Stream oder letztem Abruf) statt bei jedem
 // Dashboard-Aufruf neues Kontingent zu verbrauchen; "Aktualisieren" holt
 // bei Bedarf gezielt frische Werte.
-async function ladeFahrzeugStatusKachel() {
+let _fahrzeugStatusLetzteSignatur = null;
+
+// Einklappen merken — wer die Live-Fahrzeugdaten nicht braucht, soll das
+// nicht bei jedem Seitenaufruf erneut wegklicken muessen.
+function fahrzeugStatusEinklappenSchalten() {
+  const grid = document.getElementById('fahrzeug-status-grid');
+  const chevron = document.getElementById('fahrzeug-status-chevron');
+  if (!grid) return;
+  const eingeklappt = grid.style.display !== 'none';
+  grid.style.display = eingeklappt ? 'none' : 'flex';
+  if (chevron) chevron.style.transform = eingeklappt ? 'rotate(-90deg)' : 'rotate(0deg)';
+  localStorage.setItem('fahrzeugStatusEingeklappt', eingeklappt ? '1' : '0');
+}
+
+function _fahrzeugStatusEingeklapptWiederherstellen() {
+  if (localStorage.getItem('fahrzeugStatusEingeklappt') === '1') {
+    const grid = document.getElementById('fahrzeug-status-grid');
+    const chevron = document.getElementById('fahrzeug-status-chevron');
+    if (grid) grid.style.display = 'none';
+    if (chevron) chevron.style.transform = 'rotate(-90deg)';
+  }
+}
+
+async function ladeFahrzeugStatusKachel(erzwingen = false) {
   const card = document.getElementById('fahrzeug-status-card');
   const grid = document.getElementById('fahrzeug-status-grid');
   if (!card || !grid) return;
@@ -6848,6 +6871,7 @@ async function ladeFahrzeugStatusKachel() {
     if (!fahrzeuge.length) { card.style.display = 'none'; return; }
 
     const kacheln = [];
+    const signaturTeile = [];
     for (const v of fahrzeuge) {
       let status;
       try {
@@ -6861,18 +6885,43 @@ async function ladeFahrzeugStatusKachel() {
       } catch (e) {}
 
       kacheln.push(_fahrzeugStatusKachelHtml(v, d));
+      // Signatur ohne "stand" (Zeitstempel wuerde bei jedem Zyklus wechseln,
+      // auch wenn sich sonst nichts geaendert hat) — nur was sich sichtbar
+      // auswirkt, insbesondere lat/lon, geht in den Vergleich ein.
+      const { stand, ...ohneStand } = d || {};
+      signaturTeile.push(v.id + ':' + JSON.stringify(ohneStand));
     }
 
     if (!kacheln.length) { card.style.display = 'none'; return; }
     card.style.display = 'block';
+    _fahrzeugStatusEingeklapptWiederherstellen();
+
+    // BUG BEHOBEN (28.08.): Der Dashboard-Refresh (alle 10s) hat die Kachel
+    // jedes Mal komplett neu aufgebaut — inklusive der Karten-iframe, die
+    // dadurch bei jedem Zyklus neu geladen wurde und sichtbar "geflackert"
+    // hat, obwohl sich der Standort meist gar nicht geaendert hatte. Jetzt
+    // wird nur neu gerendert, wenn sich die Daten tatsaechlich unterscheiden.
+    const signatur = signaturTeile.join('|');
+    if (!erzwingen && signatur === _fahrzeugStatusLetzteSignatur) return;
+    _fahrzeugStatusLetzteSignatur = signatur;
     grid.innerHTML = kacheln.join('');
+    _fahrzeugStatusBatterienAnimieren();
   } catch (e) {
     card.style.display = 'none';
   }
 }
 
+// Farbskala fuer Ladestand und Reichweitenring — durchgaengig verwendet,
+// damit Batterie-Symbol und Ring dieselbe Sprache sprechen.
+function _akkuFarbe(prozent) {
+  if (prozent == null) return 'var(--text-tertiary)';
+  if (prozent < 20) return '#ef4444';
+  if (prozent < 50) return '#eab308';
+  return '#22c55e';
+}
+
 function _fahrzeugStatusKachelHtml(v, d) {
-  const kachel = (label, val, einheit, icon) => val == null ? '' : `
+  const kachel = (label, val, einheit) => val == null ? '' : `
     <div style="background:var(--bg-input); border-radius:var(--radius-sm); padding:12px 14px; border:1px solid var(--border);">
       <div style="font-size:10px; text-transform:uppercase; letter-spacing:.06em; color:var(--text-tertiary); margin-bottom:6px; font-weight:600;">${label}</div>
       <div style="font-size:19px; font-weight:700;">${val}${einheit ? ` <span style="font-size:12px; font-weight:500; color:var(--text-secondary);">${einheit}</span>` : ''}</div>
@@ -6880,6 +6929,8 @@ function _fahrzeugStatusKachelHtml(v, d) {
 
   const hatDaten = d && (d.reichweite_km != null || d.soc_prozent != null || d.km != null);
   const hatStandort = d && d.lat != null && d.lon != null;
+  const soc = d && d.soc_prozent != null ? Math.max(0, Math.min(100, d.soc_prozent)) : null;
+  const farbe = _akkuFarbe(soc);
 
   // Kein API-Key noetig: derselbe kostenlose Google-Maps-Embed wie bei der
   // Routenvorschau in Fahrten — nur mit einem Punkt statt einer Route.
@@ -6890,8 +6941,50 @@ function _fahrzeugStatusKachelHtml(v, d) {
     ? `https://www.google.com/maps?q=${d.lat},${d.lon}`
     : '';
 
+  // Batterie-Symbol: eigens gezeichnet statt eines Fremd-Icons, damit
+  // Fuellstand UND Farbe unmittelbar zusammenpassen. Die Fuellung startet
+  // bei 0% Breite und wird gleich nach dem Einfuegen auf den Zielwert
+  // animiert (siehe ladeFahrzeugStatusKachel) — daher data-pct statt
+  // direkt der fertigen Breite.
+  const batterie = soc != null ? `
+    <div style="display:flex; align-items:center; gap:14px;">
+      <div style="position:relative; width:76px; height:38px; flex:none;">
+        <svg width="76" height="38" viewBox="0 0 76 38" style="position:absolute; inset:0;">
+          <rect x="1" y="1" width="66" height="36" rx="7" fill="none" stroke="var(--border)" stroke-width="2.5"/>
+          <rect x="68" y="12" width="6" height="14" rx="2" fill="var(--border)"/>
+        </svg>
+        <div style="position:absolute; left:5px; top:5px; bottom:5px; width:0%;
+             border-radius:4px; background:${farbe}; transition:width 1.1s cubic-bezier(.22,.9,.3,1);"
+             class="fzg-batterie-fuellung" data-pct="${soc}"></div>
+      </div>
+      <div>
+        <div style="font-size:26px; font-weight:800; line-height:1; color:${farbe};">${fmtDe(soc, 0)}<span style="font-size:14px; font-weight:600;">%</span></div>
+        <div style="font-size:11px; color:var(--text-tertiary); margin-top:3px;">Ladestand</div>
+      </div>
+    </div>` : '';
+
+  // Reichweitenring: Ring-Fortschritt gemessen an einer typischen
+  // Vollreichweite (aus Akkukapazitaet und Verbrauch geschaetzt, sonst
+  // 500 km als neutrale Referenz) — reine Optik, keine Abrechnungsgroesse.
+  const vollReichweite = (d && d.akku_max_kwh && d.verbrauch_kwh_100)
+    ? (d.akku_max_kwh / d.verbrauch_kwh_100) * 100 : 500;
+  const reichweiteAnteil = d && d.reichweite_km != null
+    ? Math.max(4, Math.min(100, Math.round(d.reichweite_km / vollReichweite * 100))) : null;
+  const ring = reichweiteAnteil != null ? `
+    <div style="position:relative; width:92px; height:92px; flex:none;">
+      <div style="width:100%; height:100%; border-radius:50%;
+           background:conic-gradient(${farbe} ${reichweiteAnteil * 3.6}deg, var(--bg-input) 0deg);
+           display:flex; align-items:center; justify-content:center;">
+        <div style="width:72px; height:72px; border-radius:50%; background:var(--bg-elevated);
+             display:flex; flex-direction:column; align-items:center; justify-content:center;">
+          <div style="font-size:17px; font-weight:800;">${fmtDe(d.reichweite_km, 0)}</div>
+          <div style="font-size:9px; color:var(--text-tertiary); text-transform:uppercase; letter-spacing:.04em;">km Reichweite</div>
+        </div>
+      </div>
+    </div>` : '';
+
   return `
-    <div class="card" style="margin:0;">
+    <div class="card fzg-status-karte" style="margin:0;">
       <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;">
         <div style="font-weight:600; font-size:15px;">${v.bezeichnung || 'Fahrzeug'}</div>
         <div style="display:flex; align-items:center; gap:10px;">
@@ -6900,11 +6993,15 @@ function _fahrzeugStatusKachelHtml(v, d) {
         </div>
       </div>
       ${hatDaten ? `
-        <div style="display:flex; gap:16px; flex-wrap:wrap; align-items:stretch;">
-          <div style="flex:1 1 420px; min-width:280px; display:grid;
+        <div style="display:flex; gap:18px; flex-wrap:wrap; align-items:stretch;">
+          <div style="flex:0 0 auto; display:flex; align-items:center; gap:20px;
+               background:var(--bg-input); border:1px solid var(--border); border-radius:var(--radius-sm);
+               padding:14px 20px;">
+            ${ring}
+            ${batterie}
+          </div>
+          <div style="flex:1 1 300px; min-width:240px; display:grid;
                grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:10px;">
-            ${kachel('Reichweite', d.reichweite_km != null ? fmtDe(d.reichweite_km, 0) : null, 'km')}
-            ${kachel('Ladestand', d.soc_prozent != null ? fmtDe(d.soc_prozent, 0) : null, '%')}
             ${kachel('Kilometerstand', d.km != null ? fmtDe(d.km, 0) : null, 'km')}
             ${kachel('Nächster Service', d.service_in_km != null ? fmtDe(d.service_in_km, 0) : null, 'km')}
             ${kachel('Ø Verbrauch', d.verbrauch_kwh_100 != null ? fmtDe(d.verbrauch_kwh_100, 1) : null, 'kWh/100km')}
@@ -6936,6 +7033,19 @@ function _fahrzeugStatusKachelHtml(v, d) {
     </div>`;
 }
 
+// Batteriefuellung erst NACH dem Einfuegen ins DOM auf den Zielwert setzen,
+// sonst gibt es keinen Ausgangszustand, von dem aus animiert werden koennte
+// (die CSS-Transition braucht einen echten Wertsprung, keinen bereits
+// fertigen Endzustand beim ersten Rendern).
+function _fahrzeugStatusBatterienAnimieren() {
+  requestAnimationFrame(() => {
+    document.querySelectorAll('.fzg-batterie-fuellung').forEach(el => {
+      const pct = parseFloat(el.dataset.pct || '0');
+      el.style.width = Math.max(2, pct) + '%';
+    });
+  });
+}
+
 async function fahrzeugDatenAktualisieren(vehicleId, btn) {
   if (btn) btn.disabled = true;
   try {
@@ -6943,7 +7053,7 @@ async function fahrzeugDatenAktualisieren(vehicleId, btn) {
                                  { method: 'POST' })).json();
     if (!d.ok) { _toast(d.meldung || 'Abruf fehlgeschlagen'); return; }
     _toast('Fahrzeugdaten aktualisiert');
-    ladeFahrzeugStatusKachel();
+    ladeFahrzeugStatusKachel(true);
   } catch (e) {
     _toast('Abruf fehlgeschlagen');
   } finally {

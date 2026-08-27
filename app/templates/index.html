@@ -110,6 +110,31 @@
       </div>
       {% endif %}
 
+      <!-- Statusleiste ganz oben: "Chipkarten" gehoeren an die erste Stelle,
+           bevor irgendetwas anderes den Blick beansprucht — sie beantworten
+           die Frage "laeuft alles?" und "fuer welchen Zeitraum schaue ich
+           gerade?", bevor man ueberhaupt zu lesen anfaengt. -->
+      <div class="status-leiste" id="dash-status">
+        <span class="status-pill" id="sp-wallbox"><span class="sp-dot"></span> Wallbox</span>
+        <span class="status-pill" id="sp-cardata"><span class="sp-dot"></span> CarData</span>
+        <span class="status-pill" id="sp-offen" style="display:none;"><span class="sp-dot warn"></span> <span id="sp-offen-text"></span></span>
+        <!-- Zentrale Zeitraumauswahl. Sie steuert ALLES auf dieser Seite:
+             Kacheln, Aufschlüsselung, Monatsabschluss, Ladevorgänge. Zuvor gab
+             es zwei Felder, die unterschiedliche Bereiche steuerten — das war
+             nicht nachvollziehbar. -->
+        <span style="margin-left:auto; display:flex; gap:6px; align-items:center;">
+          <select id="dash-zeitart" onchange="zeitraumArtGewechselt()"
+                  style="font-size:12px; padding:4px 8px; min-width:96px;">
+            <option value="monat">Monat</option>
+            <option value="quartal">Quartal</option>
+            <option value="jahr">Jahr</option>
+            <option value="gesamt">Gesamt</option>
+          </select>
+          <select id="dash-zeitwert" onchange="zeitraumGewechselt()"
+                  style="font-size:12px; padding:4px 8px; min-width:118px;"></select>
+        </span>
+      </div>
+
       <!-- ── BMW: neu synchronisierte Fahrten (nur bei offenen Eintraegen) ── -->
       <div class="card" id="bmw-hinweis-card" style="display:none; margin-bottom:16px;">
         <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
@@ -145,36 +170,22 @@
         </button>
       </div>
 
-      <!-- ── Fahrzeugstatus (BMW CarData) — je Fahrzeug mit Verbindung ── -->
+      <!-- ── Fahrzeugstatus (BMW CarData) — je Fahrzeug mit Verbindung ──
+           Einklappbar: wen die Live-Fahrzeugdaten nicht interessieren, kann
+           die Kachel dauerhaft weglegen (Zustand wird gemerkt). -->
       <div class="card" id="fahrzeug-status-card" style="display:none; margin-bottom:16px;">
-        <div class="section-title" style="display:flex; align-items:center; justify-content:space-between;">
-          <span>Fahrzeugstatus</span>
-          <button class="btn btn-sm" onclick="ladeFahrzeugStatusKachel()" title="Alle aktualisieren">↻</button>
+        <div class="section-title" style="display:flex; align-items:center; justify-content:space-between; cursor:pointer;"
+             onclick="fahrzeugStatusEinklappenSchalten()">
+          <span style="display:flex; align-items:center; gap:8px;">
+            <svg id="fahrzeug-status-chevron" width="13" height="13" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" stroke-width="2.5" style="transition:transform .2s;">
+              <polyline points="6 9 12 15 18 9"/>
+            </svg>
+            Fahrzeugstatus
+          </span>
+          <button class="btn btn-sm" onclick="event.stopPropagation(); ladeFahrzeugStatusKachel(true)" title="Alle aktualisieren">↻</button>
         </div>
-        <div id="fahrzeug-status-grid" style="display:flex; flex-direction:column; gap:14px;"></div>
-      </div>
-
-      <!-- Statusleiste: Was läuft gerade? Beantwortet die Frage, bevor sie
-           gestellt wird — ohne dass man in die Wallbox-Ansicht wechseln muss. -->
-      <div class="status-leiste" id="dash-status">
-        <span class="status-pill" id="sp-wallbox"><span class="sp-dot"></span> Wallbox</span>
-        <span class="status-pill" id="sp-cardata"><span class="sp-dot"></span> CarData</span>
-        <span class="status-pill" id="sp-offen" style="display:none;"><span class="sp-dot warn"></span> <span id="sp-offen-text"></span></span>
-        <!-- Zentrale Zeitraumauswahl. Sie steuert ALLES auf dieser Seite:
-             Kacheln, Aufschlüsselung, Monatsabschluss, Ladevorgänge. Zuvor gab
-             es zwei Felder, die unterschiedliche Bereiche steuerten — das war
-             nicht nachvollziehbar. -->
-        <span style="margin-left:auto; display:flex; gap:6px; align-items:center;">
-          <select id="dash-zeitart" onchange="zeitraumArtGewechselt()"
-                  style="font-size:12px; padding:4px 8px; min-width:96px;">
-            <option value="monat">Monat</option>
-            <option value="quartal">Quartal</option>
-            <option value="jahr">Jahr</option>
-            <option value="gesamt">Gesamt</option>
-          </select>
-          <select id="dash-zeitwert" onchange="zeitraumGewechselt()"
-                  style="font-size:12px; padding:4px 8px; min-width:118px;"></select>
-        </span>
+        <div id="fahrzeug-status-grid" style="display:flex; flex-direction:column; gap:14px; margin-top:14px;"></div>
       </div>
 
       <!-- ── Kern-Kennzahlen ── -->
