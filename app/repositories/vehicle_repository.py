@@ -41,6 +41,14 @@ def _ensure_tables(conn) -> None:
     # weiterlaufen.
     cols_v = [r["name"] for r in conn.execute("PRAGMA table_info(vehicles)").fetchall()]
     for spalte, typ in [("vin", "TEXT"), ("km_stand", "INTEGER"),
+                        # Nutzungsart: entscheidet, welche Anforderungen gelten.
+                        #   'fahrtenbuch'  — lueckenlos nach § 6 Abs. 1 Nr. 4 EStG,
+                        #                    Alternative zur 1-%-Regel beim Firmenwagen.
+                        #                    Jede Fahrt zaehlt, auch private.
+                        #   'reisekosten'  — nur dienstliche Fahrten als Nachweis fuer
+                        #                    Kilometerpauschale oder Arbeitgeber-
+                        #                    erstattung. Luecken sind unerheblich.
+                        ("nutzungsart", "TEXT DEFAULT 'reisekosten'"),
                         ("km_stand_datum", "TEXT"),
                         ("hu_faellig", "TEXT"),        # Hauptuntersuchung
                         ("service_faellig", "TEXT"),   # naechster Service
@@ -113,7 +121,7 @@ def setze_stammdaten(vehicle_id: int, werte: dict) -> None:
     bleibt stehen. So ueberschreibt ein Teilupdate keine Angaben, die
     aus einer anderen Quelle stammen.
     """
-    erlaubt = {"vin", "km_stand", "km_stand_datum", "hu_faellig",
+    erlaubt = {"vin", "km_stand", "km_stand_datum", "hu_faellig", "nutzungsart",
                "service_faellig", "bremsfluessigkeit",
                "reifen_vorne", "reifen_hinten"}
     felder = {k: v for k, v in werte.items() if k in erlaubt and v not in (None, "")}

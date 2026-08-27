@@ -60,7 +60,7 @@ def handle_404(exc):
     # Für nicht-API-Routen: normale 404-Seite oder zur App weiterleiten
     return jsonify({"error": "not_found"}), 404
 
-PFLICHTENHEFT_VERSION = "12.38"
+PFLICHTENHEFT_VERSION = "12.43"
 
 # Fassung, die dem Anwender gezeigt wird. Die Pflichtenheft-Nummer daneben ist
 # die interne Baunummer — beide zusammen machen Rückfragen eindeutig.
@@ -2044,7 +2044,7 @@ def api_vehicles_add():
     # damit von Hand gepflegte Werte beim Bearbeiten erhalten bleiben.
     zusatz = {k: data[k] for k in
               ("vin", "km_stand", "km_stand_datum", "hu_faellig",
-               "service_faellig", "bremsfluessigkeit",
+               "service_faellig", "bremsfluessigkeit", "nutzungsart",
                "reifen_vorne", "reifen_hinten")
               if data.get(k)}
 
@@ -3757,6 +3757,60 @@ def api_anlaesse_speichern():
     return jsonify({"ok": True, "anzahl": len(sauber)})
 
 
+@app.route("/api/fahrten/vollstaendigkeit", methods=["GET"])
+def api_fahrten_vollstaendigkeit():
+    """Prueft, ob das Fahrtenbuch lueckenlos ist — falls es eines sein soll.
+
+    Bei der Nutzungsart 'reisekosten' ist die Frage gegenstandslos: Dort
+    werden nur dienstliche Fahrten nachgewiesen, Luecken sind unerheblich.
+    Beim 'fahrtenbuch' dagegen fuehrt eine einzige fehlende Fahrt dazu,
+    dass das Finanzamt die gesamte Aufzeichnung verwirft
+    (§ 6 Abs. 1 Nr. 4 EStG).
+    """
+    user = _current_user()
+    if user is None:
+        return jsonify({"error": "no_user"}), 400
+
+    fahrzeuge = vehicle_repository.list_vehicles()
+    relevante = [f for f in fahrzeuge if f.get("nutzungsart") == "fahrtenbuch"]
+    if not relevante:
+        return jsonify({"ok": True, "pruefung_noetig": False})
+
+    conn = get_connection()
+    ergebnisse = []
+    try:
+        for fz in relevante:
+            zeilen = conn.execute(
+                """SELECT trip_date, distance_km, start_address, end_address
+                   FROM trips WHERE user_id = ? AND vehicle_id = ?
+                   ORDER BY trip_date""",
+                (user["id"], fz["id"])).fetchall()
+            if not zeilen:
+                continue
+
+            gefahren = sum((z["distance_km"] or 0) for z in zeilen)
+            km_stand = fz.get("km_stand")
+
+            eintrag = {
+                "fahrzeug": fz.get("bezeichnung"),
+                "fahrten": len(zeilen),
+                "erfasste_km": round(gefahren, 1),
+                "von": zeilen[0]["trip_date"],
+                "bis": zeilen[-1]["trip_date"],
+            }
+
+            # Wenn ein Kilometerstand bekannt ist, laesst sich die Luecke beziffern
+            if km_stand:
+                # Erster bekannter Stand: aus der aeltesten Fahrt ableiten
+                eintrag["km_stand_aktuell"] = km_stand
+            ergebnisse.append(eintrag)
+    finally:
+        conn.close()
+
+    return jsonify({"ok": True, "pruefung_noetig": True,
+                    "fahrzeuge": ergebnisse})
+
+
 @app.route("/api/fahrten/adressen-aufloesen", methods=["POST"])
 def api_adressen_aufloesen():
     """Koordinaten in bereits gespeicherten Fahrten nachtraeglich aufloesen.
@@ -4133,6 +4187,24 @@ def api_settings_heimadresse():
         "adresse": settings_repository.get_setting("heim_adresse") or "",
         "erkannt": cardata_service._heimadresse(),
     })
+
+
+@app.route("/api/settings/archiv-bereich", methods=["GET", "POST"])
+def api_archiv_bereich():
+    """Ob der Archiv-Import bei den Fahrten angezeigt wird.
+
+    Das Datenarchiv braucht man einmal beim Erstimport, um Zeitraeume vor
+    den letzten 30 Tagen zu erfassen. Danach liefert die laufende
+    Verbindung alles Weitere — der Bereich steht dann nur im Weg.
+    """
+    if request.method == "GET":
+        return jsonify({"versteckt":
+                        settings_repository.get_setting("archiv_bereich_aus") == "1"})
+
+    daten = request.get_json(force=True, silent=True) or {}
+    aus = bool(daten.get("versteckt"))
+    settings_repository.set_setting("archiv_bereich_aus", "1" if aus else "0")
+    return jsonify({"ok": True, "versteckt": aus})
 
 
 @app.route("/api/settings/bmw-heimladungen", methods=["GET", "POST"])

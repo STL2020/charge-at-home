@@ -2146,7 +2146,7 @@ function showSettingsTab(tab, btn) {
   if (tab === 'person') {
     loadPersons();
   }
-  if (tab === 'bmw') { cardataStatusLaden(); cardataFahrzeugdatenLaden(); loadLadepreise(); loadHeimadresse(); loadBmwDuplikate(); loadBmwHeimladungen(); }
+  if (tab === 'bmw') { cardataStatusLaden(); cardataFahrzeugdatenLaden(); loadLadepreise(); loadHeimadresse(); loadBmwDuplikate(); loadBmwHeimladungen(); loadArchivBereich(); }
   if (tab === 'lizenz') editionAnzeigen();
   if (tab === 'system') { backupStatusLaden(); demodatenStatus(); }
   if (tab === 'hilfe') hilfeLaden();
@@ -4824,6 +4824,13 @@ function _fahrzeugDaten(v) {
   const zeilen = [];
   const heute = new Date();
 
+  // Nutzungsart zuerst — sie bestimmt, welche Regeln für dieses Fahrzeug gelten
+  const fb = v.nutzungsart === 'fahrtenbuch';
+  zeilen.push(`<div><span style="color:var(--text-tertiary);">Erfassung</span>
+               <b style="color:${fb ? 'var(--amber)' : 'var(--text-secondary)'};">`
+             + (fb ? 'Lückenloses Fahrtenbuch' : 'Reisekosten')
+             + '</b></div>');
+
   if (v.km_stand) {
     const stand = v.km_stand_datum
       ? ` <span style="color:var(--text-tertiary);">(${_datumKurz(v.km_stand_datum)})</span>`
@@ -4908,6 +4915,28 @@ async function loadVehiclesGrid() {
   }
 }
 
+let _vehicleNutzung = 'reisekosten';
+
+// Reisekosten oder Fahrtenbuch — der Unterschied ist steuerlich erheblich
+// und bestimmt, welche Prüfungen die Anwendung anwendet.
+function setVehicleNutzung(btn, art) {
+  _vehicleNutzung = art;
+  btn.parentNode.querySelectorAll('button').forEach(b => b.classList.remove('on'));
+  btn.classList.add('on');
+  const hint = document.getElementById('vehicle-nutzung-hint');
+  if (!hint) return;
+  hint.innerHTML = art === 'fahrtenbuch'
+    ? '<b>Lückenloses Fahrtenbuch</b> nach § 6 Abs. 1 Nr. 4 EStG — die '
+    + 'Alternative zur 1-%-Regel beim Firmenwagen. <b>Jede</b> Fahrt muss '
+    + 'erfasst sein, auch private und der Arbeitsweg. Eine einzige Lücke '
+    + 'führt dazu, dass das Finanzamt das gesamte Fahrtenbuch verwirft. '
+    + 'Die Anwendung weist auf Lücken hin.'
+    : '<b>Reisekostenabrechnung</b> — Nachweis dienstlicher Fahrten für die '
+    + 'Kilometerpauschale (§ 9 EStG) oder die Erstattung durch den '
+    + 'Arbeitgeber. Nur dienstliche Fahrten zählen; private müssen nicht '
+    + 'erfasst werden. Der übliche Fall beim eigenen PKW.';
+}
+
 function setVehicleAntrieb(btn, antrieb) {
   _vehicleAntrieb = antrieb;
   btn.parentNode.querySelectorAll('button').forEach(b => b.classList.remove('on'));
@@ -4983,6 +5012,12 @@ async function openVehicleModal() {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
+  _vehicleNutzung = 'reisekosten';
+  const nt = document.getElementById('vehicle-nutzung-toggle');
+  if (nt) {
+    nt.querySelectorAll('button').forEach((b,i) => b.classList.toggle('on', i===0));
+    setVehicleNutzung(nt.children[0], 'reisekosten');
+  }
   document.getElementById('vehicle-standard').checked = false;
   document.getElementById('vehicle-modal-message').textContent = '';
   _vehicleAntrieb = 'elektro';
@@ -5023,6 +5058,12 @@ async function editVehicle(id) {
   setzen('vehicle-service', v.service_faellig);
   setzen('vehicle-bremsfluessigkeit', v.bremsfluessigkeit);
   setzen('vehicle-reifen', v.reifen_vorne);
+  _vehicleNutzung = v.nutzungsart || 'reisekosten';
+  const nutzToggle = document.getElementById('vehicle-nutzung-toggle');
+  if (nutzToggle) {
+    const idx = _vehicleNutzung === 'fahrtenbuch' ? 1 : 0;
+    setVehicleNutzung(nutzToggle.children[idx], _vehicleNutzung);
+  }
   _vehicleAntrieb = v.antrieb;
   const toggle = document.getElementById('vehicle-antrieb-toggle');
   toggle.querySelectorAll('button').forEach((b,i) => b.classList.toggle('on', (i===0)===(v.antrieb==='elektro')));
@@ -5051,6 +5092,7 @@ async function saveVehicle() {
     service_faellig: holen('vehicle-service'),
     bremsfluessigkeit: holen('vehicle-bremsfluessigkeit'),
     reifen_vorne: holen('vehicle-reifen'),
+    nutzungsart: _vehicleNutzung,
   };
   Object.entries(zusatz).forEach(([k, v]) => { if (v) body[k] = v; });
 
@@ -6713,7 +6755,55 @@ async function pruefeBmwImportBereich() {
   } catch (e) { /* ohne Antwort gilt: nicht verbunden */ }
 
   knoepfe.forEach(el => { el.style.display = 'inline-flex'; });
-  if (bereich) bereich.style.display = verbunden ? 'block' : 'none';
+
+  // Ausgeblendet bleibt ausgeblendet — das Archiv braucht man einmal
+  // beim Erstimport, danach nicht mehr.
+  let versteckt = false;
+  try {
+    const s = await (await hole('/api/settings/archiv-bereich')).json();
+    versteckt = !!s.versteckt;
+  } catch (e) { /* im Zweifel anzeigen */ }
+
+  if (bereich) {
+    bereich.style.display = (verbunden && !versteckt) ? 'block' : 'none';
+  }
+}
+
+// Bereich ausblenden. Wieder einblenden geht über die Einstellungen.
+async function archivBereichAusblenden() {
+  const bereich = document.getElementById('trips-bmw-import');
+  if (bereich) bereich.style.display = 'none';
+  try {
+    await fetch('/api/settings/archiv-bereich', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ versteckt: true })
+    });
+    _toast('Ausgeblendet — wieder einblenden unter Einstellungen → BMW');
+  } catch (e) { /* die Anzeige ist trotzdem weg */ }
+}
+
+async function saveArchivBereich(cb) {
+  await fetch('/api/settings/archiv-bereich', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ versteckt: !cb.checked })
+  });
+  _toast(cb.checked ? 'Archiv-Import wird angezeigt' : 'Archiv-Import ausgeblendet');
+}
+
+async function loadArchivBereich() {
+  try {
+    const d = await (await hole('/api/settings/archiv-bereich')).json();
+    const cb = document.getElementById('bmw-archiv-zeigen');
+    if (cb) cb.checked = !d.versteckt;
+  } catch (e) {}
+}
+
+async function archivBereichEinblenden() {
+  await fetch('/api/settings/archiv-bereich', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ versteckt: false })
+  });
+  _toast('Der Archiv-Bereich erscheint wieder bei den Fahrten');
 }
 
 // Ladevorgänge der letzten 30 Tage übernehmen

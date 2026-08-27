@@ -22,8 +22,34 @@ USER_AGENT  = "ChargeAtHomeBillingEngine/1.0"
 TIMEOUT     = 10
 
 
+def _als_koordinate(text: str) -> tuple[float, float] | None:
+    """Erkennt eine Eingabe der Form '50.56274, 7.25786'.
+
+    Fahrten aus dem Fahrzeug tragen manchmal noch Koordinaten statt einer
+    Adresse — etwa wenn die Rueckwaertssuche beim Import nicht erreichbar
+    war. Ohne diese Pruefung wuerde die Streckenberechnung versuchen, die
+    Zahlenfolge als Ortsnamen zu suchen, und nie etwas finden.
+    """
+    import re
+    m = re.match(r"^\s*(-?\d{1,3}\.\d+)\s*,\s*(-?\d{1,3}\.\d+)\s*$", text or "")
+    if not m:
+        return None
+    try:
+        lat, lon = float(m.group(1)), float(m.group(2))
+    except ValueError:
+        return None
+    if -90 <= lat <= 90 and -180 <= lon <= 180:
+        return (lat, lon)
+    return None
+
+
 def geocode_photon(query: str) -> tuple[tuple[float, float] | None, str]:
     """Photon: Adresse → (lon, lat) mit Tippfehlertoleranz. Kein API-Key."""
+    # Schon eine Koordinate? Dann direkt verwenden statt zu suchen.
+    koord = _als_koordinate(query)
+    if koord:
+        return koord, f"{koord[0]:.5f}, {koord[1]:.5f}"
+
     params = urllib.parse.urlencode({"q": query, "limit": 1, "lang": "de"})
     url = f"{PHOTON_URL}?{params}"
     req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
@@ -105,7 +131,13 @@ def adresse_aus_koordinaten(lat: float, lon: float) -> str:
 
     fallback = f"{float(lat):.5f}, {float(lon):.5f}"
     params = urllib.parse.urlencode({"lat": lat, "lon": lon, "lang": "de"})
-    url = f"{PHOTON_URL.rstrip('/')}/reverse?{params}"
+    # Photon hat zwei Endpunkte: '/api' fuer die Suche nach Namen und
+    # '/reverse' fuer Koordinaten. Beide liegen direkt unter der Wurzel —
+    # '/api/reverse' gibt es nicht und antwortet mit 404.
+    basis = PHOTON_URL.rstrip("/")
+    if basis.endswith("/api"):
+        basis = basis[:-4]
+    url = f"{basis}/reverse?{params}"
     req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     try:
         with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:

@@ -442,15 +442,15 @@
         <!-- Aktionen rechts -->
         <div style="margin-left:auto; display:flex; gap:8px; align-items:flex-end; flex-wrap:wrap;">
           <button class="btn btn-sm" onclick="toggleLoxoneLogImport()">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="margin-right:5px;vertical-align:-2px;"><path d="M4 15h13M4 15a1.6 1.6 0 0 1-1.6-1.6v-2.6l1.8-3.4h9.6l2.6 3.4v2.6A1.6 1.6 0 0 1 14.8 15M6 15v1.6M15 15v1.6"/><circle cx="6.4" cy="11.6" r=".8"/><circle cx="13.2" cy="11.6" r=".8"/><path d="M18.5 8.5a4 4 0 0 1 0 5M21 6.5a7 7 0 0 1 0 9"/></svg>
             Loxone-Log importieren
           </button>
           <button class="btn btn-sm bmw-funktion" onclick="cardataLadesessions()" id="bmw-lade-btn"
                   title="Ladevorgänge der letzten 30 Tage über die BMW-CarData-API abrufen">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-            BMW-Ladehistorie</button>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="margin-right:5px;vertical-align:-2px;"><path d="M4 15h13M4 15a1.6 1.6 0 0 1-1.6-1.6v-2.6l1.8-3.4h9.6l2.6 3.4v2.6A1.6 1.6 0 0 1 14.8 15M6 15v1.6M15 15v1.6"/><circle cx="6.4" cy="11.6" r=".8"/><circle cx="13.2" cy="11.6" r=".8"/><path d="M18.5 8.5a4 4 0 0 1 0 5M21 6.5a7 7 0 0 1 0 9"/></svg>
+            BMW CarData — Ladehistorie</button>
           <button class="btn btn-sm" onclick="document.getElementById('csv-file-input').click()">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="margin-right:5px;vertical-align:-2px;"><path d="M4 15h13M4 15a1.6 1.6 0 0 1-1.6-1.6v-2.6l1.8-3.4h9.6l2.6 3.4v2.6A1.6 1.6 0 0 1 14.8 15M6 15v1.6M15 15v1.6"/><circle cx="6.4" cy="11.6" r=".8"/><circle cx="13.2" cy="11.6" r=".8"/><path d="M18.5 8.5a4 4 0 0 1 0 5M21 6.5a7 7 0 0 1 0 9"/></svg>
             CSV importieren</button>
           <a href="/static/beispiel-import.csv" download class="btn btn-sm">Beispieldatei</a>
           <input type="file" id="csv-file-input" accept=".csv" style="display:none" onchange="importCsv(this)">
@@ -458,7 +458,7 @@
           <button class="btn btn-sm" onclick="deleteAllSessions()" style="color:var(--danger); border-color:var(--danger);">Alle löschen</button>
           <button class="btn btn-sm bmw-funktion" onclick="cardataImportZuruecksetzen()"
                   id="bmw-reset-btn"
-                  title="Entfernt alle aus BMW importierten Ladevorgänge und setzt den Importstand zurück">BMW-Import zurücksetzen</button>
+                  title="Entfernt alle aus BMW importierten Ladevorgänge und setzt den Importstand zurück">Import zurücksetzen</button>
         </div>
       </div>
 
@@ -655,8 +655,8 @@
       <div style="display:flex; gap:8px;">
         <button class="btn btn-sm bmw-funktion" onclick="cardataAbrufen(true)" id="bmw-fahrt-btn"
                 title="Neue Fahrten aus dem Fahrzeug abrufen">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:5px; vertical-align:middle;"><path d="M5 17h14M5 17a2 2 0 0 1-2-2v-3l2-5h12l2 5v3a2 2 0 0 1-2 2M7 17v2M17 17v2"/></svg>
-          BMW holen
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="margin-right:5px;vertical-align:-2px;"><path d="M4 15h13M4 15a1.6 1.6 0 0 1-1.6-1.6v-2.6l1.8-3.4h9.6l2.6 3.4v2.6A1.6 1.6 0 0 1 14.8 15M6 15v1.6M15 15v1.6"/><circle cx="6.4" cy="11.6" r=".8"/><circle cx="13.2" cy="11.6" r=".8"/><path d="M18.5 8.5a4 4 0 0 1 0 5M21 6.5a7 7 0 0 1 0 9"/></svg>
+          BMW CarData — Fahrten
         </button>
         <button class="btn btn-primary" onclick="toggleNewTrip()">+ Fahrt erfassen</button>
       </div>
@@ -871,6 +871,16 @@
             </div>
             <input type="file" id="trips-archiv-datei" accept=".zip" style="max-width:210px;">
             <button class="btn btn-sm" onclick="cardataArchivImport(true)" id="trips-archiv-btn">Archiv einlesen</button>
+            <!-- Ausblenden: Das Archiv braucht man einmal beim Erstimport.
+                 Danach steht der Bereich nur im Weg. -->
+            <button class="icon-btn" onclick="archivBereichAusblenden()"
+                    title="Ausblenden — wieder einblenden unter Einstellungen → BMW"
+                    style="color:var(--text-tertiary);">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                   stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                <path d="M18 6L6 18M6 6l12 12"/>
+              </svg>
+            </button>
           </div>
           <div id="trips-import-ergebnis" style="margin-top:8px;"></div>
         </div>
@@ -917,7 +927,7 @@
            Braucht keine Archiv-Anforderung und keine Wartezeit. -->
       <button class="btn btn-sm bmw-funktion" onclick="fahrzeugAusBmw()"
               title="Fahrzeugdaten aus der BMW-Verbindung übernehmen">
-        Aus BMW-Portal
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="margin-right:5px;vertical-align:-2px;"><path d="M4 15h13M4 15a1.6 1.6 0 0 1-1.6-1.6v-2.6l1.8-3.4h9.6l2.6 3.4v2.6A1.6 1.6 0 0 1 14.8 15M6 15v1.6M15 15v1.6"/><circle cx="6.4" cy="11.6" r=".8"/><circle cx="13.2" cy="11.6" r=".8"/><path d="M18.5 8.5a4 4 0 0 1 0 5M21 6.5a7 7 0 0 1 0 9"/></svg>BMW CarData — Fahrzeugdaten
       </button>
       <button class="btn btn-primary" onclick="openVehicleModal()">+ Fahrzeug hinzufügen</button>
     </div>
@@ -1016,6 +1026,24 @@
         <label style="display:flex; align-items:center; gap:8px; margin-top:12px; font-size:13px; cursor:pointer;">
           <input type="checkbox" id="vehicle-standard"> Als Standard-Fahrzeug für neue Fahrten
         </label>
+
+        <!-- Nutzungsart: Der Unterschied zwischen einem Fahrtenbuch nach
+             § 6 Abs. 1 Nr. 4 EStG und einer reinen Reisekostenabrechnung ist
+             grundlegend. Beim Fahrtenbuch führt jede fehlende Fahrt zur
+             Verwerfung durch das Finanzamt — bei Reisekosten spielt das
+             keine Rolle. -->
+        <div style="margin-top:16px;">
+          <label class="field-label">Wofür wird dieses Fahrzeug erfasst?</label>
+          <div class="toggle-pair" id="vehicle-nutzung-toggle" style="width:100%;">
+            <button class="on" onclick="setVehicleNutzung(this,'reisekosten')" style="flex:1;">
+              Reisekosten
+            </button>
+            <button onclick="setVehicleNutzung(this,'fahrtenbuch')" style="flex:1;">
+              Fahrtenbuch
+            </button>
+          </div>
+          <div id="vehicle-nutzung-hint" class="hint" style="margin-top:8px;"></div>
+        </div>
 
         <!-- Fahrzeugdaten und Termine. Werden beim BMW-Abruf befüllt,
              lassen sich aber auch von Hand pflegen — für Fahrzeuge
@@ -2219,6 +2247,18 @@
               unterscheiden. Fahrten und Ladungen in Ihrer Straße gelten deshalb als
               „zuhause" und tragen im Fahrtenbuch die hier eingetragene Adresse.
             </div>
+          </div>
+
+          <label style="display:flex; align-items:center; gap:8px; font-size:12.5px;
+                 cursor:pointer; margin-bottom:14px;">
+            <input type="checkbox" id="bmw-archiv-zeigen" style="width:auto; margin:0;"
+                   onchange="saveArchivBereich(this)">
+            Archiv-Import bei den Fahrten anzeigen
+          </label>
+          <div class="hint" style="margin:-10px 0 14px 26px;">
+            Das Datenarchiv brauchen Sie einmal beim Erstimport, um Zeiträume
+            vor den letzten 30 Tagen zu erfassen. Danach liefert die laufende
+            Verbindung alles Weitere.
           </div>
 
           <label style="display:flex; align-items:center; gap:8px; font-size:12.5px;
