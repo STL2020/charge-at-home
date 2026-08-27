@@ -19,6 +19,15 @@ ZUGANG
 Der id_token laeuft staendig ab und muss erneuert werden. Deshalb baut
 dieser Dienst die Verbindung vor Ablauf von sich aus neu auf.
 
+TOPIC-KLARSTELLUNG (28.08.)
+----------------------------
+Kurzzeitig auf "nur die VIN" geaendert, weil das Portal im Feld "Topic"
+ausschliesslich die VIN anzeigt. Das war falsch: BMWs eigene Anleitung
+(Kapitel "Streaming", Abschnitt 4.3.2/4.4) stellt klar, dass das
+Portal-Feld "Topic" nur einen Baustein liefert und das tatsaechliche
+MQTT-Thema durch den Anwender selbst als "username/topic" (hier:
+gcid/vin) zusammengesetzt werden muss. Zurueckgesetzt auf <gcid>/<vin>.
+
 VORAUSSETZUNGEN beim Anwender
 -----------------------------
     1. Im BMW-Portal einen CarData-Client anlegen
@@ -43,8 +52,32 @@ from datetime import datetime, timedelta
 from repositories import settings_repository
 import services.event_log_service as event_log_service
 
-MQTT_HOST = "customer.streaming-cardata.bmwgroup.com"
-MQTT_PORT = 9000
+MQTT_HOST_STANDARD = "customer.streaming-cardata.bmwgroup.com"
+MQTT_PORT_STANDARD = 9000
+
+
+def mqtt_host() -> str:
+    """Host für die Stream-Verbindung — einstellbar statt fest verdrahtet.
+
+    Grund: Host und Port stehen im BMW-Portal als Teil der individuellen
+    Streaming-Zugangsdaten. Zwar sind sie bei allen bekannten Konten bisher
+    identisch, aber fest im Code zu verankern, was eigentlich Kontodaten
+    sind, ist derselbe Fehler wie bei Client-ID und VIN — deshalb
+    einstellbar, mit dem bekannten Wert als Vorbelegung."""
+    return settings_repository.get_setting("cardata_stream_host") or MQTT_HOST_STANDARD
+
+
+def mqtt_port() -> int:
+    wert = settings_repository.get_setting("cardata_stream_port")
+    try:
+        return int(wert) if wert else MQTT_PORT_STANDARD
+    except (TypeError, ValueError):
+        return MQTT_PORT_STANDARD
+
+
+def setze_verbindung(host: str, port: int) -> None:
+    settings_repository.set_setting("cardata_stream_host", (host or "").strip())
+    settings_repository.set_setting("cardata_stream_port", str(int(port)) if port else "")
 
 # Der id_token gilt rund eine Stunde. Zehn Minuten vorher wird erneuert,
 # damit die Verbindung nicht mitten in einer Fahrt abreisst.
@@ -65,7 +98,27 @@ _thread = None
 
 
 def status() -> dict:
-    """Zustand fuer die Anzeige."""
+    """Zustand fuer die Anzeige.
+
+    'aktiv' ist die gespeicherte Einstellung, 'laeuft' der tatsaechliche
+    Thread-Zustand dieses Prozesses — beide koennen auseinanderfallen,
+    naemlich direkt nach einem Neustart, bevor die Anwendung den Stream
+    wieder aufgenommen hat. Genau das soll hier sichtbar werden, statt
+    schweigend als "wird aufgebaut" durchzugehen.
+    """
+    fehler = _zustand["fehler"]
+    if (_zustand["laeuft"] and not _zustand["verbunden"] and not fehler
+            and _zustand.get("versuch_seit")):
+        try:
+            wartet_s = (datetime.now() - datetime.fromisoformat(
+                _zustand["versuch_seit"])).total_seconds()
+        except Exception:
+            wartet_s = 0
+        if wartet_s > 45:
+            fehler = ("Seit über 45 Sekunden keine Verbindung zustande "
+                      "gekommen. Meist Netzwerk (Port 9000 ausgehend "
+                      "blockiert?) oder ein abgelaufener Token — im "
+                      "Zweifel Haken entfernen und neu setzen.")
     return {
         "aktiv": aktiviert(),
         "laeuft": _zustand["laeuft"],
@@ -73,9 +126,9 @@ def status() -> dict:
         "letzte_nachricht": _zustand["letzte_nachricht"],
         "nachrichten": _zustand["nachrichten"],
         "verbindungen": _zustand.get("verbindungen", 0),
-        "fehler": _zustand["fehler"],
-        "host": MQTT_HOST,
-        "port": MQTT_PORT,
+        "fehler": fehler,
+        "host": mqtt_host(),
+        "port": mqtt_port(),
     }
 
 
@@ -125,6 +178,7 @@ def starte() -> dict:
 
     _zustand["laeuft"] = True
     _zustand["fehler"] = ""
+    _zustand["versuch_seit"] = datetime.now().isoformat(timespec="seconds")
     _thread = threading.Thread(target=_schleife, args=(gcid, vin), daemon=True)
     _thread.start()
     event_log_service.log_event("bmw", "info", "CarData-Stream gestartet.")
@@ -173,6 +227,11 @@ def _schleife(gcid: str, vin: str) -> None:
             client.username_pw_set(gcid, token)
             client.tls_set()
 
+            # Zusammensetzung nach offizieller BMW-Doku (Kapitel "Streaming"):
+            # "You can create a subscription by using your username and
+            # topic such as 'username/topic'" — das im Portal angezeigte
+            # Topic-Feld (nur die VIN) ist ein Baustein, nicht das fertige
+            # MQTT-Thema. Siehe TOPIC-KLARSTELLUNG im Modul-Docstring.
             thema = f"{gcid}/{vin}"
 
             # Nur die erste Verbindung protokollieren. MQTT baut nach jeder
@@ -208,7 +267,7 @@ def _schleife(gcid: str, vin: str) -> None:
             client.on_disconnect = bei_trennung
             client.on_message = bei_nachricht
 
-            client.connect(MQTT_HOST, MQTT_PORT, keepalive=60)
+            client.connect(mqtt_host(), mqtt_port(), keepalive=60)
             _client = client
             client.loop_start()
 

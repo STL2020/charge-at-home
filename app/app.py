@@ -60,7 +60,7 @@ def handle_404(exc):
     # Für nicht-API-Routen: normale 404-Seite oder zur App weiterleiten
     return jsonify({"error": "not_found"}), 404
 
-PFLICHTENHEFT_VERSION = "12.50"
+PFLICHTENHEFT_VERSION = "12.51"
 
 # Fassung, die dem Anwender gezeigt wird. Die Pflichtenheft-Nummer daneben ist
 # die interne Baunummer — beide zusammen machen Rückfragen eindeutig.
@@ -138,6 +138,10 @@ PROJECT_STATUS = [
     {"sprint": 7, "id": "S7-03", "modul": "Release", "text": "Einsprachig Deutsch — englische Fassung entfällt (Wunschkriterium)", "status": "fertig"},
     {"sprint": 7, "id": "S7-04", "modul": "Release", "text": "Feld 'Gültig ab' fest auf 01.01.2026", "status": "fertig", "view": "einstellungen"},
     {"sprint": 7, "id": "S7-05", "modul": "Release", "text": "Payhip-Lizenzlogik Free vs. Pro", "status": "fertig", "view": "einstellungen"},
+
+    {"sprint": 8, "id": "S8-01", "modul": "BMW Telematik", "text": "CarData-Stream: Wiederaufnahme nach Container-Neustart (fehlte bisher — Einstellung blieb 'an', Hintergrund-Thread lief nach Neustart aber nicht mehr)", "status": "fertig", "view": None},
+    {"sprint": 8, "id": "S8-02", "modul": "BMW Telematik", "text": "CarData-Stream: Host/Port einstellbar statt fest im Code (Streaming-Zugangsdaten aus dem BMW-Portal), Statusanzeige meldet nach 45s ohne Verbindung einen echten Fehler statt endlos 'wird aufgebaut'", "status": "fertig", "view": "einstellungen"},
+    {"sprint": 8, "id": "S8-03", "modul": "Diagnose", "text": "Eigenstaendiges Diagnose-Werkzeug mqtt_diagnose.py: separate Anmeldung mit explizit angefordertem Streaming-Scope, protokolliert jede Verbindungsstufe (Connect/Subscribe/Nachricht) einzeln in Datei und auf dem Bildschirm", "status": "fertig", "view": None},
 
 ]
 
@@ -3981,6 +3985,34 @@ def api_cardata_stream_status():
     return jsonify(cardata_stream_service.status())
 
 
+@app.route("/api/cardata/stream-verbindung", methods=["GET", "POST"])
+def api_cardata_stream_verbindung():
+    """Host und Port fuer die Stream-Verbindung.
+
+    Beide stehen im BMW-Portal als Teil der individuellen
+    Streaming-Zugangsdaten (nicht als App-Geheimnis) und sollen deshalb
+    eintragbar sein statt im Code zu stehen — siehe cardata_stream_service.
+    """
+    from services import cardata_stream_service
+    if request.method == "GET":
+        return jsonify({
+            "host": cardata_stream_service.mqtt_host(),
+            "port": cardata_stream_service.mqtt_port(),
+            "host_standard": cardata_stream_service.MQTT_HOST_STANDARD,
+            "port_standard": cardata_stream_service.MQTT_PORT_STANDARD,
+        })
+    daten = request.get_json(force=True, silent=True) or {}
+    host = str(daten.get("host") or "").strip()
+    try:
+        port = int(daten.get("port") or 0)
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "meldung": "Port muss eine Zahl sein."}), 400
+    cardata_stream_service.setze_verbindung(host, port)
+    return jsonify({"ok": True,
+                    "host": cardata_stream_service.mqtt_host(),
+                    "port": cardata_stream_service.mqtt_port()})
+
+
 @app.route("/api/cardata/stream", methods=["POST"])
 def api_cardata_stream_setzen():
     """Stream ein- oder ausschalten.
@@ -4579,4 +4611,26 @@ if __name__ == "__main__":
             cardata_service.starte_automatik()
     except Exception:
         pass
+
+    # MQTT-Stream ebenso wieder aufnehmen, falls eingeschaltet.
+    #
+    # BUG BEHOBEN (28.08.): Diese Zeilen fehlten. Die Einstellung
+    # 'cardata_stream_aktiv' wird dauerhaft gespeichert, der eigentliche
+    # Hintergrund-Thread aber nur beim manuellen Umschalten in den
+    # Einstellungen gestartet (_zustand ist reiner Prozessspeicher). Nach
+    # jedem Container-Neustart — Update, Docker-Neustart, Absturz — war die
+    # Einstellung weiterhin "an", der Stream lief aber nicht mehr, ohne dass
+    # das irgendwo auffiel: Die Checkbox blieb angehakt, und die Anzeige
+    # zeigte dauerhaft "Verbindung wird aufgebaut", weil status() nur die
+    # Einstellung abfragt, nicht den tatsaechlichen Thread-Zustand. Ohne
+    # erneutes Anklicken der Checkbox kamen danach nie wieder Meldungen an —
+    # exakt das gemeldete Verhalten (Abruf per Hand funktioniert weiterhin,
+    # weil er einen eigenen Codepfad ohne den Hintergrund-Thread nutzt).
+    try:
+        from services import cardata_stream_service
+        if cardata_stream_service.aktiviert():
+            cardata_stream_service.starte()
+    except Exception:
+        pass
+
     app.run(host="0.0.0.0", port=8501, debug=False)

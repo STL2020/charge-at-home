@@ -2210,6 +2210,38 @@
               </div>
               <div id="stream-zustand" style="margin-top:10px; font-size:12.5px;
                    display:none;"></div>
+
+              <!-- Verbindungsdaten einstellbar statt fest im Code — siehe
+                   cardata_stream_service.py. Zugeklappt per Default, es
+                   sind Werte aus dem BMW-Portal, keine taeglich gebrauchte
+                   Einstellung. -->
+              <div style="margin-top:12px;">
+                <a href="#" onclick="document.getElementById('stream-verbindung-details').style.display =
+                  document.getElementById('stream-verbindung-details').style.display === 'none' ? 'block' : 'none';
+                  return false;" style="font-size:12px;">
+                  Verbindungsdaten (Host, Port) anzeigen/ändern
+                </a>
+                <div id="stream-verbindung-details" style="display:none; margin-top:10px;">
+                  <div class="form-row-2">
+                    <div>
+                      <label class="field-label">Host</label>
+                      <input type="text" id="stream-host" style="width:100%; font-family:var(--font-mono); font-size:12.5px;"
+                             onchange="streamVerbindungSpeichern()">
+                    </div>
+                    <div>
+                      <label class="field-label">Port</label>
+                      <input type="number" id="stream-port" style="width:100%; font-family:var(--font-mono); font-size:12.5px;"
+                             onchange="streamVerbindungSpeichern()">
+                    </div>
+                  </div>
+                  <div class="hint" style="margin-top:6px;">
+                    Aus den Streaming-Zugangsdaten im BMW-Portal (CarData Stream
+                    → Host/Port). Vorbelegt mit dem bekannten Wert — nur ändern,
+                    falls BMW für dein Konto etwas anderes anzeigt.
+                  </div>
+                  <div id="stream-thema-vorschau" class="hint" style="margin-top:6px; font-family:var(--font-mono);"></div>
+                </div>
+              </div>
             </div>
 
             <div>

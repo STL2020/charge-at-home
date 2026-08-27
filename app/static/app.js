@@ -2192,7 +2192,7 @@ function showSettingsTab(tab, btn) {
   if (tab === 'person') {
     loadPersons();
   }
-  if (tab === 'bmw') { cardataStatusLaden(); cardataFahrzeugdatenLaden(); loadLadepreise(); loadHeimadresse(); loadBmwDuplikate(); loadBmwHeimladungen(); loadKontingent(); loadStreamZustand(); }
+  if (tab === 'bmw') { cardataStatusLaden(); cardataFahrzeugdatenLaden(); loadLadepreise(); loadHeimadresse(); loadBmwDuplikate(); loadBmwHeimladungen(); loadKontingent(); loadStreamZustand(); loadStreamVerbindung(); }
   if (tab === 'lizenz') editionAnzeigen();
   if (tab === 'system') { backupStatusLaden(); demodatenStatus(); }
   if (tab === 'hilfe') hilfeLaden();
@@ -6607,6 +6607,7 @@ async function cardataVinSpeichern() {
     headers:{'Content-Type':'application/json'}, body: JSON.stringify({ vin }) });
   _toast('Fahrzeug gespeichert');
   cardataStatusLaden();
+  aktualisiereThemaVorschau();
 }
 
 async function cardataAutomatikSpeichern() {
@@ -7175,7 +7176,58 @@ async function cardataStreamSchalten(cb) {
   }
 }
 
+// ─── Verbindungsdaten (Host/Port) — einstellbar statt fest im Code ────────
+async function loadStreamVerbindung() {
+  const hostFeld = document.getElementById('stream-host');
+  const portFeld = document.getElementById('stream-port');
+  if (!hostFeld || !portFeld) return;
+  try {
+    const d = await (await hole('/api/cardata/stream-verbindung')).json();
+    hostFeld.value = d.host || d.host_standard || '';
+    portFeld.value = d.port || d.port_standard || '';
+    hostFeld.placeholder = d.host_standard || '';
+    portFeld.placeholder = d.port_standard || '';
+  } catch (e) {}
+  aktualisiereThemaVorschau();
+}
+
+async function streamVerbindungSpeichern() {
+  const host = document.getElementById('stream-host').value.trim();
+  const port = parseInt(document.getElementById('stream-port').value, 10) || 0;
+  try {
+    await fetch('/api/cardata/stream-verbindung', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ host, port })
+    });
+    _toast('Verbindungsdaten gespeichert — wirkt beim nächsten Verbindungsaufbau');
+  } catch (e) {
+    _toast('Speichern fehlgeschlagen');
+  }
+}
+
+// Zeigt das tatsaechliche MQTT-Thema (gcid/vin), damit sich das ohne
+// Rätselraten mit dem Portal-Wert abgleichen laesst — genau das Thema, das
+// im Code abonniert wird, nicht nur der Bauplan dazu.
+async function aktualisiereThemaVorschau() {
+  const box = document.getElementById('stream-thema-vorschau');
+  if (!box) return;
+  try {
+    const [statusD, authD] = await Promise.all([
+      (await hole('/api/cardata/stream')).json(),
+      (await hole('/api/cardata/status')).json().catch(() => ({})),
+    ]);
+    const gcid = authD?.gcid || '';
+    const vin = document.getElementById('cardata-vin')?.value || '';
+    if (gcid && vin) {
+      box.textContent = `Abonniertes Thema: ${gcid}/${vin}`;
+    } else {
+      box.textContent = 'Thema erscheint hier, sobald Anmeldung und VIN vorliegen.';
+    }
+  } catch (e) {}
+}
+
 async function loadStreamZustand() {
+
   const box = document.getElementById('stream-zustand');
   const cb = document.getElementById('cardata-stream');
   if (!box) return;
