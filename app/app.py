@@ -60,7 +60,7 @@ def handle_404(exc):
     # Für nicht-API-Routen: normale 404-Seite oder zur App weiterleiten
     return jsonify({"error": "not_found"}), 404
 
-PFLICHTENHEFT_VERSION = "12.53"
+PFLICHTENHEFT_VERSION = "12.54"
 
 # Fassung, die dem Anwender gezeigt wird. Die Pflichtenheft-Nummer daneben ist
 # die interne Baunummer — beide zusammen machen Rückfragen eindeutig.
@@ -144,6 +144,7 @@ PROJECT_STATUS = [
     {"sprint": 8, "id": "S8-03", "modul": "Diagnose", "text": "Eigenstaendiges Diagnose-Werkzeug mqtt_diagnose.py: separate Anmeldung mit explizit angefordertem Streaming-Scope, protokolliert jede Verbindungsstufe (Connect/Subscribe/Nachricht) einzeln in Datei und auf dem Bildschirm", "status": "fertig", "view": None},
     {"sprint": 8, "id": "S8-04", "modul": "BMW Telematik", "text": "CarData-Stream: SUBACK-Pruefung nachgeruestet — subscribe() wurde aufgerufen, ohne je die Antwort von BMW auszuwerten; 'Verbunden' konnte also bei im Stillen abgelehntem Thema-Abonnement stehen bleiben, ohne dass Fahrten je ankamen. Status unterscheidet jetzt 'verbunden, Abonnement offen/bestaetigt/abgelehnt'", "status": "fertig", "view": "einstellungen"},
     {"sprint": 8, "id": "S8-05", "modul": "Diagnose", "text": "Live-Protokoll der Stream-Verbindung direkt in der App (Einstellungen -> BMW), kein Terminal/Putty mehr noetig: jede Verbindungsstufe (Connect/Subscribe/Nachricht/Fehler) im Ringpuffer, automatische Aktualisierung alle 5s nach Muster der bestehenden OCPP-Rohdaten-Anzeige", "status": "fertig", "view": "einstellungen"},
+    {"sprint": 8, "id": "S8-06", "modul": "BMW Telematik", "text": "CarData-Stream: erzwungene Token-Erneuerung nach wiederholten Verbindungsfehlschlaegen — beobachtet in Produktion (echtes Protokoll): nach 'Normal disconnection' (vermutlich zweite Sitzung mit gleichem Konto) wurden alle Rekonnektversuche mit dem als 'noch gueltig' gebuchten, tatsaechlich aber toten Token wiederholt, endlos 'Bad user name or password'. Ab dem 2. Fehlschlag in Folge wird jetzt zwangsweise erneuert.", "status": "fertig", "view": "einstellungen"},
 
 ]
 

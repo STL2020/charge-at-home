@@ -244,9 +244,26 @@ def _schleife(gcid: str, vin: str) -> None:
     from services import cardata_auth_service as auth
 
     wartezeit = 5      # waechst bei wiederholten Fehlern
+    # BUG BEHOBEN (28.08.): Nach einem abgelehnten Login (z.B. weil der
+    # id_token von BMW-Seite ungueltig wurde — beobachtet nach "Normal
+    # disconnection", vermutlich weil eine zweite Sitzung mit demselben
+    # Konto/Client aufgemacht wurde) hat auth.hole_id_token() denselben,
+    # weiterhin als "noch gueltig" gebuchten Token zurueckgegeben. Die
+    # Schleife hat sich dadurch mit demselben toten Token totgelaufen —
+    # unendlich oft "Bad user name or password", nie eine echte Erneuerung.
+    # Ab der zweiten Fehlermeldung in Folge wird der Token jetzt zwangsweise
+    # erneuert, statt der eigenen (in diesem Fall falschen) Gueltigkeitsbuchhaltung
+    # zu vertrauen.
+    fehlschlaege_in_folge = 0
 
     while _zustand["laeuft"]:
         try:
+            if fehlschlaege_in_folge >= 2:
+                _protokoll_schreiben(
+                    f"{fehlschlaege_in_folge} Fehlschläge in Folge — erzwinge "
+                    f"Token-Erneuerung statt es erneut mit demselben zu versuchen.")
+                auth.erneuere_tokens(erzwingen=True)
+
             token = auth.hole_id_token()
             if not token:
                 _zustand["fehler"] = "Kein gültiger Token — bitte neu anmelden."
@@ -274,7 +291,9 @@ def _schleife(gcid: str, vin: str) -> None:
             erstverbindung = {"erledigt": False}
 
             def bei_verbindung(c, userdata, flags, rc, props=None):
+                nonlocal fehlschlaege_in_folge
                 if rc == 0:
+                    fehlschlaege_in_folge = 0
                     _zustand["verbunden"] = True
                     _zustand["abonniert"] = None   # zuruecksetzen, Antwort steht noch aus
                     _zustand["fehler"] = ""
@@ -356,9 +375,11 @@ def _schleife(gcid: str, vin: str) -> None:
                 pass
 
         except Exception as e:
+            fehlschlaege_in_folge += 1
             _zustand["verbunden"] = False
             _zustand["fehler"] = f"{type(e).__name__}: {e}"
-            _protokoll_schreiben(f"✕ Fehler: {_zustand['fehler'][:300]}")
+            _protokoll_schreiben(f"✕ Fehler ({fehlschlaege_in_folge}. in Folge): "
+                                f"{_zustand['fehler'][:300]}")
             event_log_service.log_event("bmw", "warning",
                 f"Stream-Fehler: {_zustand['fehler'][:200]}")
             time.sleep(wartezeit)
