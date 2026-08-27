@@ -1290,7 +1290,17 @@ input.feld-fehler { border-color: var(--danger); }
   gap: 16px;
   align-items: flex-start;
 }
-.trips-liste { flex: 1 1 auto; min-width: 0; }
+.trips-liste {
+  flex: 1 1 auto;
+  min-width: 0;
+  /* Ladevorgaenge hat mit 12 Spalten deutlich mehr als Fahrten mit 9 —
+     ohne eigenen Scrollbereich lief die Tabelle ueber ihre zugeteilte
+     Breite hinaus und schob sich sichtbar HINTER das Bearbeiten-Feld
+     rechts daneben. Ein eigener horizontaler Scrollbalken haelt die
+     Tabelle innerhalb ihrer Spalte, komplett automatisch — auch wenn
+     spaeter weitere Spalten dazukommen. */
+  overflow-x: auto;
+}
 
 .trips-detail,
 .sessions-detail {

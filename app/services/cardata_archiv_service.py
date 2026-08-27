@@ -253,11 +253,30 @@ def importiere_ladehistorie_datei(vehicle_id: int, zip_pfad: str, user_id: int,
     Ladebloecken/SoC) — nur die Quelle der Rohdaten unterscheidet sich.
     Die fruehere Variante hat aus denselben Daten stattdessen Fahrten
     rekonstruiert; das ist entfernt (siehe rekonstruiere_fahrten-Docstring),
-    weil zwischen zwei Ladungen beliebig viel liegen kann."""
+    weil zwischen zwei Ladungen beliebig viel liegen kann.
+
+    BUG BEHOBEN (28.08.): Beim Umbau auf je-Fahrzeug-Verbindungen ging die
+    Uebernahme von Kilometerstand, HU-Termin, Service, Bremsfluessigkeit
+    und Reifengroesse aus dem Archiv verloren — die fruehere globale
+    Variante hatte das ueber lies_fahrzeugdaten() erledigt, das blieb beim
+    Umbau versehentlich aussen vor. Jetzt wieder da, diesmal gezielt auf
+    das uebergebene Fahrzeug statt auf eine geratene Zuordnung."""
     gelesen = lese_ladehistorie(zip_pfad)
     if not gelesen["ok"]:
         return gelesen
 
     from services import cardata_service
-    return cardata_service.importiere_ladesessions(
+    ergebnis = cardata_service.importiere_ladesessions(
         vehicle_id, vin, user_id, sessions_liste=gelesen["eintraege"])
+
+    try:
+        fz_daten = lies_fahrzeugdaten(zip_pfad)
+        stammdaten = {k: v for k, v in fz_daten.items() if k != "vin"}
+        if stammdaten:
+            from repositories import vehicle_repository
+            vehicle_repository.setze_stammdaten(vehicle_id, stammdaten)
+            ergebnis["stammdaten_aktualisiert"] = list(stammdaten.keys())
+    except Exception:
+        pass  # Ladevorgaenge sind das Wichtige — Stammdaten sind Beiwerk
+
+    return ergebnis

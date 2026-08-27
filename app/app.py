@@ -60,7 +60,7 @@ def handle_404(exc):
     # Für nicht-API-Routen: normale 404-Seite oder zur App weiterleiten
     return jsonify({"error": "not_found"}), 404
 
-PFLICHTENHEFT_VERSION = "13.2"
+PFLICHTENHEFT_VERSION = "13.4"
 
 # Fassung, die dem Anwender gezeigt wird. Die Pflichtenheft-Nummer daneben ist
 # die interne Baunummer — beide zusammen machen Rückfragen eindeutig.
@@ -156,6 +156,11 @@ PROJECT_STATUS = [
     {"sprint": 9, "id": "S9-07", "modul": "Fahrzeuge", "text": "Link zur BMW-Portal-Anmeldung im Fahrzeug-Dialog korrigiert auf https://www.bmw.de/de-de/mybmw/vehicle-overview (Fahrzeug waehlen -> BMW CarData -> Technical Access) statt des alten CarData-Direktlinks.", "status": "fertig", "view": "fahrzeuge"},
     {"sprint": 9, "id": "S9-08", "modul": "Einstellungen", "text": "BUG BEHOBEN: showSettingsTab() referenzierte '_streamLogAutoRefreshTimer', eine Variable, die beim Entfernen der alten globalen BMW-Protokollanzeige geloescht wurde. Jeder Tabwechsel ausser 'BMW' brach dadurch mit einem ReferenceError ab, bevor der neue Tab sichtbar geschaltet wurde — alle Bereiche ausser BMW blieben leer. node --check erkennt das nicht (nur Syntax, keine Variablenpruefung); ein echter no-undef-Lint-Durchlauf (eslint) ist deshalb ab sofort fester Teil der Pruefung vor jeder Auslieferung.", "status": "fertig", "view": "einstellungen"},
     {"sprint": 9, "id": "S9-09", "modul": "Oberflaeche", "text": "Hauptbereich (.topbar, .content) auf max. 1680px begrenzt und zentriert. Auf sehr breiten Monitoren zog sich der Inhalt zuvor ueber die gesamte Fensterbreite; Tabellen ohne Datenzeilen (z.B. Fahrten, Ladevorgaenge) verteilten ihre Spaltenkoepfe dann mit grossen, unschoenen Luecken. Automatisch behoben, keine Aenderung auf normalen/schmalen Fenstern.", "status": "fertig", "view": None},
+    {"sprint": 9, "id": "S9-10", "modul": "Ladevorgaenge", "text": "BUG BEHOBEN: Die Ladevorgaenge-Tabelle (12 Spalten) lief ueber ihre zugeteilte Breite hinaus und schob sich sichtbar HINTER das Bearbeiten-Feld rechts daneben, sobald eine Session zum Bearbeiten geoeffnet war — bei Fahrten (9 Spalten) fiel das nicht auf. Listenspalte bekommt jetzt einen eigenen horizontalen Scrollbereich statt ueberzulaufen; wirkt automatisch, kein manueller Splitter noetig.", "status": "fertig", "view": "ladevorgaenge"},
+    {"sprint": 9, "id": "S9-11", "modul": "Einstellungen", "text": "Bereich 'BMW CarData' aufgeraeumt und in 'Ladeimport' umbenannt: verwaiste Checkbox 'Archiv-Import bei den Fahrten anzeigen' entfernt (referenzierte eine laengst geloeschte Funktion, Text war seit dem Fahrzeug-Umbau irrefuehrend -- der Archiv-Import lebt jetzt im Fahrzeug-Dialog und hat mit der Fahrten-Ansicht nichts mehr zu tun). Verwaiste Verweiskarte auf die alte globale BMW-Verbindung sowie die nicht mehr zutreffende Vollversions-Sperre fuer diesen Bereich entfernt (Wohnadresse, Strompreise und Heimladungen-Uebernahme sind editionsunabhaengig nutzbar). Uebrig bleiben nur die Einstellungen, die wirklich global sind.", "status": "fertig", "view": "einstellungen"},
+    {"sprint": 9, "id": "S9-12", "modul": "BMW Telematik", "text": "WICHTIGE KLARSTELLUNG: Das BMW-Datenarchiv enthaelt nachweislich KEINE Fahrten, nur Ladehistorie (mit Stephans echter Archivdatei bestaetigt: 49 Eintraege, alle Ladevorgaenge, null Fahrten). Ein 'Fahrten aus Archiv importieren'-Knopf ist deshalb technisch nicht umsetzbar. Stattdessen: BUG BEHOBEN — beim Umbau auf je-Fahrzeug-Verbindungen ging die Uebernahme von Kilometerstand, HU-Termin, Service, Bremsfluessigkeit und Reifengroesse aus dem Archiv verloren (importiere_ladehistorie_datei rief lies_fahrzeugdaten() nicht mehr auf). Wieder hergestellt und mit echter Archivdatei bestaetigt (alle 5 Felder korrekt uebernommen).", "status": "fertig", "view": "fahrzeuge"},
+    {"sprint": 9, "id": "S9-13", "modul": "BMW Telematik", "text": "Archiv-Import (ZIP-Datei einlesen) bewusst aus der Vollversions-Sperre herausgenommen (neue Pruefung 'bmw_archiv' statt 'bmw'): braucht keine laufende BMW-Anmeldung und kein Tageskontingent, nur eine bereits heruntergeladene Datei — anders als die Live-API-Anbindung. Im Fahrzeug-Dialog jetzt permanent sichtbar und nutzbar, auch ohne vorherige Anmeldung und in jeder Ausgabe.", "status": "fertig", "view": "fahrzeuge"},
+    {"sprint": 9, "id": "S9-14", "modul": "Dashboard", "text": "Fahrzeugstatus-Kachel komplett neu gestaltet: volle Breite statt schmaler Mehrspalten-Kacheln, konsolidierte Datenpunkte im etablierten Kachel-Stil (Reichweite, Ladestand, Kilometerstand, naechster Service, Verbrauch, Akkukapazitaet, Akkuzustand, Wochenlaufleistung), zusaetzlich eine eingebettete Kartenvorschau des letzten bekannten Standorts (derselbe kostenlose Google-Maps-Embed wie bei der Fahrten-Routenvorschau, kein API-Key noetig).", "status": "fertig", "view": "dashboard"},
 
 ]
 
@@ -4110,9 +4115,14 @@ def api_vehicle_cardata_archiv_ladesessions(vehicle_id):
 
     Ersetzt den frueheren Archiv-Import, der stattdessen Fahrten aus
     Ladepunkten rekonstruierte (entfernt: zwischen zwei Ladungen kann
-    beliebig viel liegen, siehe cardata_archiv_service)."""
-    if not edition_service.funktion_verfuegbar("bmw"):
-        return jsonify(edition_service.gesperrt_hinweis("bmw")), 402
+    beliebig viel liegen, siehe cardata_archiv_service).
+
+    Bewusst NICHT hinter "bmw" (Vollversion) gesperrt: das Einlesen einer
+    bereits heruntergeladenen ZIP-Datei braucht keine laufende BMW-Anmeldung
+    und belastet kein Tageskontingent — anders als die live-API-Anbindung.
+    """
+    if not edition_service.funktion_verfuegbar("bmw_archiv"):
+        return jsonify(edition_service.gesperrt_hinweis("bmw_archiv")), 402
     user = _current_user()
     if user is None:
         return jsonify({"error": "no_user"}), 400

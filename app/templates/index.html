@@ -151,8 +151,7 @@
           <span>Fahrzeugstatus</span>
           <button class="btn btn-sm" onclick="ladeFahrzeugStatusKachel()" title="Alle aktualisieren">↻</button>
         </div>
-        <div id="fahrzeug-status-grid" style="display:grid;
-             grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:12px;"></div>
+        <div id="fahrzeug-status-grid" style="display:flex; flex-direction:column; gap:14px;"></div>
       </div>
 
       <!-- Statusleiste: Was läuft gerade? Beantwortet die Frage, bevor sie
@@ -1004,6 +1003,29 @@
 
         <div id="vehicle-bmw-block" style="display:none; margin-bottom:16px; padding:14px 16px;
              background:var(--amber-soft); border:1px solid var(--amber); border-radius:8px;">
+
+          <!-- Archiv-Import steht bewusst VOR der Anmeldung und ganz ohne
+               Verbindungsvoraussetzung: Er braucht keinen laufenden
+               BMW-Login und kein Tageskontingent, nur eine bereits
+               heruntergeladene ZIP-Datei aus dem BMW-Portal — deshalb in
+               jeder Ausgabe nutzbar, nicht nur in der Vollversion. -->
+          <div style="margin-bottom:14px; padding-bottom:14px; border-bottom:1px solid var(--amber);">
+            <div class="field-label" style="margin-bottom:6px;">
+              Ladehistorie aus Archiv-Datei einlesen
+            </div>
+            <div class="hint" style="margin-bottom:8px;">
+              Für Zeiträume vor den letzten 30 Tagen — im BMW-Portal unter
+              „Historisches Datenarchiv" anfordern, nach einigen Stunden als
+              ZIP herunterladen. Funktioniert <b>ohne</b> Anmeldung unten,
+              auch in der kostenlosen Version.
+            </div>
+            <button class="btn btn-sm" onclick="document.getElementById('vehicle-bmw-archiv-datei').click()">
+              Archiv-ZIP auswählen …
+            </button>
+            <input type="file" id="vehicle-bmw-archiv-datei" accept=".zip" style="display:none" onchange="vehicleBmwArchivImport(this)">
+            <div id="vehicle-bmw-import-ergebnis" class="hint" style="margin-top:6px;"></div>
+          </div>
+
           <div id="vehicle-bmw-schritt-anmelden">
             <div class="hint" style="margin-bottom:8px;">
               Client-ID erzeugst du im
@@ -1059,12 +1081,7 @@
             <div id="vehicle-bmw-stream-zustand" class="hint" style="margin-bottom:10px;"></div>
             <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px;">
               <button class="btn btn-sm" onclick="vehicleBmwLadesessions()">Ladehistorie (30 Tage) importieren</button>
-              <button class="btn btn-sm" onclick="document.getElementById('vehicle-bmw-archiv-datei').click()">
-                Archiv-ZIP importieren (älter)
-              </button>
-              <input type="file" id="vehicle-bmw-archiv-datei" accept=".zip" style="display:none" onchange="vehicleBmwArchivImport(this)">
             </div>
-            <div id="vehicle-bmw-import-ergebnis" class="hint" style="margin-bottom:8px;"></div>
             <button class="btn btn-sm" id="vehicle-bmw-protokoll-toggle-btn" onclick="vehicleBmwProtokollToggle()">Protokoll anzeigen</button>
             <pre id="vehicle-bmw-protokoll" style="display:none; margin-top:8px; max-height:220px; overflow-y:auto;
                  background:var(--bg-input); border-radius:6px; padding:8px 10px; font-size:11px;
@@ -1976,7 +1993,7 @@
         <button class="settings-tab active" onclick="showSettingsTab('hilfe',this)">Hilfe</button>
         <button class="settings-tab" onclick="showSettingsTab('person',this)">Person &amp; Fahrzeug</button>
         <button class="settings-tab" onclick="showSettingsTab('ocpp',this)">OCPP</button>
-        <button class="settings-tab" onclick="showSettingsTab('bmw',this)">BMW CarData</button>
+        <button class="settings-tab" onclick="showSettingsTab('bmw',this)">Ladeimport</button>
         <button class="settings-tab" onclick="showSettingsTab('recht',this)">Rechtliches</button>
         <button class="settings-tab" onclick="showSettingsTab('lizenz',this)">Lizenz</button>
         <button class="settings-tab" onclick="showSettingsTab('system',this)">System</button>
@@ -2158,46 +2175,6 @@
       </div>
 
       <div id="stab-bmw" style="display:none;">
-        <div class="card" id="bmw-gesperrt-hinweis"
-             style="display:none; margin-bottom:16px;">
-          <div style="display:flex; align-items:flex-start; gap:12px;">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--akz-hinweis)"
-                 stroke-width="1.8" style="flex:none; margin-top:2px;">
-              <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-            </svg>
-            <div>
-              <div style="font-size:14px; font-weight:600; margin-bottom:6px;">
-                BMW CarData nur in der Vollversion
-              </div>
-              <div class="hint" style="line-height:1.7;">
-                Die Anbindung übernimmt Ladevorgänge und Fahrten automatisch aus dem
-                Fahrzeug — mit Ladeort, Kilometerstand und Energiemenge. Ohne sie lässt
-                sich alles von Hand erfassen; die Auswertung bleibt vollständig.<br><br>
-                <a onclick="showSettingsTab('lizenz', null)" style="cursor:pointer; text-decoration:underline;">
-                  Zur Lizenz →</a>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div id="bmw-bereich" class="pro-bereich">
-        <!-- Anmeldung und Verbindung liegen jetzt je Fahrzeug im
-             Fahrzeug-Dialog (Fahrzeuge → Fahrzeug hinzufügen/bearbeiten →
-             "Aus BMW-Konto importieren"). Mehrere Fahrzeuge koennen dort
-             jeweils ihre eigene, unabhaengige BMW-Verbindung haben — eine
-             einzelne globale Verbindung wie frueher wuerde das nicht mehr
-             abbilden koennen. -->
-        <div class="card" style="margin-bottom:16px;">
-          <div class="section-title">BMW CarData</div>
-          <div class="hint" style="line-height:1.7;">
-            Die Verbindung (Client-ID, Anmeldung, Datenstrom, Fahrgestellnummer)
-            wird jetzt <b>je Fahrzeug</b> eingerichtet — unter
-            <a onclick="showView('fahrzeuge'); return false;" style="cursor:pointer; text-decoration:underline;">Fahrzeuge</a>
-            beim Anlegen oder Bearbeiten eines Fahrzeugs, über „Aus BMW-Konto importieren".
-            So kann jedes Fahrzeug seine eigene, unabhängige Verbindung haben.
-          </div>
-        </div>
-
-
         <div class="card" style="margin-bottom:16px;">
           <div class="section-title">Ladeort und Preise</div>
           <div style="margin-bottom:14px;">
@@ -2215,18 +2192,6 @@
               unterscheiden. Fahrten und Ladungen in Ihrer Straße gelten deshalb als
               „zuhause" und tragen im Fahrtenbuch die hier eingetragene Adresse.
             </div>
-          </div>
-
-          <label style="display:flex; align-items:center; gap:8px; font-size:12.5px;
-                 cursor:pointer; margin-bottom:14px;">
-            <input type="checkbox" id="bmw-archiv-zeigen" style="width:auto; margin:0;"
-                   onchange="saveArchivBereich(this)">
-            Archiv-Import bei den Fahrten anzeigen
-          </label>
-          <div class="hint" style="margin:-10px 0 14px 26px;">
-            Das Datenarchiv brauchen Sie einmal beim Erstimport, um Zeiträume
-            vor den letzten 30 Tagen zu erfassen. Danach liefert die laufende
-            Verbindung alles Weitere.
           </div>
 
           <label style="display:flex; align-items:center; gap:8px; font-size:12.5px;
@@ -2270,7 +2235,6 @@
               <input type="number" id="lp-ac" step="0.01" value="0.59" style="width:100%"
                      onchange="saveLadepreise()"></div>
           </div>
-          <div id="cardata-abruf-ergebnis" class="hint" style="margin-top:8px;"></div>
         </div>
 
         <!-- Hinweise -->
@@ -2281,14 +2245,9 @@
             <span class="mono">travelledDistance</span> sowie
             <span class="mono">currentLocation.latitude</span> und
             <span class="mono">.longitude</span> ausgewählt sein.<br><br>
-            <b>Tageslimit:</b> BMW erlaubt 50 Abrufe pro Tag. Der 30-Minuten-Takt nutzt 48 davon.<br><br>
-            <b>Genauigkeit:</b> Die Kilometer stammen vom Tacho und stimmen exakt. Die Uhrzeiten
-            entsprechen dem Abrufzeitpunkt und können daher etwas abweichen — beim Zuordnen
-            der Fahrt lassen sie sich anpassen.<br><br>
-            <b>Anmeldung:</b> Bleibt dauerhaft gültig, solange die Verbindung mindestens alle
-            zwei Wochen genutzt wird. Kein Captcha.
+            <b>Tageslimit:</b> BMW erlaubt 50 Abrufe pro Tag.<br><br>
+            <b>Genauigkeit:</b> Die Kilometer stammen vom Tacho und stimmen exakt.
           </div>
-        </div>
         </div>
       </div>
 

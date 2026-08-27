@@ -2195,7 +2195,6 @@ function showSettingsTab(tab, btn) {
   if (tab === 'system') { backupStatusLaden(); demodatenStatus(); }
   if (tab === 'hilfe') hilfeLaden();
   if (tab === 'ocpp') { ocppVerfuegbarkeitPruefen(); externOcppLaden(); }
-  if (tab === 'bmw') bmwVerfuegbarkeitPruefen();
   if (tab === 'recht') loadSteuersatzIntoField();
   if (tab === 'ocpp') {
     populateOcppClientWallboxSelect();
@@ -5345,10 +5344,14 @@ async function vehicleBmwLadesessions() {
 }
 
 async function vehicleBmwArchivImport(input) {
-  const vid = _editingVehicleId;
   const file = input.files[0];
-  if (!vid || !file) return;
+  if (!file) return;
   const out = document.getElementById('vehicle-bmw-import-ergebnis');
+  // Braucht keine laufende BMW-Anmeldung — nur einen Fahrzeug-Datensatz,
+  // an den die Ladevorgaenge gehaengt werden. Der wird bei Bedarf jetzt
+  // still angelegt, genau wie beim Start der Live-Anmeldung.
+  const vid = await _stelleFahrzeugFuerBmwSicher();
+  if (!vid) return;
   out.textContent = 'Lese Archiv …';
   const formData = new FormData();
   formData.append('file', file);
@@ -5358,6 +5361,9 @@ async function vehicleBmwArchivImport(input) {
     out.textContent = d.ok
       ? `${d.neu || 0} von ${d.gefunden || 0} Ladevorgängen aus dem Archiv übernommen.`
       : (d.meldung || 'Import fehlgeschlagen.');
+    if (d.ok && d.stammdaten_aktualisiert && d.stammdaten_aktualisiert.length) {
+      out.textContent += ' Fahrzeugdaten (Kilometerstand, Termine) ebenfalls aktualisiert.';
+    }
   } catch (e) {
     out.textContent = 'Import fehlgeschlagen.';
   }
@@ -6866,37 +6872,67 @@ async function ladeFahrzeugStatusKachel() {
 }
 
 function _fahrzeugStatusKachelHtml(v, d) {
-  const wert = (label, val, einheit) => val == null ? '' : `
-    <div style="padding:8px 10px; background:var(--bg-input); border-radius:6px;">
-      <div style="font-size:9.5px; color:var(--text-tertiary); text-transform:uppercase; letter-spacing:.04em;">${label}</div>
-      <div style="font-size:15px; font-weight:700; margin-top:2px;">${val}${einheit ? ' ' + einheit : ''}</div>
+  const kachel = (label, val, einheit, icon) => val == null ? '' : `
+    <div style="background:var(--bg-input); border-radius:var(--radius-sm); padding:12px 14px; border:1px solid var(--border);">
+      <div style="font-size:10px; text-transform:uppercase; letter-spacing:.06em; color:var(--text-tertiary); margin-bottom:6px; font-weight:600;">${label}</div>
+      <div style="font-size:19px; font-weight:700;">${val}${einheit ? ` <span style="font-size:12px; font-weight:500; color:var(--text-secondary);">${einheit}</span>` : ''}</div>
     </div>`;
 
   const hatDaten = d && (d.reichweite_km != null || d.soc_prozent != null || d.km != null);
-  const standort = (d && d.lat != null && d.lon != null)
-    ? `<a href="https://www.google.com/maps?q=${d.lat},${d.lon}" target="_blank" rel="noopener"
-         style="font-size:11px; text-decoration:underline;">Standort auf Karte</a>`
+  const hatStandort = d && d.lat != null && d.lon != null;
+
+  // Kein API-Key noetig: derselbe kostenlose Google-Maps-Embed wie bei der
+  // Routenvorschau in Fahrten — nur mit einem Punkt statt einer Route.
+  const mapUrl = hatStandort
+    ? `https://maps.google.com/maps?q=${d.lat},${d.lon}&z=15&output=embed`
+    : '';
+  const mapsLink = hatStandort
+    ? `https://www.google.com/maps?q=${d.lat},${d.lon}`
     : '';
 
   return `
-    <div class="card" style="margin:0; padding:12px 14px;">
-      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
-        <div style="font-weight:600; font-size:13px;">${v.bezeichnung || 'Fahrzeug'}</div>
-        <button class="btn btn-sm" style="padding:2px 8px; font-size:11px;"
-                onclick="fahrzeugDatenAktualisieren(${v.id}, this)" title="Jetzt abrufen">↻</button>
+    <div class="card" style="margin:0;">
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;">
+        <div style="font-weight:600; font-size:15px;">${v.bezeichnung || 'Fahrzeug'}</div>
+        <div style="display:flex; align-items:center; gap:10px;">
+          ${d && d.stand ? `<span style="font-size:11px; color:var(--text-tertiary);">Stand: ${d.stand.slice(11,16)} Uhr</span>` : ''}
+          <button class="btn btn-sm" onclick="fahrzeugDatenAktualisieren(${v.id}, this)" title="Jetzt abrufen">↻ Aktualisieren</button>
+        </div>
       </div>
       ${hatDaten ? `
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
-          ${wert('Reichweite', d.reichweite_km != null ? fmtDe(d.reichweite_km, 0) : null, 'km')}
-          ${wert('Ladestand', d.soc_prozent != null ? fmtDe(d.soc_prozent, 0) : null, '%')}
-          ${wert('Kilometerstand', d.km != null ? fmtDe(d.km, 0) : null, 'km')}
-          ${wert('Nächster Service', d.service_in_km != null ? fmtDe(d.service_in_km, 0) : null, 'km')}
+        <div style="display:flex; gap:16px; flex-wrap:wrap; align-items:stretch;">
+          <div style="flex:1 1 420px; min-width:280px; display:grid;
+               grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:10px;">
+            ${kachel('Reichweite', d.reichweite_km != null ? fmtDe(d.reichweite_km, 0) : null, 'km')}
+            ${kachel('Ladestand', d.soc_prozent != null ? fmtDe(d.soc_prozent, 0) : null, '%')}
+            ${kachel('Kilometerstand', d.km != null ? fmtDe(d.km, 0) : null, 'km')}
+            ${kachel('Nächster Service', d.service_in_km != null ? fmtDe(d.service_in_km, 0) : null, 'km')}
+            ${kachel('Ø Verbrauch', d.verbrauch_kwh_100 != null ? fmtDe(d.verbrauch_kwh_100, 1) : null, 'kWh/100km')}
+            ${kachel('Akkukapazität', d.akku_max_kwh != null ? fmtDe(d.akku_max_kwh, 1) : null, 'kWh')}
+            ${kachel('Akkuzustand', d.akku_soh_prozent != null ? fmtDe(d.akku_soh_prozent, 0) : null, '% SoH')}
+            ${kachel('Ø pro Woche', d.woche_km != null ? fmtDe(d.woche_km, 0) : null, 'km')}
+          </div>
+          <div style="flex:1 1 280px; min-width:220px; max-width:420px;">
+            ${hatStandort ? `
+              <div style="position:relative; border-radius:var(--radius-sm); overflow:hidden;
+                   border:1px solid var(--border); height:100%; min-height:180px;">
+                <iframe src="${mapUrl}" loading="lazy" style="width:100%; height:100%; min-height:180px;
+                        border:none; display:block;"></iframe>
+                <a href="${mapsLink}" target="_blank" rel="noopener"
+                   style="position:absolute; bottom:8px; right:8px; font-size:11px; padding:4px 8px;
+                          background:var(--bg-elevated); border:1px solid var(--border); border-radius:6px;
+                          text-decoration:none; color:var(--text-primary);">In Google Maps öffnen</a>
+              </div>
+            ` : `
+              <div style="display:flex; align-items:center; justify-content:center; height:100%;
+                   min-height:180px; background:var(--bg-input); border-radius:var(--radius-sm);
+                   border:1px solid var(--border); color:var(--text-tertiary); font-size:12px; text-align:center; padding:12px;">
+                Standort noch nicht bekannt
+              </div>
+            `}
+          </div>
         </div>
-        <div style="margin-top:8px; display:flex; justify-content:space-between; align-items:center;">
-          ${standort || '<span></span>'}
-          ${d.stand ? `<span style="font-size:10px; color:var(--text-tertiary);">Stand: ${d.stand.slice(11,16)} Uhr</span>` : ''}
-        </div>
-      ` : `<div class="hint">Noch keine Daten — auf ↻ tippen, um jetzt abzurufen.</div>`}
+      ` : `<div class="hint">Noch keine Daten — auf „Aktualisieren" tippen, um jetzt abzurufen.</div>`}
     </div>`;
 }
 
@@ -7860,19 +7896,6 @@ function hilfeSuchen() {
 // OCPP-Bereich an die Ausgabe anpassen: In der Demo wird der Hinweis
 // eingeblendet und die Bedienung gesperrt, statt Schalter anzubieten,
 // die wirkungslos bleiben.
-// BMW-Bereich analog zum OCPP-Bereich behandeln
-async function bmwVerfuegbarkeitPruefen() {
-  const hinweis = document.getElementById('bmw-gesperrt-hinweis');
-  const bereich = document.getElementById('bmw-bereich');
-  if (!hinweis) return;
-  try {
-    const d = await (await fetch('/api/license/status')).json();
-    const gesperrt = !d.voll;
-    hinweis.style.display = gesperrt ? 'block' : 'none';
-    if (bereich) bereich.classList.toggle('gesperrt', gesperrt);
-  } catch (e) {}
-}
-
 async function ocppVerfuegbarkeitPruefen() {
   const hinweis = document.getElementById('ocpp-gesperrt-hinweis');
   const karte = document.getElementById('ocpp-hauptkarte');
