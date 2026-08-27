@@ -6961,68 +6961,92 @@ function _terminUrgenz(datumStr) {
 }
 
 function _fahrzeugStatusKachelHtml(v, d, kont) {
-  const kachel = (label, val, einheit) => val == null ? '' : `
+  d = d || {};
+  // Kachel zeigt ab jetzt IMMER ihren vollen Rahmen — Batteriebalken,
+  // Termine, Standort, Kennzahlen. Fehlt ein einzelner Wert, erscheint an
+  // seiner Stelle ein klar erkennbarer Leerstand ("—", "kein Wert",
+  // "nicht hinterlegt"), statt das ganze Element oder die halbe Kachel
+  // verschwinden zu lassen. Nur so ist auf den ersten Blick zu sehen,
+  // WAS fehlt, statt raten zu muessen, ob die Kachel ueberhaupt lebt.
+  const kachel = (label, val, einheit) => `
     <div style="background:var(--bg-input); border-radius:var(--radius-sm); padding:12px 14px; border:1px solid var(--border);">
       <div style="font-size:10px; text-transform:uppercase; letter-spacing:.06em; color:var(--text-tertiary); margin-bottom:6px; font-weight:600;">${label}</div>
-      <div style="font-size:19px; font-weight:700;">${val}${einheit ? ` <span style="font-size:12px; font-weight:500; color:var(--text-secondary);">${einheit}</span>` : ''}</div>
+      <div style="font-size:19px; font-weight:700; ${val == null ? 'color:var(--text-tertiary); font-weight:500;' : ''}">${
+        val != null ? val + (einheit ? ` <span style="font-size:12px; font-weight:500; color:var(--text-secondary);">${einheit}</span>` : '') : '—'
+      }</div>
     </div>`;
 
-  const hatDaten = d && (d.reichweite_km != null || d.soc_prozent != null || d.km != null);
-  const hatStandort = d && d.lat != null && d.lon != null;
-  const soc = d && d.soc_prozent != null ? Math.max(0, Math.min(100, d.soc_prozent)) : null;
-  const farbe = _akkuFarbe(soc);
+  const hatStandort = d.lat != null && d.lon != null;
+  const hatSoc = d.soc_prozent != null;
+  // Ohne jemals empfangenen Wert wird 0 als neutraler Leerstand angezeigt
+  // (grau, nicht rot) — sobald ein echter Wert ankommt, uebernimmt der die
+  // Anzeige und faerbt sich entsprechend ein.
+  const soc = hatSoc ? Math.max(0, Math.min(100, d.soc_prozent)) : 0;
+  const farbe = hatSoc ? _akkuFarbe(soc) : 'var(--border)';
   const mapsLink = hatStandort ? `https://www.google.com/maps?q=${d.lat},${d.lon}` : '';
 
-  // Ladestatus: das einzige Live-Signal, das wirklich zur Abrechnung
-  // gehoert (laedt gerade / angesteckt), statt zur Fernbedienung.
-  const ladeBadge = d && d.angesteckt != null ? `
+  // Ladestatus: default "Nicht angesteckt", solange kein Wert bekannt ist
+  // — erst ein tatsaechlich empfangener 'true' schaltet auf "Angesteckt"
+  // um. Kein Wert heisst nicht "unbekannt lassen", sondern "sicherste
+  // Annahme zeigen, bis Gegenteiliges ankommt".
+  const angesteckt = d.angesteckt === true;
+  const ladeBadge = `
     <span style="display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:600;
          padding:5px 12px; border-radius:20px;
-         background:${d.angesteckt ? 'rgba(34,197,94,.14)' : 'var(--bg-input)'};
-         color:${d.angesteckt ? '#22c55e' : 'var(--text-tertiary)'};
-         border:1px solid ${d.angesteckt ? 'rgba(34,197,94,.35)' : 'var(--border)'};">
+         background:${angesteckt ? 'rgba(34,197,94,.14)' : 'var(--bg-input)'};
+         color:${angesteckt ? '#22c55e' : 'var(--text-tertiary)'};
+         border:1px solid ${angesteckt ? 'rgba(34,197,94,.35)' : 'var(--border)'};">
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
         <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
       </svg>
-      ${d.angesteckt ? 'Angesteckt' : 'Nicht angesteckt'}
-    </span>` : '';
+      ${angesteckt ? 'Angesteckt' : 'Nicht angesteckt'}
+    </span>`;
 
-  // Batteriebalken: EIN grosses Gauge statt Symbol + separatem Ring,
-  // angelehnt an professionelle Flotten-Dashboards. Der Farbverlauf
-  // (rot -> orange -> gelb -> gruen) liegt fest ueber die gesamte Breite;
-  // eine Maske deckt den noch nicht erreichten Teil von rechts ab und
-  // wird nach dem Einfuegen auf die Zielbreite animiert.
-  const batteriebar = soc != null ? `
+  // Batteriebalken: IMMER sichtbar. Ohne jemals empfangenen Wert steht er
+  // grau bei 0% mit einem Hinweistext statt farbig eine falsche Zahl
+  // vorzutaeuschen — aber der Rahmen selbst verschwindet nie.
+  const batteriebar = `
     <div style="position:relative; height:68px; border-radius:16px; overflow:hidden;
-         background:linear-gradient(90deg, #ef4444 0%, #f97316 28%, #eab308 52%, #84cc16 74%, #22c55e 100%);
-         box-shadow:0 10px 26px -8px ${farbe}66;">
+         background:${hatSoc
+           ? 'linear-gradient(90deg, #ef4444 0%, #f97316 28%, #eab308 52%, #84cc16 74%, #22c55e 100%)'
+           : 'var(--bg-input)'};
+         border:${hatSoc ? 'none' : '1px solid var(--border)'};
+         box-shadow:${hatSoc ? `0 10px 26px -8px ${farbe}66` : 'none'};">
+      ${hatSoc ? `
       <div class="fzg-batteriebar-maske" data-pct="${soc}"
            style="position:absolute; top:0; right:0; bottom:0; width:100%;
-                  background:var(--bg-input); transition:width 1.2s cubic-bezier(.22,.9,.3,1);"></div>
+                  background:var(--bg-input); transition:width 1.2s cubic-bezier(.22,.9,.3,1);"></div>` : ''}
       <div style="position:relative; z-index:1; height:100%; display:flex; align-items:center;
            justify-content:space-between; padding:0 22px;">
         <div style="display:flex; align-items:baseline; gap:7px;">
-          <span style="font-size:32px; font-weight:800; color:#fff; text-shadow:0 1px 4px rgba(0,0,0,.5); font-variant-numeric:tabular-nums;">${fmtDe(soc,0)}</span>
-          <span style="font-size:15px; font-weight:700; color:#fff; text-shadow:0 1px 4px rgba(0,0,0,.5);">% Ladestand</span>
+          <span style="font-size:${hatSoc ? '32px' : '15px'}; font-weight:800; font-variant-numeric:tabular-nums;
+               color:${hatSoc ? '#fff' : 'var(--text-tertiary)'};
+               ${hatSoc ? 'text-shadow:0 1px 4px rgba(0,0,0,.5);' : ''}">
+            ${hatSoc ? fmtDe(soc,0) : 'Ladestand noch nicht bekannt'}</span>
+          ${hatSoc ? `<span style="font-size:15px; font-weight:700; color:#fff; text-shadow:0 1px 4px rgba(0,0,0,.5);">% Ladestand</span>` : ''}
         </div>
-        ${d.reichweite_km != null ? `
-          <div style="text-align:right;">
-            <div style="font-size:21px; font-weight:800; color:#fff; text-shadow:0 1px 4px rgba(0,0,0,.5);">${fmtDe(d.reichweite_km,0)} km</div>
-            <div style="font-size:10.5px; color:rgba(255,255,255,.9); text-shadow:0 1px 3px rgba(0,0,0,.45); text-transform:uppercase; letter-spacing:.04em;">Reichweite</div>
-          </div>` : ''}
+        <div style="text-align:right;">
+          <div style="font-size:${hatSoc ? '21px' : '15px'}; font-weight:800;
+               color:${hatSoc ? '#fff' : 'var(--text-tertiary)'};
+               ${hatSoc ? 'text-shadow:0 1px 4px rgba(0,0,0,.5);' : ''}">
+            ${d.reichweite_km != null ? fmtDe(d.reichweite_km,0) + ' km' : '—'}</div>
+          <div style="font-size:10.5px; text-transform:uppercase; letter-spacing:.04em;
+               color:${hatSoc ? 'rgba(255,255,255,.9)' : 'var(--text-tertiary)'};
+               ${hatSoc ? 'text-shadow:0 1px 3px rgba(0,0,0,.45);' : ''}">Reichweite</div>
+        </div>
       </div>
-    </div>` : '';
+    </div>`;
 
   // Termine: HU, Service, Bremsfluessigkeit — aus den Fahrzeug-Stammdaten
-  // (v), nicht aus den Live-Cardata-Werten (d). Genau das hat bisher auf
-  // dem Dashboard gefehlt, obwohl die Daten laengst im Fahrzeug-Datensatz
-  // stehen (siehe Archiv-Import). Nur zeigen, was tatsaechlich gesetzt ist.
+  // (v), nicht aus den Live-Cardata-Werten (d). Immer alle drei Zeilen
+  // zeigen, auch wenn (noch) nichts hinterlegt ist — sonst verschwindet
+  // der ganze Abschnitt und es wirkt, als gaebe es die Funktion nicht.
   const termine = [
     ['HU/TÜV', v.hu_faellig],
     ['Service', v.service_faellig],
     ['Bremsflüssigkeit', v.bremsfluessigkeit],
-  ].filter(([, datum]) => !!datum).map(([label, datum]) => {
-    const u = _terminUrgenz(datum);
+  ].map(([label, datum]) => {
+    const u = datum ? _terminUrgenz(datum) : { farbe: 'var(--text-tertiary)', text: 'nicht hinterlegt' };
     return `
       <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;
            padding:9px 12px; background:var(--bg-input); border-radius:8px; border:1px solid var(--border);">
@@ -7050,7 +7074,7 @@ function _fahrzeugStatusKachelHtml(v, d, kont) {
           ${ladeBadge}
         </div>
         <div style="display:flex; align-items:center; gap:10px;">
-          ${d && d.stand ? `<span style="font-size:11px; color:var(--text-tertiary);">Stand: ${d.stand.slice(11,16)} Uhr</span>` : ''}
+          <span style="font-size:11px; color:var(--text-tertiary);">${d.stand ? `Stand: ${d.stand.slice(11,16)} Uhr` : 'Noch nie aktualisiert'}</span>
           <button class="btn btn-sm" onclick="fahrzeugDatenAktualisieren(${v.id}, this)"
                   ${limitErreicht ? 'disabled title="Tageslimit erreicht"' : 'title="Jetzt abrufen"'}
                   style="${limitErreicht ? 'opacity:.5; cursor:not-allowed;' : ''}">↻ Aktualisieren</button>
@@ -7060,48 +7084,46 @@ function _fahrzeugStatusKachelHtml(v, d, kont) {
         <div style="font-size:11.5px; color:${limitErreicht ? '#eab308' : 'var(--text-tertiary)'}; margin-bottom:12px;">
           ${kontingentText}
         </div>` : ''}
-      ${hatDaten ? `
-        ${batteriebar ? `<div style="margin-bottom:16px;">${batteriebar}</div>` : ''}
-        <div style="display:flex; gap:18px; flex-wrap:wrap; align-items:stretch;">
-          <div style="flex:1 1 300px; min-width:240px; display:flex; flex-direction:column; gap:10px;">
-            ${termine ? `<div style="display:flex; flex-direction:column; gap:8px;">${termine}</div>` : ''}
-            <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:10px;">
-              ${kachel('Kilometerstand', d.km != null ? fmtDe(d.km, 0) : null, 'km')}
-              ${kachel('Ø Verbrauch', d.verbrauch_kwh_100 != null ? fmtDe(d.verbrauch_kwh_100, 1) : null, 'kWh/100km')}
-              ${kachel('Akkukapazität', d.akku_max_kwh != null ? fmtDe(d.akku_max_kwh, 1) : null, 'kWh')}
-              ${kachel('Akkuzustand', d.akku_soh_prozent != null ? fmtDe(d.akku_soh_prozent, 0) : null, '% SoH')}
-            </div>
-          </div>
-          <div style="flex:1 1 260px; min-width:220px; max-width:380px;">
-            ${hatStandort ? `
-              <div style="height:100%; min-height:150px; background:var(--bg-input); border-radius:var(--radius-sm);
-                   border:1px solid var(--border); padding:16px; display:flex; flex-direction:column; justify-content:space-between;">
-                <div style="display:flex; gap:10px; align-items:flex-start;">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="${farbe || 'var(--accent)'}" stroke-width="2"
-                       style="flex:none; margin-top:1px;">
-                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>
-                  </svg>
-                  <div style="font-size:13.5px; line-height:1.5;">
-                    ${d.standort_adresse ? d.standort_adresse : `${fmtDe(d.lat,5)}, ${fmtDe(d.lon,5)}`}
-                  </div>
-                </div>
-                <a href="${mapsLink}" target="_blank" rel="noopener"
-                   style="align-self:flex-start; font-size:12px; font-weight:600; color:var(--accent);
-                          text-decoration:none; display:flex; align-items:center; gap:5px;">
-                  Route öffnen
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M7 17L17 7M7 7h10v10"/></svg>
-                </a>
-              </div>
-            ` : `
-              <div style="display:flex; align-items:center; justify-content:center; height:100%;
-                   min-height:150px; background:var(--bg-input); border-radius:var(--radius-sm);
-                   border:1px solid var(--border); color:var(--text-tertiary); font-size:12px; text-align:center; padding:12px;">
-                Standort noch nicht bekannt
-              </div>
-            `}
+      <div style="margin-bottom:16px;">${batteriebar}</div>
+      <div style="display:flex; gap:18px; flex-wrap:wrap; align-items:stretch;">
+        <div style="flex:1 1 300px; min-width:240px; display:flex; flex-direction:column; gap:10px;">
+          <div style="display:flex; flex-direction:column; gap:8px;">${termine}</div>
+          <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:10px;">
+            ${kachel('Kilometerstand', d.km != null ? fmtDe(d.km, 0) : null, 'km')}
+            ${kachel('Ø Verbrauch', d.verbrauch_kwh_100 != null ? fmtDe(d.verbrauch_kwh_100, 1) : null, 'kWh/100km')}
+            ${kachel('Akkukapazität', d.akku_max_kwh != null ? fmtDe(d.akku_max_kwh, 1) : null, 'kWh')}
+            ${kachel('Akkuzustand', d.akku_soh_prozent != null ? fmtDe(d.akku_soh_prozent, 0) : null, '% SoH')}
           </div>
         </div>
-      ` : `<div class="hint">Noch keine Daten — auf „Aktualisieren" tippen, um jetzt abzurufen.</div>`}
+        <div style="flex:1 1 260px; min-width:220px; max-width:380px;">
+          ${hatStandort ? `
+            <div style="height:100%; min-height:150px; background:var(--bg-input); border-radius:var(--radius-sm);
+                 border:1px solid var(--border); padding:16px; display:flex; flex-direction:column; justify-content:space-between;">
+              <div style="display:flex; gap:10px; align-items:flex-start;">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="${hatSoc ? farbe : 'var(--accent)'}" stroke-width="2"
+                     style="flex:none; margin-top:1px;">
+                  <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>
+                </svg>
+                <div style="font-size:13.5px; line-height:1.5;">
+                  ${d.standort_adresse ? d.standort_adresse : `${fmtDe(d.lat,5)}, ${fmtDe(d.lon,5)}`}
+                </div>
+              </div>
+              <a href="${mapsLink}" target="_blank" rel="noopener"
+                 style="align-self:flex-start; font-size:12px; font-weight:600; color:var(--accent);
+                        text-decoration:none; display:flex; align-items:center; gap:5px;">
+                Route öffnen
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M7 17L17 7M7 7h10v10"/></svg>
+              </a>
+            </div>
+          ` : `
+            <div style="display:flex; align-items:center; justify-content:center; height:100%;
+                 min-height:150px; background:var(--bg-input); border-radius:var(--radius-sm);
+                 border:1px solid var(--border); color:var(--text-tertiary); font-size:12px; text-align:center; padding:12px;">
+              Standort noch nicht bekannt
+            </div>
+          `}
+        </div>
+      </div>
     </div>`;
 }
 
