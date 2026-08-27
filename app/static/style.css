@@ -135,6 +135,14 @@
 
   /* ---------- Main ---------- */
   .main { flex: 1; min-width: 0; overflow-y: auto; }
+  /* Auf sehr breiten Monitoren zieht sich der Inhalt sonst ueber die
+     gesamte Fensterbreite — Tabellen ohne Datenzeilen verteilen ihre
+     Spalten dann mit grossen, unschoenen Luecken, und die zweispaltigen
+     Ansichten (Fahrten, Ladevorgaenge) wirken unverhaeltnismaessig
+     auseinandergezogen. Eine Hoechstbreite, zentriert, behebt das
+     automatisch — auf normalen und schmalen Fenstern aendert sich nichts,
+     da die Breite dort ohnehin unter der Grenze bleibt. */
+  .topbar, .content { max-width: 1680px; margin-left: auto; margin-right: auto; }
   .topbar { display: flex; align-items: center; justify-content: space-between; padding: 22px 34px 0 34px; }
   .page-title { font-family: var(--font-display); font-size: 22px; font-weight: 600; letter-spacing: .01em;}
   .page-sub { color: var(--text-secondary); font-size: 13px; margin-top: 3px; }

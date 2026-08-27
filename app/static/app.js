@@ -2183,13 +2183,6 @@ function showSettingsTab(tab, btn) {
     const el = document.getElementById('stab-' + t);
     if (el) el.style.display = 'none';
   });
-  // Live-Protokoll-Refresh anhalten, wenn der BMW-Bereich verlassen wird —
-  // sonst laeuft der Timer im Hintergrund weiter, auch auf Tabs, die ihn
-  // gar nicht anzeigen.
-  if (tab !== 'bmw' && _streamLogAutoRefreshTimer) {
-    clearInterval(_streamLogAutoRefreshTimer);
-    _streamLogAutoRefreshTimer = null;
-  }
   const active = document.getElementById('stab-' + tab);
   if (active) active.style.display = '';
   document.querySelectorAll('.settings-tab').forEach(b => b.classList.remove('active'));
