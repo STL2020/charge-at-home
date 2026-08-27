@@ -130,7 +130,7 @@
            die Frage "laeuft alles?" und "fuer welchen Zeitraum schaue ich
            gerade?", bevor man ueberhaupt zu lesen anfaengt. -->
       <div class="status-leiste" id="dash-status">
-        <span class="status-pill" id="sp-wallbox"><span class="sp-dot"></span> Wallbox</span>
+        <span class="status-pill" id="sp-wallbox" onclick="showView('wallbox')" style="cursor:pointer;"><span class="sp-dot"></span> Wallbox</span>
         <span class="status-pill" id="sp-cardata"><span class="sp-dot"></span> CarData</span>
         <span class="status-pill" id="sp-offen" style="display:none;"><span class="sp-dot warn"></span> <span id="sp-offen-text"></span></span>
         <!-- Zentrale Zeitraumauswahl. Sie steuert ALLES auf dieser Seite:
@@ -833,12 +833,15 @@
               <span id="trip-return-hint" class="hint" style="margin:0;"></span>
             </div>
 
-            <div style="display:flex; gap:6px; align-items:flex-end; margin-top:6px;">
-              <div style="flex:1">
-                <label class="field-label">Distanz (km) <span id="trip-km-label" style="color:var(--text-tertiary); font-size:11px;"></span></label>
-                <input type="number" id="trip-distance" style="width:100%" step="0.1" placeholder="oder automatisch berechnen →" oninput="updateTripPreview()">
-              </div>
-              <button class="btn btn-sm btn-primary" onclick="estimateTripDistance()" style="white-space:nowrap; height:38px;">
+            <div style="margin-top:6px;">
+              <label class="field-label">Distanz (km) <span id="trip-km-label" style="color:var(--text-tertiary); font-size:11px;"></span></label>
+              <input type="number" id="trip-distance" style="width:100%" step="0.1" placeholder="oder automatisch berechnen →" oninput="updateTripPreview()">
+            </div>
+            <!-- Eigene Reihe fuer die zwei Aktionen statt in einer Zeile mit
+                 dem Eingabefeld gequetscht -- hat vorher zu horizontalem
+                 Scrollen im Panel gefuehrt. Buttons brechen bei Bedarf um. -->
+            <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:8px;">
+              <button class="btn btn-sm btn-primary" onclick="estimateTripDistance()" style="white-space:nowrap; height:38px; flex:1 1 auto;">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="10" r="3"/><path d="M12 2a8 8 0 0 0-8 8c0 5.25 8 14 8 14s8-8.75 8-14a8 8 0 0 0-8-8z"/></svg>
                 Berechnen &amp; Karte
               </button>
@@ -847,7 +850,7 @@
                    der Anwender meist zuerst die Strecke berechnet. -->
               <button class="btn btn-sm" onclick="adressenAufloesen()"
                       title="GPS-Koordinaten in lesbare Adressen umwandeln"
-                      style="white-space:nowrap; height:38px;">
+                      style="white-space:nowrap; height:38px; flex:1 1 auto;">
                 ⌖ Koordinaten auflösen
               </button>
             </div>

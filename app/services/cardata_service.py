@@ -788,6 +788,20 @@ def fahrzeugdaten(vehicle_id: int) -> dict:
     offen, anzahl = _tueren_fenster_offen(d)
     d["tueren_fenster_offen"] = offen
     d["tueren_fenster_anzahl_offen"] = anzahl
+
+    # Zuhause/unterwegs fuer die Einfaerbung des Standort-Punkts auf der
+    # Status-Kachel (gruen zuhause, blau unterwegs). adresse_aus_koordinaten()
+    # setzt bei einer Adresse in der eigenen Strasse bereits exakt die
+    # hinterlegte Heimadresse ein -- ein einfacher Textvergleich reicht,
+    # keine erneute Koordinatenpruefung noetig.
+    try:
+        from services import geocoding_service
+        heim = geocoding_service.hole_heim_adresse()
+        adresse = (d.get("standort_adresse") or "").strip()
+        d["zuhause"] = bool(heim) and bool(adresse) and adresse == heim
+    except Exception:
+        d["zuhause"] = None
+
     return d
 
 

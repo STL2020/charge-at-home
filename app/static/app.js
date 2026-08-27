@@ -6933,6 +6933,7 @@ async function ladeFahrzeugStatusKachel(erzwingen = false) {
     if (!fahrzeuge.length) { card.style.display = 'none'; return; }
 
     const kacheln = [];
+    const meta = [];
     const signaturTeile = [];
     for (const v of fahrzeuge) {
       let status;
@@ -6955,6 +6956,7 @@ async function ladeFahrzeugStatusKachel(erzwingen = false) {
       } catch (e) {}
 
       kacheln.push(_fahrzeugStatusKachelHtml(v, d, kont));
+      meta.push({ id: v.id, bezeichnung: v.bezeichnung || 'Fahrzeug', soc: d.soc_prozent, laedt: !!d.laedt_aktiv_text });
       // Signatur ohne "stand" (Zeitstempel wuerde bei jedem Zyklus wechseln,
       // auch wenn sich sonst nichts geaendert hat) — nur was sich sichtbar
       // auswirkt, insbesondere lat/lon, geht in den Vergleich ein.
@@ -6974,11 +6976,73 @@ async function ladeFahrzeugStatusKachel(erzwingen = false) {
     const signatur = signaturTeile.join('|');
     if (!erzwingen && signatur === _fahrzeugStatusLetzteSignatur) return;
     _fahrzeugStatusLetzteSignatur = signatur;
-    grid.innerHTML = kacheln.join('');
+
+    if (kacheln.length === 1) {
+      // Ein Fahrzeug: kein Karussell noetig, direkt die Kachel zeigen.
+      grid.innerHTML = kacheln[0];
+    } else {
+      // Mehrere Fahrzeuge: Reiterkarten oben, darunter ein horizontal
+      // einrastendes Scroll-Karussell -- funktioniert nativ per Wisch-Geste
+      // auf Touch-Geraeten, keine eigene Gesten-Logik noetig.
+      window._fzgKarussellIndex = Math.min(window._fzgKarussellIndex || 0, kacheln.length - 1);
+      const reiter = meta.map((m, i) => `
+        <button onclick="_fahrzeugKarussellGehe(${i})" data-fzg-reiter="${i}"
+                style="all:unset; cursor:pointer; display:flex; align-items:center; gap:7px; padding:7px 13px;
+                       border-radius:20px; font-size:12px; font-weight:600; white-space:nowrap;
+                       background:${i === window._fzgKarussellIndex ? 'var(--bg-input)' : 'transparent'};
+                       color:${i === window._fzgKarussellIndex ? 'var(--text-primary)' : 'var(--text-tertiary)'};
+                       border:1px solid ${i === window._fzgKarussellIndex ? 'var(--border-strong)' : 'transparent'};">
+          <span style="width:7px; height:7px; border-radius:50%; background:${m.laedt ? '#22c55e' : (m.soc != null ? _akkuFarbe(m.soc) : 'var(--border)')};"></span>
+          ${m.bezeichnung}
+        </button>`).join('');
+
+      const spuren = kacheln.map((html, i) => `
+        <div data-fzg-spur="${i}" style="min-width:100%; scroll-snap-align:start;">${html}</div>`).join('');
+
+      grid.innerHTML = `
+        <div style="display:flex; gap:6px; margin-bottom:10px; overflow-x:auto;">${reiter}</div>
+        <div id="fzg-karussell-track" onscroll="_fahrzeugKarussellScrollUpdate()"
+             style="display:flex; overflow-x:auto; scroll-snap-type:x mandatory; scroll-behavior:smooth;
+                    gap:0; -webkit-overflow-scrolling:touch;">
+          ${spuren}
+        </div>`;
+      // Nach dem Einfuegen zum zuletzt gewaehlten Fahrzeug springen (ohne
+      // Animation) -- sonst startet das Karussell nach jedem Refresh
+      // wieder bei Fahrzeug 1.
+      requestAnimationFrame(() => _fahrzeugKarussellGehe(window._fzgKarussellIndex, false));
+    }
     _fahrzeugStatusBatterienAnimieren();
   } catch (e) {
     card.style.display = 'none';
   }
+}
+
+function _fahrzeugKarussellGehe(index, animiert = true) {
+  window._fzgKarussellIndex = index;
+  const track = document.getElementById('fzg-karussell-track');
+  if (!track) return;
+  const spur = track.querySelector(`[data-fzg-spur="${index}"]`);
+  if (spur) spur.scrollIntoView({ behavior: animiert ? 'smooth' : 'instant', inline: 'start', block: 'nearest' });
+  document.querySelectorAll('[data-fzg-reiter]').forEach(btn => {
+    const aktiv = parseInt(btn.dataset.fzgReiter, 10) === index;
+    btn.style.background = aktiv ? 'var(--bg-input)' : 'transparent';
+    btn.style.color = aktiv ? 'var(--text-primary)' : 'var(--text-tertiary)';
+    btn.style.borderColor = aktiv ? 'var(--border-strong)' : 'transparent';
+  });
+}
+
+// Beim manuellen Wischen (nicht per Reiter-Klick) den aktiven Reiter
+// nachziehen -- leicht entprellt, damit es waehrend des Wischens nicht
+// bei jedem Pixel neu rechnet.
+let _fzgKarussellScrollTimer = null;
+function _fahrzeugKarussellScrollUpdate() {
+  clearTimeout(_fzgKarussellScrollTimer);
+  _fzgKarussellScrollTimer = setTimeout(() => {
+    const track = document.getElementById('fzg-karussell-track');
+    if (!track) return;
+    const index = Math.round(track.scrollLeft / track.clientWidth);
+    if (index !== window._fzgKarussellIndex) _fahrzeugKarussellGehe(index, false);
+  }, 120);
 }
 
 // Farbskala fuer Ladestand und Reichweitenring — durchgaengig verwendet,
@@ -7019,8 +7083,13 @@ function _fahrzeugStatusKachelHtml(v, d, kont) {
   // sein, das laesst sich nicht mit einem Alpha-Suffix ("...88") kombinieren
   // wie es fuer den Box-Shadow-Verlauf noetig ist -- braucht einen echten
   // Hex-Wert als Rueckfall.
-  const pulsFarbe = hatSoc ? farbe : '#3f3f42';
-  const mapsLink = hatStandort ? `https://www.google.com/maps?q=${d.lat},${d.lon}` : '';
+  // Standort-Punkt: gruen zuhause, blau unterwegs -- nicht mehr nach
+  // Ladestand eingefaerbt, das hatte inhaltlich nichts mit dem Standort
+  // zu tun. d.zuhause: true/false/null (null = Heimadresse nicht
+  // hinterlegt oder Vergleich nicht moeglich -> neutraler Grauton).
+  const standortFarbe = d.zuhause === true ? '#22c55e'
+                       : d.zuhause === false ? '#3b82f6'
+                       : '#6a6f78';
 
   // ── Chips ──────────────────────────────────────────────────────────
   // Ein Chip pro Thema, nicht pro Einzelsensor. "Zu"/"verriegelt" ist der
@@ -7093,8 +7162,19 @@ function _fahrzeugStatusKachelHtml(v, d, kont) {
   // erhalten) ────────────────────────────────────────────────────────
   window._fzgDetailsOffen = window._fzgDetailsOffen || new Set();
   const detailsOffen = window._fzgDetailsOffen.has(v.id);
-  const termin = (label, datum) => {
-    const u = datum ? _terminUrgenz(datum) : { farbe: 'var(--text-tertiary)', text: 'nicht hinterlegt' };
+  const termin = (label, datum, vehicleId) => {
+    if (!datum) {
+      // Nicht hinterlegt: klickbarer Link direkt zur Bearbeitung, statt
+      // einer Sackgasse. Bearbeitbar ist es laengst -- nur unter
+      // "Fahrzeuge", von der Kachel aus bisher nicht erreichbar.
+      return `
+        <div onclick="editVehicle(${vehicleId})" style="display:flex; align-items:center; justify-content:space-between; gap:10px;
+             padding:9px 12px; background:var(--bg-input); border-radius:8px; border:1px solid var(--border); margin-bottom:8px; cursor:pointer;">
+          <span style="font-size:12.5px; color:var(--text-secondary);">${label}</span>
+          <span style="font-size:12.5px; font-weight:600; color:var(--accent); text-decoration:underline;">nicht hinterlegt — eintragen →</span>
+        </div>`;
+    }
+    const u = _terminUrgenz(datum);
     return `
       <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;
            padding:9px 12px; background:var(--bg-input); border-radius:8px; border:1px solid var(--border); margin-bottom:8px;">
@@ -7144,19 +7224,19 @@ function _fahrzeugStatusKachelHtml(v, d, kont) {
           </div>
         </div>
 
-        <a href="${mapsLink || '#'}" ${hatStandort ? 'target="_blank" rel="noopener"' : 'onclick="return false;"'}
-           style="display:flex; align-items:center; gap:12px; text-decoration:none; cursor:${hatStandort ? 'pointer' : 'default'};">
+        <button ${hatStandort ? `onclick="_standortPopupZeigen(${d.lat}, ${d.lon}, '${(d.standort_adresse || '').replace(/'/g, "\\'")}')"` : 'disabled'}
+           style="all:unset; display:flex; align-items:center; gap:12px; text-decoration:none; cursor:${hatStandort ? 'pointer' : 'default'};">
           <div style="position:relative; width:44px; height:44px; border-radius:9px; flex:none; overflow:hidden;
                background:radial-gradient(circle at 60% 35%, var(--bg-input), var(--bg-elevated) 70%);">
             <div style="position:absolute; inset:0; opacity:.5; background-image:radial-gradient(var(--border) 1px, transparent 1px); background-size:9px 9px;"></div>
-            ${hatStandort ? `<div style="position:absolute; left:18px; top:17px; width:9px; height:9px; border-radius:50%; background:${farbe}; animation:fzgMapPuls 2s ease-out infinite;"></div>` : ''}
+            ${hatStandort ? `<div style="position:absolute; left:18px; top:17px; width:9px; height:9px; border-radius:50%; background:${standortFarbe}; animation:fzgMapPuls 2s ease-out infinite;"></div>` : ''}
           </div>
           <div style="font-size:12px; color:var(--text-secondary); line-height:1.5; text-shadow:0 1px 6px rgba(0,0,0,.55);">
             ${hatStandort
               ? (d.standort_adresse ? d.standort_adresse : `${fmtDe(d.lat,5)}, ${fmtDe(d.lon,5)}`)
               : '<span style="color:var(--text-tertiary);">Standort noch nicht bekannt</span>'}
           </div>
-        </a>
+        </button>
       </div>
 
       <button class="fzg-details-toggle" onclick="_fahrzeugDetailsUmschalten(${v.id}, this)"
@@ -7169,13 +7249,13 @@ function _fahrzeugStatusKachelHtml(v, d, kont) {
       <div class="fzg-details-panel" style="position:relative; z-index:2; overflow:hidden;
            max-height:${detailsOffen ? '600px' : '0'}; opacity:${detailsOffen ? '1' : '0'};
            transition:max-height .35s ease, opacity .3s ease; margin-top:${detailsOffen ? '12px' : '0'};">
-        <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;
+        <div ${d.km == null ? `onclick="editVehicle(${v.id})" style="cursor:pointer;` : 'style="'}display:flex; align-items:center; justify-content:space-between; gap:10px;
              padding:9px 12px; background:var(--bg-input); border-radius:8px; border:1px solid var(--border); margin-bottom:8px;">
           <span style="font-size:12.5px; color:var(--text-secondary);">Kilometerstand</span>
-          <span style="font-size:12.5px; font-weight:600;">${d.km != null ? fmtDe(d.km,0) + ' km' : '—'}</span>
+          <span style="font-size:12.5px; font-weight:600; ${d.km == null ? 'color:var(--accent); text-decoration:underline;' : ''}">${d.km != null ? fmtDe(d.km,0) + ' km' : 'nicht hinterlegt — eintragen →'}</span>
         </div>
-        ${termin('HU/TÜV', v.hu_faellig)}
-        ${termin('Service', v.service_faellig)}
+        ${termin('HU/TÜV', v.hu_faellig, v.id)}
+        ${termin('Service', v.service_faellig, v.id)}
         <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:10px; margin-top:2px;">
           ${metrik('Ø Verbrauch', d.verbrauch_kwh_100 != null ? fmtDe(d.verbrauch_kwh_100, 1) : null, 'kWh/100km')}
           ${metrik('Akkukapazität', d.akku_max_kwh != null ? fmtDe(d.akku_max_kwh, 1) : null, 'kWh')}
@@ -7194,7 +7274,7 @@ function _fahrzeugStatusKachelHtml(v, d, kont) {
                   style="${kont.rest <= 0 ? 'opacity:.5; cursor:not-allowed;' : ''}">↻ Aktualisieren</button>
         </div>` : ''}
     </div>
-    <style>@keyframes fzgMapPuls { 0%{box-shadow:0 0 0 0 ${pulsFarbe}88;} 70%{box-shadow:0 0 0 9px ${pulsFarbe}00;} 100%{box-shadow:0 0 0 0 ${pulsFarbe}00;} }</style>`;
+    <style>@keyframes fzgMapPuls { 0%{box-shadow:0 0 0 0 ${standortFarbe}88;} 70%{box-shadow:0 0 0 9px ${standortFarbe}00;} 100%{box-shadow:0 0 0 0 ${standortFarbe}00;} }</style>`;
 }
 
 function _fahrzeugDetailsUmschalten(vehicleId, btn) {
@@ -7237,6 +7317,40 @@ async function fahrzeugFotoEntfernen(vehicleId) {
   } catch (e) {
     _toast('Foto konnte nicht entfernt werden');
   }
+}
+
+// Kleines In-Seite-Popup mit eingebetteter Karte statt eines neuen
+// Browser-Tabs. OpenStreetMap-Einbettung, kein API-Key noetig -- dieselbe
+// Quelle wie das Adress-Aufloesen (Photon/Nominatim laufen ohnehin auf
+// OSM-Daten).
+function _standortPopupZeigen(lat, lon, adresse) {
+  let overlay = document.getElementById('standort-popup-overlay');
+  if (overlay) overlay.remove();
+
+  const spanne = 0.006; // Kartenausschnitt, grob 500m
+  const bbox = `${lon - spanne},${lat - spanne},${lon + spanne},${lat + spanne}`;
+  const embedSrc = `https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik&marker=${lat},${lon}`;
+  const grosseKarteLink = `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lon}#map=17/${lat}/${lon}`;
+
+  overlay = document.createElement('div');
+  overlay.id = 'standort-popup-overlay';
+  overlay.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:9999; display:flex; align-items:center; justify-content:center; padding:20px;';
+  overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+  overlay.innerHTML = `
+    <div style="background:var(--bg-card); border:1px solid var(--border); border-radius:12px;
+         max-width:440px; width:100%; overflow:hidden; box-shadow:0 20px 60px rgba(0,0,0,.5);">
+      <div style="display:flex; align-items:center; justify-content:space-between; padding:12px 16px; border-bottom:1px solid var(--border);">
+        <span style="font-size:13px; font-weight:600;">${adresse || 'Standort'}</span>
+        <button onclick="document.getElementById('standort-popup-overlay').remove()"
+                style="all:unset; cursor:pointer; color:var(--text-tertiary); font-size:18px; line-height:1; padding:2px 6px;">✕</button>
+      </div>
+      <iframe src="${embedSrc}" style="width:100%; height:280px; border:none; display:block;"></iframe>
+      <div style="padding:10px 16px; display:flex; justify-content:space-between; align-items:center;">
+        <span style="font-size:11px; color:var(--text-tertiary); font-family:var(--font-mono);">${fmtDe(lat,5)}, ${fmtDe(lon,5)}</span>
+        <a href="${grosseKarteLink}" target="_blank" rel="noopener" style="font-size:12px; color:var(--accent); text-decoration:none;">Große Karte öffnen ↗</a>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
 }
 
 

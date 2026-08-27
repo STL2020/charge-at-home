@@ -266,25 +266,35 @@ def _strassenkern(text: str) -> str:
     return re.sub(r"[^a-zäöüß]+", "", t)[:20]
 
 
+def hole_heim_adresse() -> str:
+    """Liefert die hinterlegte Wohnadresse (Einstellung oder erste Person
+    mit gesetzter Adresse) — eigene, oeffentliche Funktion, damit auch
+    andere Stellen (z. B. die "zuhause/unterwegs"-Einfaerbung der
+    Fahrzeugstatus-Kachel) pruefen koennen, ohne die private
+    Strassenvergleichs-Funktion direkt anzufassen."""
+    from repositories import settings_repository
+    heim = (settings_repository.get_setting("heim_adresse") or "").strip()
+    if heim:
+        return heim
+    from services import db_service
+    conn = db_service.get_connection()
+    try:
+        z = conn.execute(
+            "SELECT home_address FROM persons "
+            "WHERE home_address IS NOT NULL AND TRIM(home_address) != '' "
+            "LIMIT 1").fetchone()
+        return (z["home_address"] or "").strip() if z else ""
+    finally:
+        conn.close()
+
+
 def _eigene_adresse_wenn_passend(strasse: str, ort: str) -> str:
     """Gibt die hinterlegte Wohnadresse zurueck, wenn der Punkt dort liegt.
 
     Sonst leer. Verglichen wird nur die Strasse, nicht die Hausnummer.
     """
     try:
-        from repositories import settings_repository
-        heim = (settings_repository.get_setting("heim_adresse") or "").strip()
-        if not heim:
-            from services import db_service
-            conn = db_service.get_connection()
-            try:
-                z = conn.execute(
-                    "SELECT home_address FROM persons "
-                    "WHERE home_address IS NOT NULL AND TRIM(home_address) != '' "
-                    "LIMIT 1").fetchone()
-                heim = (z["home_address"] or "").strip() if z else ""
-            finally:
-                conn.close()
+        heim = hole_heim_adresse()
         if not heim:
             return ""
 
