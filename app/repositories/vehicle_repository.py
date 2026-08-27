@@ -106,6 +106,30 @@ def anlegen_aus_bmw(daten: dict, person_id: int | None = None) -> int:
         conn.close()
 
 
+def setze_stammdaten(vehicle_id: int, werte: dict) -> None:
+    """Setzt Fahrgestellnummer, Kilometerstand und Termine.
+
+    Nur die uebergebenen Felder werden geaendert — was nicht dabei ist,
+    bleibt stehen. So ueberschreibt ein Teilupdate keine Angaben, die
+    aus einer anderen Quelle stammen.
+    """
+    erlaubt = {"vin", "km_stand", "km_stand_datum", "hu_faellig",
+               "service_faellig", "bremsfluessigkeit",
+               "reifen_vorne", "reifen_hinten"}
+    felder = {k: v for k, v in werte.items() if k in erlaubt and v not in (None, "")}
+    if not felder:
+        return
+    conn = get_connection()
+    try:
+        _ensure_tables(conn)
+        setz = ", ".join(f"{k} = ?" for k in felder)
+        conn.execute(f"UPDATE vehicles SET {setz} WHERE id = ?",
+                     list(felder.values()) + [vehicle_id])
+        conn.commit()
+    finally:
+        conn.close()
+
+
 def list_vehicles(person_id: int = None) -> list[dict]:
     conn = get_connection()
     try:

@@ -60,7 +60,7 @@ def handle_404(exc):
     # Für nicht-API-Routen: normale 404-Seite oder zur App weiterleiten
     return jsonify({"error": "not_found"}), 404
 
-PFLICHTENHEFT_VERSION = "12.37"
+PFLICHTENHEFT_VERSION = "12.38"
 
 # Fassung, die dem Anwender gezeigt wird. Die Pflichtenheft-Nummer daneben ist
 # die interne Baunummer — beide zusammen machen Rückfragen eindeutig.
@@ -2040,14 +2040,27 @@ def api_vehicles_add():
     person_id = data.get("person_id")
     if not person_id:
         return jsonify({"error": "person_required"}), 400
+    # Fahrzeugdaten und Termine — nur die uebergebenen Felder anfassen,
+    # damit von Hand gepflegte Werte beim Bearbeiten erhalten bleiben.
+    zusatz = {k: data[k] for k in
+              ("vin", "km_stand", "km_stand_datum", "hu_faellig",
+               "service_faellig", "bremsfluessigkeit",
+               "reifen_vorne", "reifen_hinten")
+              if data.get(k)}
+
     if data.get("id"):
         vehicle_repository.update_vehicle(
             int(data["id"]), data.get("bezeichnung", ""), data.get("kennzeichen", ""),
             data.get("antrieb", "elektro"), bool(data.get("ist_standard")))
+        if zusatz:
+            vehicle_repository.setze_stammdaten(int(data["id"]), zusatz)
         return jsonify({"ok": True, "id": data["id"]})
+
     vid = vehicle_repository.insert_vehicle(
         person_id, data.get("bezeichnung", ""), data.get("kennzeichen", ""),
         data.get("antrieb", "elektro"), bool(data.get("ist_standard")))
+    if zusatz:
+        vehicle_repository.setze_stammdaten(vid, zusatz)
     return jsonify({"ok": True, "id": vid})
 
 

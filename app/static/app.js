@@ -4920,9 +4920,6 @@ function setVehicleAntrieb(btn, antrieb) {
   }
 }
 
-async // Fahrzeug aus dem BMW-CarData-Archiv anlegen. Das ZIP enthält
-// Fahrgestellnummer, Kilometerstand und die Wartungstermine — die
-// muss niemand abtippen.
 // Fahrzeug aus der laufenden CarData-Verbindung anlegen. Nutzt die
 // hinterlegte Fahrgestellnummer und die zuletzt abgerufenen Werte —
 // kein Archiv, keine Wartezeit.
@@ -4981,6 +4978,11 @@ async function openVehicleModal() {
   document.getElementById('vehicle-modal-title').textContent = 'Fahrzeug hinzufügen';
   document.getElementById('vehicle-bezeichnung').value = '';
   document.getElementById('vehicle-kennzeichen').value = '';
+  ['vehicle-vin','vehicle-km','vehicle-hu','vehicle-service',
+   'vehicle-bremsfluessigkeit','vehicle-reifen'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
   document.getElementById('vehicle-standard').checked = false;
   document.getElementById('vehicle-modal-message').textContent = '';
   _vehicleAntrieb = 'elektro';
@@ -5010,6 +5012,17 @@ async function editVehicle(id) {
   document.getElementById('vehicle-bezeichnung').value = v.bezeichnung;
   document.getElementById('vehicle-kennzeichen').value = v.kennzeichen || '';
   document.getElementById('vehicle-standard').checked = !!v.ist_standard;
+  // Fahrzeugdaten und Termine
+  const setzen = (id, wert) => {
+    const el = document.getElementById(id);
+    if (el) el.value = wert || '';
+  };
+  setzen('vehicle-vin', v.vin);
+  setzen('vehicle-km', v.km_stand);
+  setzen('vehicle-hu', v.hu_faellig);
+  setzen('vehicle-service', v.service_faellig);
+  setzen('vehicle-bremsfluessigkeit', v.bremsfluessigkeit);
+  setzen('vehicle-reifen', v.reifen_vorne);
   _vehicleAntrieb = v.antrieb;
   const toggle = document.getElementById('vehicle-antrieb-toggle');
   toggle.querySelectorAll('button').forEach((b,i) => b.classList.toggle('on', (i===0)===(v.antrieb==='elektro')));
@@ -5027,6 +5040,20 @@ async function saveVehicle() {
     return;
   }
   const body = { person_id, bezeichnung, kennzeichen, antrieb: _vehicleAntrieb, ist_standard };
+
+  // Fahrzeugdaten und Termine mitschicken. Leere Felder werden nicht
+  // übertragen, damit vorhandene Werte nicht überschrieben werden.
+  const holen = id => (document.getElementById(id)?.value || '').trim();
+  const zusatz = {
+    vin: holen('vehicle-vin').toUpperCase(),
+    km_stand: holen('vehicle-km'),
+    hu_faellig: holen('vehicle-hu'),
+    service_faellig: holen('vehicle-service'),
+    bremsfluessigkeit: holen('vehicle-bremsfluessigkeit'),
+    reifen_vorne: holen('vehicle-reifen'),
+  };
+  Object.entries(zusatz).forEach(([k, v]) => { if (v) body[k] = v; });
+
   if (_editingVehicleId) body.id = _editingVehicleId;
   await fetch('/api/vehicles', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
   closeVehicleModal();

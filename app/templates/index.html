@@ -644,7 +644,6 @@
             <tr><td colspan="11" class="hint">Lade Sessions …</td></tr>
           </tbody>
         </table>
-        <div class="hint">Zwischenstände offener Sessions ohne StopTransaction folgen ab Sprint 3 (§ 6.1).</div>
       </div>
     </div>
   </section>
@@ -1017,6 +1016,52 @@
         <label style="display:flex; align-items:center; gap:8px; margin-top:12px; font-size:13px; cursor:pointer;">
           <input type="checkbox" id="vehicle-standard"> Als Standard-Fahrzeug für neue Fahrten
         </label>
+
+        <!-- Fahrzeugdaten und Termine. Werden beim BMW-Abruf befüllt,
+             lassen sich aber auch von Hand pflegen — für Fahrzeuge
+             anderer Hersteller. -->
+        <div style="margin-top:16px; padding-top:14px; border-top:1px solid var(--border);">
+          <div class="field-label" style="margin-bottom:10px;">
+            Fahrzeugdaten und Termine
+          </div>
+          <div class="form-row-2">
+            <div>
+              <label class="field-label" for="vehicle-vin">Fahrgestellnummer</label>
+              <input type="text" id="vehicle-vin" style="width:100%"
+                     placeholder="WBY…" maxlength="17">
+            </div>
+            <div>
+              <label class="field-label" for="vehicle-km">Kilometerstand</label>
+              <input type="number" id="vehicle-km" style="width:100%"
+                     placeholder="26380" min="0">
+            </div>
+          </div>
+          <div class="form-row-2" style="margin-top:10px;">
+            <div>
+              <label class="field-label" for="vehicle-hu">Hauptuntersuchung fällig</label>
+              <input type="date" id="vehicle-hu" style="width:100%">
+            </div>
+            <div>
+              <label class="field-label" for="vehicle-service">Nächster Service</label>
+              <input type="date" id="vehicle-service" style="width:100%">
+            </div>
+          </div>
+          <div class="form-row-2" style="margin-top:10px;">
+            <div>
+              <label class="field-label" for="vehicle-bremsfluessigkeit">Bremsflüssigkeit</label>
+              <input type="date" id="vehicle-bremsfluessigkeit" style="width:100%">
+            </div>
+            <div>
+              <label class="field-label" for="vehicle-reifen">Reifengröße</label>
+              <input type="text" id="vehicle-reifen" style="width:100%"
+                     placeholder="245 40 R 19 98 Y">
+            </div>
+          </div>
+          <div class="hint" style="margin-top:8px;">
+            Bei BMW-Fahrzeugen füllt „Aus BMW-Portal" diese Felder selbst.
+          </div>
+        </div>
+
         <div id="vehicle-antrieb-hint" class="hint" style="margin-top:10px;"></div>
         <div id="vehicle-modal-message" style="font-size:13px; margin:10px 0; min-height:16px;"></div>
         <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:8px;">
