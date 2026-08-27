@@ -146,6 +146,7 @@ function showView(name) {
     setTimeout(() => showSettingsTab('allgemein', document.querySelector('.settings-tab')), 0);
   } else if (name === 'wallbox') {
     loadWallboxesTable();
+    _pruefeDoppelteWallbox();
     updateOcppConnectionUrl();
     loadTopologyLivePower();
     loadPollInterval();
@@ -483,6 +484,15 @@ function renderSessionsTable(sessions, showClassification) {
       </div>${adresse}</td>`;
 
     const row = document.createElement('tr');
+
+    // Klick auf die Zeile öffnet die Bearbeitung — wie bei den Fahrten.
+    // Kästchen, Knöpfe und Umschalter behalten ihre eigene Wirkung.
+    row.style.cursor = 'pointer';
+    row.addEventListener('click', function (e) {
+      if (e.target.closest('button, input, a, svg, .toggle-pair')) return;
+      editSession(s.id);
+    });
+
     row.innerHTML = `
       <td><input type="checkbox" class="sess-cb" data-id="${s.id}" onchange="toggleSessionCheck(${s.id}, this.checked)"></td>
       <td class="mono">#S-${s.id}</td>
@@ -559,7 +569,16 @@ async function editSession(sessionId) {
     document.getElementById('ms-meter-end').value = raw.meter_stop_wh || '';
   }
   loadSessionFormSuggestions();
-  window.scrollTo(0, 0);
+
+  // Zum Formular scrollen statt an den Seitenanfang — bei langen Listen
+  // hätte man sonst suchen müssen, wohin der Klick geführt hat.
+  const form = document.getElementById('new-session-form');
+  if (form) {
+    form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    form.style.transition = 'box-shadow .3s';
+    form.style.boxShadow = '0 0 0 2px var(--amber)';
+    setTimeout(() => { form.style.boxShadow = ''; }, 1200);
+  }
 }
 
 async function deleteSession(sessionId) {
@@ -1308,6 +1327,13 @@ async function editTrip(tripId) {
   editingTripId = tripId;
   document.getElementById('new-trip-form').style.display = 'block';
   document.getElementById('trip-form-title').textContent = `Fahrt #${tripId} bearbeiten`;
+
+  // Fahrer und Fahrzeug befüllen — das geschah bisher nur beim Anlegen
+  // einer neuen Fahrt. Wer eine bestehende öffnete, fand leere Listen und
+  // musste erst eine Fahrt anlegen und verwerfen, damit sie gefüllt wurden.
+  await loadPersonsIntoTripForm();
+  const fzSel = document.getElementById('trip-vehicle-select');
+  if (fzSel && t.vehicle_id) fzSel.value = String(t.vehicle_id);
   document.getElementById('trip-date').value = t.trip_date;
   document.getElementById('trip-purpose').value = t.purpose;
   document.getElementById('trip-start').value = t.start_address;
@@ -1325,7 +1351,18 @@ async function editTrip(tripId) {
     document.getElementById('trip-rate-custom').value = t.rate_chosen;
   }
   updateTripPreview();
-  window.scrollTo(0, 0);
+
+  // Zum Formular scrollen — nicht an den Seitenanfang. Bei einer langen
+  // Fahrtenliste lag das Formular sonst außerhalb des Sichtfelds und man
+  // musste erst suchen, wohin der Klick geführt hat.
+  const form = document.getElementById('new-trip-form');
+  if (form) {
+    form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    // Kurz hervorheben, damit klar ist, worauf sich das Formular bezieht
+    form.style.transition = 'box-shadow .3s';
+    form.style.boxShadow = '0 0 0 2px var(--amber)';
+    setTimeout(() => { form.style.boxShadow = ''; }, 1200);
+  }
 }
 
 async function deleteTrip(tripId) {
@@ -2034,6 +2071,46 @@ async function startEditWallbox(wallboxId) {
 
 function cancelEditWallbox() {
   closeWbModal();
+}
+
+// Doppelte Wallboxen zusammenführen. Der Knopf erscheint nur, wenn es
+// tatsächlich eine automatisch angelegte "BMW (zuhause)" neben einer
+// echten Wallbox gibt.
+// Knopf nur zeigen, wenn es wirklich eine doppelte gibt — sonst steht
+// dort eine Schaltfläche, die niemand versteht.
+async function _pruefeDoppelteWallbox() {
+  const btn = document.getElementById('wb-merge-btn');
+  if (!btn) return;
+  try {
+    const d = await (await fetch('/api/wallboxes')).json();
+    const alle = d.wallboxes || [];
+    const bmwHeim = alle.some(w => w.name === 'BMW (zuhause)');
+    const echte = alle.some(w => !String(w.name).startsWith('BMW ')
+                              && w.name !== 'Unterwegs geladen');
+    btn.style.display = (bmwHeim && echte) ? 'inline-flex' : 'none';
+  } catch (e) {
+    btn.style.display = 'none';
+  }
+}
+
+async function wallboxenZusammenfuehren() {
+  if (!confirm('Die automatisch angelegte Wallbox "BMW (zuhause)" mit Ihrer '
+             + 'echten Wallbox zusammenführen?\n\n'
+             + 'Alle Ladevorgänge werden übertragen, der doppelte Eintrag '
+             + 'verschwindet. "Unterwegs geladen" bleibt bestehen.')) return;
+  try {
+    const d = await (await fetch('/api/wallboxes/zusammenfuehren',
+                                 { method: 'POST' })).json();
+    if (d.ok) {
+      _toast(`${d.verschoben} Ladevorgänge auf "${d.ziel}" übertragen`);
+      loadWallboxesTable();
+      _pruefeDoppelteWallbox();
+    } else {
+      _toast(d.fehler || 'Zusammenführen fehlgeschlagen');
+    }
+  } catch (e) {
+    _toast('Zusammenführen fehlgeschlagen');
+  }
 }
 
 function openWbModal(editId) {
@@ -4741,6 +4818,58 @@ async function loadVehiclesView() {
   loadVollkostenView();
 }
 
+// Fahrzeugdaten aus dem BMW-Archiv: Kilometerstand, Wartungstermine,
+// Reifen. Fällige Termine werden hervorgehoben — sonst übersieht man sie.
+function _fahrzeugDaten(v) {
+  const zeilen = [];
+  const heute = new Date();
+
+  if (v.km_stand) {
+    const stand = v.km_stand_datum
+      ? ` <span style="color:var(--text-tertiary);">(${_datumKurz(v.km_stand_datum)})</span>`
+      : '';
+    zeilen.push(`<div><span style="color:var(--text-tertiary);">Kilometerstand</span>
+                 <b>${Number(v.km_stand).toLocaleString('de-DE')} km</b>${stand}</div>`);
+  }
+
+  [['hu_faellig', 'Hauptuntersuchung'],
+   ['service_faellig', 'Service'],
+   ['bremsfluessigkeit', 'Bremsflüssigkeit']].forEach(([feld, name]) => {
+    if (!v[feld]) return;
+    const d = new Date(v[feld]);
+    const tage = Math.round((d - heute) / 86400000);
+    // Ab 60 Tagen vorher wird es dringend
+    const farbe = tage < 0 ? 'var(--danger)'
+                : tage < 60 ? 'var(--amber)'
+                : 'var(--text-secondary)';
+    const zusatz = tage < 0 ? ' — überfällig'
+                 : tage < 60 ? ` — in ${tage} Tagen`
+                 : '';
+    zeilen.push(`<div><span style="color:var(--text-tertiary);">${name}</span>
+                 <b style="color:${farbe};">${_datumKurz(v[feld])}${zusatz}</b></div>`);
+  });
+
+  if (v.reifen_vorne) {
+    const hinten = v.reifen_hinten && v.reifen_hinten !== v.reifen_vorne
+      ? ` / ${v.reifen_hinten}` : '';
+    zeilen.push(`<div><span style="color:var(--text-tertiary);">Reifen</span>
+                 <span style="font-family:var(--font-mono); font-size:11.5px;">${v.reifen_vorne}${hinten}</span></div>`);
+  }
+
+  if (!zeilen.length) return '';
+  return `<div style="margin-top:10px; padding-top:10px;
+               border-top:1px solid var(--border); font-size:12px;
+               display:flex; flex-direction:column; gap:5px;">
+            ${zeilen.join('')}
+          </div>`;
+}
+
+function _datumKurz(iso) {
+  if (!iso) return '';
+  const t = String(iso).split('-');
+  return t.length === 3 ? `${t[2]}.${t[1]}.${t[0]}` : iso;
+}
+
 async function loadVehiclesGrid() {
   const grid = document.getElementById('vehicles-grid');
   if (!grid) return;
@@ -4769,6 +4898,7 @@ async function loadVehiclesGrid() {
           ${v.ist_standard ? '<span style="margin-left:6px; color:var(--text-tertiary);">· Standard</span>' : ''}
         </div>
         ${v.antrieb==='verbrenner' ? '<div class="hint" style="margin-top:8px;">Verbrenner: keine Stromerstattung, nur Fahrtkosten.</div>' : ''}
+        ${_fahrzeugDaten(v)}
         <div style="margin-top:12px;">
           <button class="btn btn-sm" onclick="manageVehicleCosts(${v.id}, '${v.bezeichnung.replace(/'/g,"")}')" style="width:100%;">Kosten verwalten →</button>
         </div>

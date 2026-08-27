@@ -36,7 +36,74 @@ def _ensure_tables(conn) -> None:
             conn.execute("ALTER TABLE trips ADD COLUMN vehicle_id INTEGER")
         except Exception:
             pass
+    # Fahrzeugdaten aus dem BMW-Archiv: Fahrgestellnummer, Kilometerstand,
+    # Wartungstermine. Nachgeruestet, damit bestehende Datenbanken
+    # weiterlaufen.
+    cols_v = [r["name"] for r in conn.execute("PRAGMA table_info(vehicles)").fetchall()]
+    for spalte, typ in [("vin", "TEXT"), ("km_stand", "INTEGER"),
+                        ("km_stand_datum", "TEXT"),
+                        ("hu_faellig", "TEXT"),        # Hauptuntersuchung
+                        ("service_faellig", "TEXT"),   # naechster Service
+                        ("bremsfluessigkeit", "TEXT"),
+                        ("reifen_vorne", "TEXT"), ("reifen_hinten", "TEXT")]:
+        if spalte not in cols_v:
+            try:
+                conn.execute(f"ALTER TABLE vehicles ADD COLUMN {spalte} {typ}")
+            except Exception:
+                pass
     conn.commit()
+
+
+def anlegen_aus_bmw(daten: dict, person_id: int | None = None) -> int:
+    """Legt ein Fahrzeug aus BMW-Archivdaten an oder aktualisiert es.
+
+    Die Fahrgestellnummer ist der Schluessel: Gibt es den Wagen schon,
+    werden nur die Werte aufgefrischt — sonst entstuende bei jedem Import
+    ein neuer Eintrag.
+    """
+    vin = (daten.get("vin") or "").strip()
+    conn = get_connection()
+    try:
+        _ensure_tables(conn)
+        vorhanden = None
+        if vin:
+            vorhanden = conn.execute(
+                "SELECT id FROM vehicles WHERE vin = ? LIMIT 1", (vin,)).fetchone()
+
+        felder = {
+            "vin": vin or None,
+            "km_stand": daten.get("km_stand"),
+            "km_stand_datum": daten.get("km_stand_datum"),
+            "hu_faellig": daten.get("hu_faellig"),
+            "service_faellig": daten.get("service_faellig"),
+            "bremsfluessigkeit": daten.get("bremsfluessigkeit"),
+            "reifen_vorne": daten.get("reifen_vorne"),
+            "reifen_hinten": daten.get("reifen_hinten"),
+        }
+
+        if vorhanden:
+            setz = ", ".join(f"{k} = ?" for k, v in felder.items() if v is not None)
+            werte = [v for v in felder.values() if v is not None]
+            if setz:
+                conn.execute(f"UPDATE vehicles SET {setz} WHERE id = ?",
+                             werte + [vorhanden["id"]])
+                conn.commit()
+            return vorhanden["id"]
+
+        # Erstes Fahrzeug wird automatisch zum Standard
+        anzahl = conn.execute("SELECT COUNT(*) c FROM vehicles").fetchone()["c"]
+        spalten = ["person_id", "bezeichnung", "antrieb", "ist_standard"] + \
+                  [k for k, v in felder.items() if v is not None]
+        werte = [person_id, daten.get("bezeichnung") or "BMW", "elektro",
+                 1 if anzahl == 0 else 0] + \
+                [v for v in felder.values() if v is not None]
+        platz = ", ".join("?" * len(spalten))
+        cur = conn.execute(
+            f"INSERT INTO vehicles ({', '.join(spalten)}) VALUES ({platz})", werte)
+        conn.commit()
+        return cur.lastrowid
+    finally:
+        conn.close()
 
 
 def list_vehicles(person_id: int = None) -> list[dict]:

@@ -640,6 +640,45 @@ def _ist_heimladung(session: dict, heim_adresse: str) -> bool:
     return strasse(adresse) and strasse(adresse) == strasse(heim_adresse)
 
 
+def _wallbox_zuhause() -> int:
+    """Die Wallbox fuer Heimladungen.
+
+    Reihenfolge: eine per OCPP oder Loxone angebundene Wallbox, sonst die
+    als Standard markierte, sonst die einzige vorhandene. Erst wenn gar
+    keine existiert, wird eine angelegt.
+
+    Der Grund: Wer zuhause laedt, hat dort genau einen Ladepunkt. Ob die
+    Daten per OCPP kommen oder aus der BMW-App, aendert daran nichts —
+    es bleibt dieselbe Wallbox.
+    """
+    from services import db_service
+    conn = db_service.get_connection()
+    try:
+        # 1. Angebundene Wallbox (OCPP, Loxone) — die misst tatsaechlich
+        z = conn.execute(
+            """SELECT id FROM wallboxes
+               WHERE source_type IN ('ocpp', 'loxone_api')
+               ORDER BY id LIMIT 1""").fetchone()
+        if z:
+            return z["id"]
+
+        # 2. Irgendeine vorhandene, aber keine der frueher automatisch
+        #    angelegten BMW-Eintraege
+        z = conn.execute(
+            """SELECT id FROM wallboxes
+               WHERE name NOT LIKE 'BMW %' AND name NOT LIKE 'Unterwegs%'
+               ORDER BY id LIMIT 1""").fetchone()
+        if z:
+            return z["id"]
+    finally:
+        conn.close()
+
+    # 3. Keine vorhanden — dann eine anlegen
+    from repositories import wallbox_repository
+    return wallbox_repository.get_or_create_wallbox(
+        "Wallbox zuhause", source_type="manual")
+
+
 def importiere_ladesessions(vin: str, user_id: int,
                             ueberschneidung_pruefen: bool | None = None) -> dict:
     """Uebernimmt die Ladehistorie als Ladesessions.
@@ -682,8 +721,19 @@ def importiere_ladesessions(vin: str, user_id: int,
                 "meldung": "Keine Ladevorgänge in den letzten 30 Tagen."}
 
     heim = _heimadresse(sessions)
-    wb_heim = wallbox_repository.get_or_create_wallbox("BMW (zuhause)", source_type="manual")
-    wb_extern = wallbox_repository.get_or_create_wallbox("BMW (unterwegs)", source_type="manual")
+
+    # HEIMLADUNGEN gehoeren auf die vorhandene Wallbox, nicht auf eine
+    # erfundene zweite. Frueher entstand hier "BMW (zuhause)" — wer bereits
+    # eine eigene Wallbox betreibt, hatte danach zwei Eintraege fuer
+    # denselben Ladepunkt und musste jede Auswertung doppelt lesen.
+    wb_heim = _wallbox_zuhause()
+
+    # UNTERWEGS ist etwas anderes: Fremde Ladesaeulen sind keine eigene
+    # Wallbox und gehoeren nicht mit ihr vermischt. Ein Sammeleintrag
+    # genuegt — welche Saeule es war, steht ohnehin in der Ortsangabe.
+    from repositories import wallbox_repository
+    wb_extern = wallbox_repository.get_or_create_wallbox(
+        "Unterwegs geladen", source_type="manual")
 
     # Preise je Ladeart. Heimladung laeuft ueber den eigenen Vertrag, extern
     # ueber Ladekarte oder Ad-hoc-Tarif — dort liegen die Preise deutlich

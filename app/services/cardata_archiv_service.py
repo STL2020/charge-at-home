@@ -170,6 +170,83 @@ def rekonstruiere_fahrten(eintraege: list, vin: str = "") -> list[dict]:
     return fahrten
 
 
+def lies_fahrzeugdaten(zip_pfad: str) -> dict:
+    """Liest Fahrzeugdaten aus dem BMW-Archiv.
+
+    Das Archiv enthaelt neben der Ladehistorie eine KeyList mit den
+    Wartungsterminen (Condition Based Service) und eine Reifendiagnose.
+    Beides ist fuer die Fahrzeugverwaltung nuetzlich — bisher blieb es
+    ungenutzt liegen.
+    """
+    import zipfile, re as _re
+    import xml.etree.ElementTree as ET
+
+    daten: dict = {}
+    try:
+        with zipfile.ZipFile(zip_pfad) as z:
+            namen = z.namelist()
+
+            # Fahrgestellnummer steht im Dateinamen
+            for n in namen:
+                m = _re.search(r"_([A-HJ-NPR-Z0-9]{17})_", n)
+                if m:
+                    daten["vin"] = m.group(1)
+                    break
+
+            # Wartungstermine aus der KeyList
+            keylist = next((n for n in namen
+                            if "KeyList" in n and n.endswith(".xml")), None)
+            if keylist:
+                with z.open(keylist) as f:
+                    wurzel = ET.parse(f).getroot()
+                for msg in wurzel.iter("cbsMessage"):
+                    eintrag = {k.tag: (k.text or "").strip() for k in msg}
+                    titel = eintrag.get("title", "")
+                    datum = eintrag.get("date", "")[:10]   # TT.MM.JJJJ
+                    if not datum or datum == "-":
+                        continue
+                    # In ISO wandeln, damit sich sortieren laesst
+                    m = _re.match(r"(\d{2})\.(\d{2})\.(\d{4})", datum)
+                    iso = f"{m.group(3)}-{m.group(2)}-{m.group(1)}" if m else datum
+                    if "untersuchung" in titel.lower():
+                        daten["hu_faellig"] = iso
+                    elif "bremsfl" in titel.lower():
+                        daten["bremsfluessigkeit"] = iso
+                    elif "check" in titel.lower() or "service" in titel.lower():
+                        daten["service_faellig"] = iso
+
+            # Reifen aus der Diagnose
+            reifen = next((n for n in namen if "Reifendiagnose" in n
+                           and n.endswith(".json")), None)
+            if reifen:
+                with z.open(reifen) as f:
+                    r = json.loads(f.read().decode("utf-8"))
+                montiert = ((r.get("passengerCar") or {}).get("mountedTyres") or {})
+                for seite, feld in [("frontLeft", "reifen_vorne"),
+                                    ("rearLeft", "reifen_hinten")]:
+                    dim = ((montiert.get(seite) or {}).get("dimension") or {})
+                    if dim.get("value"):
+                        daten[feld] = dim["value"]
+
+            # Kilometerstand aus der juengsten Ladung
+            hist = next((n for n in namen if "Ladehistorie" in n
+                         and n.endswith(".json")), None)
+            if hist:
+                with z.open(hist) as f:
+                    eintraege = json.loads(f.read().decode("utf-8"))
+                mit_km = [e for e in eintraege if e.get("mileage")]
+                if mit_km:
+                    juengste = max(mit_km, key=lambda e: e.get("startTime", 0))
+                    daten["km_stand"] = int(juengste["mileage"])
+                    from datetime import datetime as _dt
+                    daten["km_stand_datum"] = _dt.fromtimestamp(
+                        juengste["startTime"]).strftime("%Y-%m-%d")
+    except Exception:
+        pass   # Fahrzeugdaten sind Beiwerk — der Fahrten-Import laeuft trotzdem
+
+    return daten
+
+
 def _standard_fahrzeug(user_id: int, vin: str = "") -> int | None:
     """Fahrzeug fuer den Import ermitteln.
 
@@ -227,6 +304,21 @@ def importiere_archiv(zip_pfad: str, user_id: int, vin: str = "",
     # Fahrzeug bestimmen, falls keines uebergeben wurde: Gibt es nur eines,
     # ist die Sache eindeutig. Sonst bleibt das Feld leer und der Anwender
     # waehlt selbst — raten waere hier schlechter als offen lassen.
+    # Fahrzeug aus dem Archiv anlegen oder auffrischen: Fahrgestellnummer,
+    # Kilometerstand, TÜV-Termin, Service, Reifen. Das spart dem Anwender
+    # das Abtippen — und die Termine hat er sonst nirgends im Blick.
+    fz_daten = lies_fahrzeugdaten(zip_pfad)
+    if fz_daten:
+        try:
+            from repositories import vehicle_repository
+            if not fz_daten.get("bezeichnung"):
+                fz_daten["bezeichnung"] = "BMW"
+            neue_id = vehicle_repository.anlegen_aus_bmw(fz_daten)
+            if vehicle_id is None:
+                vehicle_id = neue_id
+        except Exception:
+            pass   # ohne Fahrzeug laeuft der Fahrten-Import trotzdem
+
     if vehicle_id is None:
         vehicle_id = _standard_fahrzeug(user_id, vin)
 

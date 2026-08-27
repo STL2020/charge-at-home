@@ -60,7 +60,7 @@ def handle_404(exc):
     # Für nicht-API-Routen: normale 404-Seite oder zur App weiterleiten
     return jsonify({"error": "not_found"}), 404
 
-PFLICHTENHEFT_VERSION = "12.31"
+PFLICHTENHEFT_VERSION = "12.34"
 
 # Fassung, die dem Anwender gezeigt wird. Die Pflichtenheft-Nummer daneben ist
 # die interne Baunummer — beide zusammen machen Rückfragen eindeutig.
@@ -3694,6 +3694,63 @@ def api_adressen_aufloesen():
     event_log_service.log_event("system", "info",
         f"Adressen nachgetragen: {geaendert} Fahrten.")
     return jsonify({"ok": True, "geaendert": geaendert})
+
+
+@app.route("/api/wallboxes/zusammenfuehren", methods=["POST"])
+def api_wallboxen_zusammenfuehren():
+    """Fuehrt die automatisch angelegte BMW-Heimwallbox mit der echten zusammen.
+
+    Frueher legte der BMW-Import "BMW (zuhause)" an, auch wenn schon eine
+    Wallbox vorhanden war. Wer beides nutzt, hat danach zwei Eintraege fuer
+    denselben Ladepunkt. Diese Funktion schreibt die Ladevorgaenge auf die
+    echte Wallbox um und entfernt den ueberfluessigen Eintrag.
+    """
+    user = _current_user()
+    if user is None:
+        return jsonify({"error": "no_user"}), 400
+
+    conn = get_connection()
+    verschoben = 0
+    geloescht = []
+    try:
+        # Zielwallbox: angebunden, sonst die erste ohne BMW-Namen
+        ziel = conn.execute(
+            """SELECT id, name FROM wallboxes
+               WHERE source_type IN ('ocpp', 'loxone_api')
+               ORDER BY id LIMIT 1""").fetchone()
+        if not ziel:
+            ziel = conn.execute(
+                """SELECT id, name FROM wallboxes
+                   WHERE name NOT LIKE 'BMW %' ORDER BY id LIMIT 1""").fetchone()
+        if not ziel:
+            return jsonify({"ok": False,
+                            "fehler": "Keine Wallbox gefunden, auf die "
+                                      "zusammengeführt werden könnte."}), 400
+
+        # Nur die Heim-Variante zusammenfuehren — "unterwegs" bleibt
+        # eigenstaendig, das sind fremde Ladesaeulen.
+        quellen = conn.execute(
+            """SELECT id, name FROM wallboxes
+               WHERE name = 'BMW (zuhause)' AND id != ?""", (ziel["id"],)).fetchall()
+
+        for q in quellen:
+            cur = conn.execute(
+                "UPDATE charging_sessions SET wallbox_id = ? WHERE wallbox_id = ?",
+                (ziel["id"], q["id"]))
+            verschoben += cur.rowcount
+            conn.execute("PRAGMA foreign_keys=OFF")
+            conn.execute("DELETE FROM wallboxes WHERE id = ?", (q["id"],))
+            geloescht.append(q["name"])
+        conn.commit()
+    finally:
+        conn.close()
+
+    if verschoben or geloescht:
+        event_log_service.log_event("system", "info",
+            f"Wallboxen zusammengeführt: {verschoben} Ladevorgänge auf "
+            f"'{ziel['name']}' übertragen.")
+    return jsonify({"ok": True, "verschoben": verschoben,
+                    "entfernt": geloescht, "ziel": ziel["name"]})
 
 
 @app.route("/api/cardata/status", methods=["GET"])
