@@ -362,7 +362,20 @@ def _schleife(vehicle_id: int, gcid: str, vin: str) -> None:
 
             _protokoll_schreiben(vehicle_id,
                 f"Verbinde zu {mqtt_host(vehicle_id)}:{mqtt_port(vehicle_id)} als {gcid} …")
-            client.connect(mqtt_host(vehicle_id), mqtt_port(vehicle_id), keepalive=60)
+            # BUG-VERDACHT BEHOBEN (28.08.): Die Verbindung riss zuverlaessig
+            # alle 60-70 Sekunden mit MQTTv5-Grund "Unspecified error" ab —
+            # exakt im Takt des bisherigen keepalive-Werts von 60s. Das
+            # deutet auf einen zu knapp bemessenen Ping-Zyklus hin (Latenz
+            # zu BMWs Streaming-Server oder ein Ping-Timing-Problem im
+            # Hintergrund-Thread von loop_start()), nicht auf ein
+            # grundsaetzliches Verbindungsproblem — jeder einzelne
+            # Verbindungsaufbau gelang ja. Deutlich groesserer Puffer
+            # (240s statt 60s) reduziert, wie oft ueberhaupt gepingt werden
+            # muss, und damit die Angriffsflaeche fuer genau diesen
+            # Zeitmangel. Der bestehende Wiederverbindungs-Mechanismus
+            # bleibt als Sicherheitsnetz unveraendert bestehen, falls die
+            # Verbindung aus einem anderen Grund doch abbricht.
+            client.connect(mqtt_host(vehicle_id), mqtt_port(vehicle_id), keepalive=240)
             _client[vehicle_id] = client
             client.loop_start()
 
@@ -452,10 +465,12 @@ def verarbeite_nachricht(vehicle_id: int, roh: str) -> dict:
             return None
         if isinstance(eintrag, dict):
             eintrag = eintrag.get("value")
-        if isinstance(eintrag, bool):
-            return eintrag
-        text = str(eintrag).strip().lower()
-        return True if text == "true" else False if text == "false" else None
+        # Nutzt denselben Umwandler wie der manuelle Abruf (_cds._bool),
+        # statt eine zweite, eigene Kopie zu pflegen — genau eine
+        # abweichende Kopie war die Ursache des Akkukapazitaets-Bugs von
+        # vorhin. Deckt sowohl echte true/false als auch Text-Aufzaehlungen
+        # wie CONNECTED/DISCONNECTED ab (siehe DESCRIPTOR_ANGESTECKT).
+        return _cds._bool(eintrag)
 
     # Alle fuer die Status-Kachel relevanten Deskriptoren aus DERSELBEN
     # Nachricht mitnehmen — unabhaengig davon, ob sie LAT/LON/KM enthaelt.

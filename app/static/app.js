@@ -93,6 +93,10 @@ function showView(name) {
     clearInterval(window._protokollInterval);
     window._protokollInterval = null;
   }
+  if (name !== 'protokoll' && window._mqttRohInterval) {
+    clearInterval(window._mqttRohInterval);
+    window._mqttRohInterval = null;
+  }
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   document.getElementById('view-' + name).classList.add('active');
   navItems.forEach(n => n.classList.toggle('active', n.dataset.view === name));
@@ -4506,7 +4510,69 @@ function onProtokollSourceChange() {
   const rawCard = document.getElementById('ocpp-rawlog-card');
   if (rawCard) rawCard.style.display = (quelle === '' || quelle === 'ocpp') ? '' : 'none';
 
+  // MQTT-Rohdaten-Karte nur bei "MQTT (roh)" zeigen — ersetzt dort die
+  // normale Ereignistabelle, weil rohe Stream-Nachrichten so haeufig und
+  // detailliert sind, dass sie in der Tabelle nur stoeren wuerden.
+  const mqttCard = document.getElementById('bmw-mqtt-rawlog-card');
+  const tabelle = document.querySelector('#view-protokoll .card:not(#ocpp-rawlog-card):not(#bmw-mqtt-rawlog-card)');
+  if (mqttCard) {
+    mqttCard.style.display = quelle === 'bmw_mqtt' ? '' : 'none';
+    if (quelle === 'bmw_mqtt') {
+      if (tabelle) tabelle.style.display = 'none';
+      ladeMqttFahrzeugauswahl();
+      if (window._mqttRohInterval) clearInterval(window._mqttRohInterval);
+      window._mqttRohInterval = setInterval(ladeMqttRohprotokoll, 5000);
+      return;
+    }
+  }
+  if (tabelle) tabelle.style.display = '';
+  if (window._mqttRohInterval) { clearInterval(window._mqttRohInterval); window._mqttRohInterval = null; }
+
   loadProtokoll();
+}
+
+// ─── MQTT-Rohdaten im zentralen Protokoll ───────────────────────────────────
+// Konsolidiert an einer Stelle statt verstreut im Fahrzeug-Dialog — auf
+// ausdruecklichen Wunsch: eine Protokollfunktion, nicht mehrere.
+async function ladeMqttFahrzeugauswahl() {
+  const sel = document.getElementById('bmw-mqtt-fahrzeug');
+  if (!sel) return;
+  try {
+    const vs = await (await fetch('/api/vehicles')).json();
+    const fahrzeuge = (vs.vehicles || []).filter(v => v.vin);
+    if (fahrzeuge.length <= 1) {
+      sel.style.display = 'none';
+      sel.innerHTML = fahrzeuge.length ? `<option value="${fahrzeuge[0].id}">${fahrzeuge[0].bezeichnung}</option>` : '';
+    } else {
+      sel.style.display = '';
+      sel.innerHTML = fahrzeuge.map(v => `<option value="${v.id}">${v.bezeichnung}</option>`).join('');
+    }
+  } catch (e) {}
+  ladeMqttRohprotokoll();
+}
+
+async function ladeMqttRohprotokoll() {
+  const pre = document.getElementById('bmw-mqtt-rohtext');
+  const sel = document.getElementById('bmw-mqtt-fahrzeug');
+  if (!pre || !sel || !sel.value) { if (pre) pre.textContent = 'Kein verbundenes Fahrzeug.'; return; }
+  try {
+    const d = await (await fetch(`/api/vehicles/${sel.value}/cardata/stream/protokoll`)).json();
+    pre.textContent = (d.log_tail || []).join('\n') || 'Noch keine Einträge.';
+  } catch (e) {
+    pre.textContent = 'Protokoll konnte nicht geladen werden.';
+  }
+}
+
+function mqttRohprotokollHerunterladen() {
+  const pre = document.getElementById('bmw-mqtt-rohtext');
+  if (!pre) return;
+  const blob = new Blob([pre.textContent], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `mqtt-protokoll-${new Date().toISOString().slice(0,10)}.txt`;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 // ─── Person-Auswahl im Fahrtformular ─────────────────────────────────────────
@@ -5075,7 +5141,6 @@ async function openVehicleModal() {
   document.getElementById('vehicle-bmw-fahrzeugwahl').style.display = 'none';
   document.getElementById('vehicle-bmw-verbunden').style.display = 'none';
   if (_vehicleBmwPolling) { clearInterval(_vehicleBmwPolling); _vehicleBmwPolling = null; }
-  if (_vehicleBmwProtokollTimer) { clearInterval(_vehicleBmwProtokollTimer); _vehicleBmwProtokollTimer = null; }
 
   // Personen laden
   const sel = document.getElementById('vehicle-person');
@@ -5094,7 +5159,6 @@ function closeVehicleModal() {
   // das hat die Seite spuerbar haengen lassen, bis hin zum nicht mehr
   // reagierenden Schliessen-Knopf.
   if (_vehicleBmwPolling) { clearInterval(_vehicleBmwPolling); _vehicleBmwPolling = null; }
-  if (_vehicleBmwProtokollTimer) { clearInterval(_vehicleBmwProtokollTimer); _vehicleBmwProtokollTimer = null; }
 }
 
 async function editVehicle(id) {
@@ -5385,41 +5449,6 @@ async function vehicleBmwArchivImport(input) {
     out.textContent = 'Import fehlgeschlagen.';
   }
   input.value = '';
-}
-
-let _vehicleBmwProtokollTimer = null;
-
-function vehicleBmwProtokollToggle() {
-  const pre = document.getElementById('vehicle-bmw-protokoll');
-  const btn = document.getElementById('vehicle-bmw-protokoll-toggle-btn');
-  const show = pre.style.display === 'none';
-  // Sicherheitsnetz: vor dem Start immer erst einen evtl. noch laufenden
-  // Timer beenden, statt einen zweiten daneben zu haengen.
-  if (_vehicleBmwProtokollTimer) { clearInterval(_vehicleBmwProtokollTimer); _vehicleBmwProtokollTimer = null; }
-  if (show) {
-    pre.style.display = 'block';
-    btn.textContent = 'Protokoll ausblenden';
-    _vehicleBmwProtokollAktualisieren();
-    _vehicleBmwProtokollTimer = setInterval(_vehicleBmwProtokollAktualisieren, 5000);
-  } else {
-    pre.style.display = 'none';
-    btn.textContent = 'Protokoll anzeigen';
-  }
-}
-
-async function _vehicleBmwProtokollAktualisieren() {
-  const vid = _editingVehicleId;
-  const pre = document.getElementById('vehicle-bmw-protokoll');
-  if (!vid || !pre) return;
-  try {
-    const d = await (await fetch(`/api/vehicles/${vid}/cardata/stream/protokoll`)).json();
-    // Nur die letzten 40 Zeilen anzeigen — bei viel Fahrzeugverkehr kann
-    // das Protokoll schnell auf hunderte Zeilen anwachsen; die Anzeige
-    // wuerde sonst bei jeder Aktualisierung eine wachsende Textmenge neu
-    // rendern und die Seite spuerbar traege machen.
-    const zeilen = (d.log_tail || []).slice(-40);
-    pre.textContent = zeilen.length ? zeilen.join('\n') : 'Noch keine Einträge.';
-  } catch (e) {}
 }
 
 async function vehicleBmwImportZuruecksetzen() {

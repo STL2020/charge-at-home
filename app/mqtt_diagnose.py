@@ -267,7 +267,9 @@ def _verbinde_und_lausche(gcid: str, id_token: str, vin: str) -> None:
     client.on_log = bei_log
 
     log(f"Verbinde zu {MQTT_HOST}:{MQTT_PORT} als Benutzer {gcid} …")
-    client.connect(MQTT_HOST, MQTT_PORT, keepalive=60)
+    # Gleicher Wert wie im Produktivpfad (cardata_stream_service.py) —
+    # siehe dortiger Kommentar zur Verbindungsabbruch-Untersuchung.
+    client.connect(MQTT_HOST, MQTT_PORT, keepalive=240)
     client.loop_start()
 
     log("Warte auf Nachrichten. Jetzt fahren (mindestens gut 1 km, GPS-Rauschen "

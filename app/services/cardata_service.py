@@ -78,11 +78,17 @@ DESCRIPTOR_WOCHE = "vehicle.vehicle.averageWeeklyDistanceLongTerm"
 # 'conditionBasedServices' liefert dieselben Angaben sofort: naechste
 # Hauptuntersuchung, Service, Bremsfluessigkeit.
 DESCRIPTOR_CBS = "vehicle.status.conditionBasedServices"
-DESCRIPTOR_MELDUNGEN = "vehicle.status.checkControlMessages"
 # Angesteckt/laedt — der einzige Live-Status, der wirklich zur Ladeabrechnung
 # gehoert statt zur Fernbedienung (siehe Diskussion: Tueren/Fenster bewusst
 # nicht erfasst, das deckt die BMW-App bereits ab).
-DESCRIPTOR_ANGESTECKT = "vehicle.powertrain.tractionBattery.charging.port.anyPosition.isPlugged"
+#
+# BUG BEHOBEN (28.08.): Der urspruengliche Deskriptor war geraten, nicht
+# nachgeschlagen, und existiert so nicht — im offiziellen Telematics-
+# Datenkatalog heisst das Element "isPlugConnected" mit den Werten
+# CONNECTED/DISCONNECTED/INVALID (ein Text, kein wahr/falsch). Bestaetigt
+# durch eine echte, produktiv laufende Referenzintegration (evcc), die
+# genau diesen vollstaendigen Pfad fuer denselben Zweck nutzt.
+DESCRIPTOR_ANGESTECKT = "vehicle.body.chargingPort.status"
 
 CONTAINER_DESCRIPTORS = [
     # Fahrterfassung
@@ -93,7 +99,7 @@ CONTAINER_DESCRIPTORS = [
     DESCRIPTOR_SOC, DESCRIPTOR_REICHWEITE, DESCRIPTOR_SERVICE, DESCRIPTOR_WOCHE,
     DESCRIPTOR_ANGESTECKT,
     # Wartung
-    DESCRIPTOR_CBS, DESCRIPTOR_MELDUNGEN,
+    DESCRIPTOR_CBS,
 ]
 
 # Unterhalb dieser Distanz gilt eine Aenderung als Messrauschen bzw.
@@ -377,16 +383,22 @@ def _zahl(wert) -> float | None:
 
 
 def _bool(wert) -> bool | None:
-    """Wandelt BMWs Wahrheitswerte (echtes bool, 'true'/'false' als Text,
-    oder 'True'/'False') in ein Python-bool um. None, wenn der Wert fehlt."""
+    """Wandelt BMWs Wahrheitswerte in ein Python-bool um. None, wenn der
+    Wert fehlt.
+
+    Deckt zwei Formen ab: echte true/false-Werte (die meisten Deskriptoren)
+    UND Text-Aufzaehlungen wie 'CONNECTED'/'DISCONNECTED', wie sie der
+    offizielle Katalog fuer den Steckerstatus vorsieht (isPlugConnected) —
+    nicht jeder BMW-Datenpunkt ist ein echtes Bool, manche sind ein
+    Zustandstext mit nur zwei sinnvollen Werten."""
     if wert is None:
         return None
     if isinstance(wert, bool):
         return wert
-    text = str(wert).strip().lower()
-    if text in ("true", "1"):
+    text = str(wert).strip().upper()
+    if text in ("CONNECTED", "TRUE", "1", "LOCKED", "ON"):
         return True
-    if text in ("false", "0"):
+    if text in ("DISCONNECTED", "FALSE", "0", "UNLOCKED", "OFF"):
         return False
     return None
 
