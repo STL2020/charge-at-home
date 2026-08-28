@@ -57,7 +57,7 @@
   <a href="#sicherung">9 · Datensicherung und Neuanfang</a>
   <a href="#ausgaben">10 · Demo und Vollversion</a>
   <a href="#installation">11 · Installationsarten</a>
-  <a href="#faq">12 · Häufige Fragen</a>
+  <a href="#faq">13 · Häufige Fragen</a>
 </nav>
 
 <h2 id="start">1 · Erste Schritte</h2>
@@ -249,15 +249,77 @@ go-e, Webasto, ABL, Zaptec und weiteren.</p>
   im selben Netz sind.
 </div>
 
-<h2 id="bmw">4 · BMW ConnectedDrive</h2>
-<p>Fahrten lassen sich direkt aus dem MyBMW-Konto importieren, ohne OBD-Stecker
-und ohne manuelle Eingabe.</p>
+<h2 id="bmw">4 · BMW CarData einrichten</h2>
+<p>Das Fahrzeug liefert Kilometerstand, Standort, Ladestand und Ladezustand
+selbstständig — ohne OBD-Stecker und ohne manuelle Eingabe.</p>
+
+<h3>Schritt 1 — Fahrzeug verbinden</h3>
 <ol>
-  <li><b>Einstellungen → BMW Sync</b> öffnen.</li>
-  <li>MyBMW-Zugangsdaten eintragen, optional die Fahrgestellnummer bei mehreren Fahrzeugen.</li>
-  <li>Auf <b>Jetzt synchronisieren</b> klicken.</li>
-  <li>Im Dashboard erscheinen die neuen Fahrten. Pro Fahrt mit einem Klick
-      <b>Dienstlich</b> oder <b>Privat</b> wählen.</li>
+  <li>Im <b>BMW-Portal</b> (mybmw → CarData → Technical Access) eine
+      <b>Client-ID</b> erzeugen.</li>
+  <li>In der App unter <b>Fahrzeuge → Fahrzeug bearbeiten → „Aus BMW-Portal"</b>
+      die Client-ID eintragen und die Anmeldung im Browser bestätigen.</li>
+  <li>Fahrzeug aus der Liste auswählen. Fertig.</li>
+</ol>
+
+<h3>Schritt 2 — Datenpunkte aktivieren (Pflicht!)</h3>
+<div class="box">
+  <b>Ohne diesen Schritt bleibt die Fahrzeugkachel leer</b>, obwohl die Anmeldung
+  funktioniert. BMW aktiviert die Datenpunkte nicht von selbst. Im BMW-Portal unter
+  <b>CarData → Configure data stream</b> anhaken:
+  <ul>
+    <li><b>Pflicht:</b> <code>vehicle.vehicle.travelledDistance</code>,
+        <code>…currentLocation.latitude</code>,
+        <code>…currentLocation.longitude</code> (beide!)</li>
+    <li><b>Elektro:</b> <code>…batteryManagement.header</code> (Ladestand),
+        <code>…batteryManagement.maxEnergy</code>,
+        <code>…kombiRemainingElectricRange</code>,
+        <code>…avgElectricRangeConsumption</code>,
+        <code>…electricEngine.charging.status</code>,
+        <code>…electricEngine.charging.method</code>,
+        <code>vehicle.body.chargingPort.status</code>,
+        <code>vehicle.body.flap.isLocked</code></li>
+    <li><b>Optional:</b> Türen und Fenster (je 4 Einträge), Motorhaube, Kofferraum</li>
+  </ul>
+  Die vollständige Zuordnung mit Erklärung steht in der App unter
+  <b>Einstellungen → Ladeimport</b>.
+</div>
+
+<div class="box">
+  <b>Was BMW nicht liefert.</b> Ladestand über <code>stateOfCharge.displayed</code>,
+  Akkuzustand (SoH), Restladedauer, Verriegelung und die Service-/HU-Termine kommen
+  über den Datenstrom nicht an — auch nicht, wenn sie im Portal angehakt sind. Das
+  wurde über Stunden geprüft. Diese Felder sind deshalb bewusst nicht in der
+  Anwendung enthalten; <b>HU/TÜV und Service trägst du im Fahrzeug-Dialog von Hand
+  ein</b> oder füllst sie per Archiv-Import.
+</div>
+
+<h3>Datenstrom oder manueller Abruf?</h3>
+<ul>
+  <li><b>Datenstrom (empfohlen):</b> läuft im Hintergrund, unbegrenzt. Meldet sich
+      nur, wenn sich am Fahrzeug etwas ändert — ein geparktes Auto sendet
+      minutenlang nichts. Das ist normal.</li>
+  <li><b>Manueller Abruf</b> („Aktualisieren" an der Kachel): fragt sofort ab,
+      aber <b>höchstens 50-mal am Tag</b> (BMW-Vorgabe). Die Kachel zeigt das
+      verbleibende Kontingent.</li>
+</ul>
+
+<div class="box">
+  <b>Mehrere Fahrzeuge im selben BMW-Konto?</b> Kein Problem — die App hält
+  bewusst nur <b>eine</b> Verbindung offen und bedient beide Fahrzeuge darüber.
+  BMW erlaubt pro Konto nur eine Verbindung; zwei würden sich gegenseitig
+  ständig trennen.
+</div>
+
+<h3>Wenn nichts ankommt</h3>
+<ol>
+  <li><b>Protokoll → Quelle „MQTT (roh)"</b> öffnen. Dort steht, was das Fahrzeug
+      tatsächlich sendet.</li>
+  <li>Kommt gar nichts: Datenpunkte im Portal prüfen (Schritt 2).</li>
+  <li>Kommt etwas, aber nicht der erwartete Wert: Der Datenpunkt wird von diesem
+      Modell nicht unterstützt.</li>
+  <li>Neu angehakte Punkte greifen erst beim nächsten Abruf — die App legt den
+      Container selbstständig neu an.</li>
 </ol>
 <p>Dienstliche Fahrten werden automatisch als abrechenbare Fahrt übernommen. Private
 Fahrten bleiben in der Rohtabelle und tauchen in keinem Beleg auf — sie zählen nur
@@ -576,7 +638,45 @@ freigeben und anderswo erneut eingeben.</p>
 die genauere Fahrterkennung über den Telematik-Abruf willst. Für Ladevorgänge und die
 daraus abgeleiteten Fahrten reicht die portable Fassung — BMW hält die Daten 30 Tage vor.</p>
 
-<h2 id="faq">12 · Häufige Fragen</h2>
+<h2 id="zugriff">12 · Zugriff von außen absichern</h2>
+<p>Die Anwendung hat <b>standardmäßig keine Anmeldung</b> — im eigenen Heimnetz
+ist das bewusst so, dort ist sie ohnehin nur intern erreichbar.</p>
+
+<div class="box">
+  <b>Sobald die Anwendung von außen erreichbar ist, ist eine Anmeldung Pflicht.</b>
+  Ohne sie hat jeder, der die Adresse kennt, vollen Zugriff auf Fahrtenbuch mit
+  Adressen, Wallbox-Zugangsdaten und alle Belege.
+</div>
+
+<h3>Anmeldung einschalten</h3>
+<ol>
+  <li><b>Einstellungen → Rechtliches → Anmeldung mit Passwort</b>.</li>
+  <li>Passwort vergeben (mindestens 8 Zeichen) und speichern.</li>
+  <li>Schalter auf <b>Ein</b>. Beim nächsten Aufruf wird das Passwort verlangt.</li>
+</ol>
+<p>Das Passwort wird nur als nicht umkehrbarer Hash gespeichert, nie im Klartext.
+Nach fünf Fehlversuchen ist der Zugang 15 Minuten gesperrt. Eine Anmeldung gilt
+12 Stunden.</p>
+
+<h3>Der wichtigere Teil: Wie man von außen zugreift</h3>
+<div class="box">
+  <b>Eine Anmeldung allein genügt nicht.</b> Ohne HTTPS wird das Passwort im
+  Klartext übertragen und ist unterwegs mitlesbar. Drei Wege, vom sichersten zum
+  riskantesten:
+  <ol>
+    <li><b>VPN</b> (WireGuard, Tailscale) — die Anwendung bleibt von außen
+        unsichtbar, keine Portfreigabe nötig. Auf einer Synology in wenigen
+        Minuten eingerichtet. <b>Empfohlen.</b></li>
+    <li><b>Cloudflare Tunnel</b> — HTTPS inklusive, ebenfalls ohne offenen Port
+        im Router.</li>
+    <li><b>Portfreigabe mit Reverse Proxy und Zertifikat</b> — funktioniert, aber
+        das Gerät ist dauerhaft im Internet sichtbar und wird binnen Stunden von
+        automatisierten Scannern gefunden.</li>
+  </ol>
+  Bei Weg 1 und 2 ist die Anmeldung die zweite Schicht statt der einzigen.
+</div>
+
+<h2 id="faq">13 · Häufige Fragen</h2>
 
 <h3>Warum sehe ich Ladesessions mit 0 kWh?</h3>
 <p>Manche Wallboxen melden Verbindungsvorgänge ohne Energiefluss. Diese Zeilen

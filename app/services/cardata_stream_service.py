@@ -546,42 +546,27 @@ def verarbeite_nachricht(vehicle_id: int, roh: str) -> dict:
     fahrzeugdaten_gefunden = {}
     zahl_deskriptoren = {
         "verbrauch_kwh_100": _cds.DESCRIPTOR_VERBRAUCH,
-        "akku_soh_prozent": _cds.DESCRIPTOR_AKKU_SOH,
-        "soc_prozent": _cds.DESCRIPTOR_SOC,
+        "soc_prozent": _cds.DESCRIPTOR_SOC_ALT,
         "reichweite_km": _cds.DESCRIPTOR_REICHWEITE,
-        "service_in_km": _cds.DESCRIPTOR_SERVICE,
-        "woche_km": _cds.DESCRIPTOR_WOCHE,
     }
     for feld, deskriptor in zahl_deskriptoren.items():
         wert = zahl(deskriptor)
         if wert is not None:
             fahrzeugdaten_gefunden[feld] = wert
 
-    # Akkukapazitaet: dieselbe Rueckfalllogik wie beim manuellen Abruf —
-    # batterySizeMax liefert bei diesem Fahrzeug zuverlaessig 0.
-    akku_primaer = zahl(_cds.DESCRIPTOR_AKKU_MAX)
-    akku_alt = zahl(_cds.DESCRIPTOR_AKKU_MAX_ALT)
-    if akku_primaer:
-        fahrzeugdaten_gefunden["akku_max_kwh"] = akku_primaer
-    elif akku_alt:
-        fahrzeugdaten_gefunden["akku_max_kwh"] = akku_alt
-
-    # Ladestand-Rueckfall: der offizielle Deskriptor kam in keinem
-    # Protokoll je an, dieser hier liefert stattdessen zuverlaessig einen
-    # Prozentwert. Nur setzen, wenn der offizielle Wert in DIESER Nachricht
-    # fehlt -- er behaelt damit immer Vorrang, sobald er doch eintrifft.
-    if "soc_prozent" not in fahrzeugdaten_gefunden:
-        soc_alt = zahl(_cds.DESCRIPTOR_SOC_ALT)
-        if soc_alt is not None and 0 <= soc_alt <= 100:
-            fahrzeugdaten_gefunden["soc_prozent"] = soc_alt
+    # Akkukapazitaet: nur noch maxEnergy -- batterySizeMax lieferte in
+    # allen ausgewerteten Protokollen durchgaengig '0.0,' und wurde
+    # deshalb ersatzlos entfernt.
+    akku = zahl(_cds.DESCRIPTOR_AKKU_MAX_ALT)
+    if akku:
+        fahrzeugdaten_gefunden["akku_max_kwh"] = akku
 
     # Beide moeglichen Deskriptoren pruefen — welcher tatsaechlich sendet,
     # ist je Fahrzeug unterschiedlich (siehe Kommentar bei der Definition
     # in cardata_service.py). Der erste, der in DIESER Nachricht einen
     # Wert liefert, gewinnt.
-    angesteckt = wahrheitswert(_cds.DESCRIPTOR_ANGESTECKT)
-    if angesteckt is None:
-        angesteckt = wahrheitswert(_cds.DESCRIPTOR_ANGESTECKT_ALT)
+    # anyPosition.isPlugged kam in keinem Protokoll je an -- entfernt.
+    angesteckt = wahrheitswert(_cds.DESCRIPTOR_ANGESTECKT_ALT)
     if angesteckt is not None:
         fahrzeugdaten_gefunden["angesteckt"] = angesteckt
 
@@ -600,10 +585,6 @@ def verarbeite_nachricht(vehicle_id: int, roh: str) -> dict:
             fahrzeugdaten_gefunden["laedt_aktiv_text"] = (
                 _cds.LADESTATUS_ANZEIGE.get(str(ladestatus_text).strip().upper()) or "")
 
-    restladedauer = zahl(_cds.DESCRIPTOR_RESTLADEDAUER)
-    if restladedauer is not None:
-        fahrzeugdaten_gefunden["restladedauer_min"] = restladedauer
-
     steckertyp_roh = werte.get(_cds.DESCRIPTOR_STECKERTYP)
     if steckertyp_roh is not None:
         steckertyp_text = steckertyp_roh.get("value") if isinstance(steckertyp_roh, dict) else steckertyp_roh
@@ -615,9 +596,6 @@ def verarbeite_nachricht(vehicle_id: int, roh: str) -> dict:
     ladeklappe = wahrheitswert(_cds.DESCRIPTOR_LADEKLAPPE)
     if ladeklappe is not None:
         fahrzeugdaten_gefunden["ladeklappe_zu"] = ladeklappe
-    verriegelt = wahrheitswert(_cds.DESCRIPTOR_VERRIEGELUNG)
-    if verriegelt is not None:
-        fahrzeugdaten_gefunden["verriegelt"] = verriegelt
 
     # Tueren/Fenster: acht Einzelwerte, wie im REST-Pfad. Fenster nutzen den
     # Zustandstext-Umwandler statt eines reinen Bools (CLOSED/OPEN/
@@ -625,6 +603,8 @@ def verarbeite_nachricht(vehicle_id: int, roh: str) -> dict:
     tuer_deskriptoren = {
         "tuer_vl": _cds.DESCRIPTOR_TUER_VL, "tuer_vr": _cds.DESCRIPTOR_TUER_VR,
         "tuer_hl": _cds.DESCRIPTOR_TUER_HL, "tuer_hr": _cds.DESCRIPTOR_TUER_HR,
+        "motorhaube": _cds.DESCRIPTOR_MOTORHAUBE,
+        "kofferraum": _cds.DESCRIPTOR_KOFFERRAUM,
     }
     for feld_name, deskriptor in tuer_deskriptoren.items():
         wert = wahrheitswert(deskriptor)
@@ -643,16 +623,11 @@ def verarbeite_nachricht(vehicle_id: int, roh: str) -> dict:
             if wert is not None:
                 fahrzeugdaten_gefunden[feld_name] = wert
 
-    cbs_wert = werte.get(_cds.DESCRIPTOR_CBS)
-    if cbs_wert is not None:
-        cbs_roh = cbs_wert.get("value") if isinstance(cbs_wert, dict) else cbs_wert
-        try:
-            wartung = _cds._lies_wartungstermine(cbs_roh)
-            if wartung:
-                from repositories import vehicle_repository
-                vehicle_repository.setze_stammdaten(vehicle_id, wartung)
-        except Exception:
-            pass
+    # Wartungstermine (conditionBasedServices) ENTFERNT: Der Deskriptor
+    # lieferte in 788 ausgewerteten Nachrichten kein einziges Mal einen
+    # Wert und ist deshalb nicht mehr Teil des Containers -- der Block
+    # haette also nie ausloesen koennen. HU/TUEV und Service werden im
+    # Fahrzeug-Dialog von Hand gepflegt oder per Archiv-Import gefuellt.
 
     lat, lon, km = zahl(LAT), zahl(LON), zahl(KM)
     if km is not None:

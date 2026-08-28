@@ -130,6 +130,7 @@ function showView(name) {
     loadBmfReference();
     loadVehicleDescription();
     ladeAnlaesseInFeld();    // Katalog zum Bearbeiten laden
+    authStatusLaden();       // Zustand des Passwortschutzes anzeigen
     // Allgemein-Tab als Standard aktivieren
     setTimeout(() => showSettingsTab('allgemein', document.querySelector('.settings-tab')), 0);
   } else if (name === 'wallbox') {
@@ -7076,9 +7077,10 @@ function _fahrzeugStatusKachelHtml(v, d, kont) {
   };
 
   const chips = [];
+  // Restladedauer entfernt: timeToFullyCharged kam in 788 ausgewerteten
+  // Stream-Nachrichten kein einziges Mal an.
   if (d.laedt_aktiv_text) {
-    const restText = d.restladedauer_min != null ? ` · noch ${fmtDe(d.restladedauer_min,0)} Min` : '';
-    chips.push(chip('mdi-lightning-bolt', d.laedt_aktiv_text + restText, 'on'));
+    chips.push(chip('mdi-lightning-bolt', d.laedt_aktiv_text, 'on'));
   }
   if (d.steckertyp) {
     chips.push(chip(d.steckertyp.icon, d.steckertyp.text, d.steckertyp.dc ? 'on' : 'off'));
@@ -7099,22 +7101,10 @@ function _fahrzeugStatusKachelHtml(v, d, kont) {
   } else if (d.ladeklappe_zu === true) {
     chipsZeile2.push(chip('mdi-lock', 'Ladeklappe verriegelt', 'off'));
   }
-  // Verriegelung: nur bei wirklich bekanntem Wert eine Aussage treffen.
-  // Zuvor wurde bei fehlendem Wert "Verriegelt" behauptet -- frei erfunden.
-  // Fehlt der Wert, erscheint statt einer Falschaussage ein anklickbarer
-  // Hinweis, WARUM nichts da ist: der Datenpunkt ist im BMW-Portal nicht
-  // aktiviert. Ohne diesen Hinweis wirkt der Chip schlicht "ohne Funktion".
-  if (d.verriegelt === true) {
-    chipsZeile2.push(chip('mdi-car-door-lock', 'Verriegelt', 'off'));
-  } else if (d.verriegelt === false) {
-    chipsZeile2.push(chip('mdi-lock-open-variant', 'Entriegelt', 'warn'));
-  } else {
-    chipsZeile2.push(`<span onclick="showView('einstellungen')" title="Datenpunkt vehicle.cabin.door.lock.status im BMW-Portal aktivieren"
-      style="display:inline-flex; align-items:center; gap:5px; font-size:11.5px; font-weight:600;
-             padding:3px 9px; border-radius:13px; cursor:pointer; background:var(--bg-input);
-             color:var(--text-tertiary); border:1px dashed var(--border-strong);">
-      <i class="mdi mdi-car-door-lock" style="font-size:13px;"></i> Verriegelung nicht aktiviert</span>`);
-  }
+  // Verriegelungs-Chip ENTFERNT (Release 2.0): door.lock.status lieferte
+  // in keinem einzigen ausgewerteten Protokoll je einen Wert. Ein Chip,
+  // der nie etwas anzeigen kann, gehoert nicht in die Oberflaeche --
+  // er laesst die Anwendung defekt wirken, obwohl sie korrekt arbeitet.
 
   // Tueren/Fenster: ebenso nur bei bekanntem Zustand. Kommen nur einzelne
   // der acht Werte an (bei diesem Fahrzeug z. B. nur die Beifahrertueren),
@@ -7123,7 +7113,7 @@ function _fahrzeugStatusKachelHtml(v, d, kont) {
     const anzahl = d.tueren_fenster_anzahl_offen || 1;
     chipsZeile2.push(chip('mdi-car-door', `${anzahl} offen`, 'warn'));
   } else if (d.tueren_fenster_offen === false) {
-    chipsZeile2.push(chip('mdi-car-door', 'Türen/Fenster zu', 'off'));
+    chipsZeile2.push(chip('mdi-car-door', 'Alles geschlossen', 'off'));
   }
 
   // ── Foto/Silhouette ────────────────────────────────────────────────
@@ -7249,7 +7239,8 @@ function _fahrzeugStatusKachelHtml(v, d, kont) {
         <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:10px; margin-top:2px;">
           ${metrik('Ø Verbrauch', d.verbrauch_kwh_100 != null ? fmtDe(d.verbrauch_kwh_100, 1) : null, 'kWh/100km')}
           ${metrik('Akkukapazität', d.akku_max_kwh != null ? fmtDe(d.akku_max_kwh, 1) : null, 'kWh')}
-          ${metrik('Akkuzustand', d.akku_soh_prozent != null ? fmtDe(d.akku_soh_prozent, 0) : null, '% SoH')}
+          <!-- Akkuzustand (SoH) entfernt: stateOfHealth.displayed lieferte
+               in keinem Protokoll je einen Wert. -->
         </div>
       </div>
 
@@ -8493,4 +8484,84 @@ async function externOcppImport() {
     + `✓ ${d.neu} von ${d.gefunden} Ladevorgängen übernommen.</div>`
     + (rest.length ? `<div class="hint" style="margin-top:3px;">${rest.join(' · ')}</div>` : '');
   if (d.neu) _toast(`${d.neu} Ladevorgänge übernommen`);
+}
+
+// ─── Anmeldung (optional zuschaltbarer Passwortschutz) ────────────────────
+async function authStatusLaden() {
+  try {
+    const d = await (await fetch('/api/auth/status')).json();
+    const txt = document.getElementById('auth-status-text');
+    const toggle = document.getElementById('auth-schutz-toggle');
+    const abmelden = document.getElementById('auth-abmelden-btn');
+    if (!txt || !toggle) return;
+
+    if (d.aktiv) {
+      txt.textContent = 'Aktiv — beim Aufruf wird ein Passwort verlangt.';
+      txt.style.color = 'var(--success)';
+    } else if (d.passwort_gesetzt) {
+      txt.textContent = 'Aus — Passwort ist hinterlegt, wird aber nicht verlangt.';
+      txt.style.color = 'var(--text-tertiary)';
+    } else {
+      txt.textContent = 'Aus — noch kein Passwort vergeben.';
+      txt.style.color = 'var(--text-tertiary)';
+    }
+    toggle.querySelectorAll('button').forEach((b, i) =>
+      b.classList.toggle('on', (i === 1) === !!d.aktiv));
+    if (abmelden) abmelden.style.display = d.aktiv ? '' : 'none';
+  } catch (e) { /* Anzeige bleibt auf "wird geprüft" */ }
+}
+
+async function authPasswortSpeichern() {
+  const meldung = document.getElementById('auth-pw-meldung');
+  const neu = document.getElementById('auth-neu').value;
+  const alt = document.getElementById('auth-alt').value;
+  try {
+    const d = await (await fetch('/api/auth/passwort', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ neu, alt }),
+    })).json();
+    meldung.textContent = d.meldung || '';
+    meldung.style.color = d.ok ? 'var(--success)' : 'var(--danger)';
+    if (d.ok) {
+      document.getElementById('auth-neu').value = '';
+      document.getElementById('auth-alt').value = '';
+      authStatusLaden();
+    }
+  } catch (e) {
+    meldung.textContent = 'Konnte nicht gespeichert werden.';
+    meldung.style.color = 'var(--danger)';
+  }
+}
+
+async function authSchutzSetzen(aktiv, btn) {
+  try {
+    const d = await (await fetch('/api/auth/schutz', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ aktiv }),
+    })).json();
+    if (!d.ok) { _toast(d.meldung); authStatusLaden(); return; }
+    if (btn) {
+      btn.parentNode.querySelectorAll('button').forEach(b => b.classList.remove('on'));
+      btn.classList.add('on');
+    }
+    if (aktiv) {
+      // KORREKTUR: Zuvor stand hier, die laufende Sitzung bliebe gueltig --
+      // das stimmt nicht. Beim Einschalten existiert noch GAR KEINE
+      // Sitzung (der Schutz war ja aus), alle weiteren API-Aufrufe liefen
+      // deshalb sofort in 401 und die Oberflaeche wirkte kaputt. Jetzt
+      // sauber zur Anmeldemaske fuehren.
+      _toast('Anmeldung aktiv — bitte einmal anmelden.');
+      setTimeout(() => { window.location.href = '/login'; }, 1200);
+      return;
+    }
+    _toast('Anmeldung ausgeschaltet.');
+    authStatusLaden();
+  } catch (e) { _toast('Konnte nicht umgestellt werden.'); }
+}
+
+async function authAbmelden() {
+  try {
+    await fetch('/api/auth/logout', { method: 'POST' });
+    window.location.href = '/login';
+  } catch (e) { _toast('Abmelden fehlgeschlagen.'); }
 }

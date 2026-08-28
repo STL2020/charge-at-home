@@ -1133,50 +1133,41 @@
 
               <div id="bmw-felder-elektro">
                 <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.05em;
-                            color:var(--text-tertiary); margin:10px 0 4px;">Pflicht — Abrechnung &amp; Fahrten</div>
-                <ul style="margin:0; padding-left:18px; font-size:11.5px; line-height:1.7; color:var(--text-secondary);">
-                  <li><code>vehicle.vehicle.travelledDistance</code> — Kilometerstand</li>
-                  <li><code>…navigation.currentLocation.latitude</code> — Standort</li>
-                  <li><code>…navigation.currentLocation.longitude</code> — Standort</li>
-                  <li><code>vehicle.trip.segment.end.travelledDistance</code> — Fahrtende</li>
-                  <li><code>vehicle.trip.segment.end.time</code> — Fahrtende</li>
+                            color:var(--text-tertiary); margin:12px 0 4px;">Pflicht — für jede Abrechnung</div>
+                <ul style="margin:0; padding-left:18px; font-size:12px; line-height:1.8; color:var(--text-secondary);">
+                  <li><code>vehicle.vehicle.travelledDistance</code></li>
+                  <li><code>…navigation.currentLocation.latitude</code></li>
+                  <li><code>…navigation.currentLocation.longitude</code> — beide nötig</li>
                 </ul>
 
                 <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.05em;
-                            color:var(--text-tertiary); margin:10px 0 4px;">Nur Elektro — Akku &amp; Laden</div>
-                <ul style="margin:0; padding-left:18px; font-size:11.5px; line-height:1.7; color:var(--text-secondary);">
-                  <li><code>…battery.stateOfCharge.displayed</code> — Ladestand %</li>
-                  <li><code>…battery.stateOfHealth.displayed</code> — Akkuzustand</li>
-                  <li><code>…batteryManagement.batterySizeMax</code> + <code>maxEnergy</code> — Kapazität (beide anhaken)</li>
+                            color:var(--text-tertiary); margin:12px 0 4px;">Nur Elektro — Akku &amp; Laden</div>
+                <ul style="margin:0; padding-left:18px; font-size:12px; line-height:1.8; color:var(--text-secondary);">
+                  <li><code>…batteryManagement.header</code> — Ladestand %</li>
+                  <li><code>…batteryManagement.maxEnergy</code> — Akkukapazität</li>
                   <li><code>…kombiRemainingElectricRange</code> — Reichweite</li>
                   <li><code>…avgElectricRangeConsumption</code> — Ø Verbrauch</li>
-                  <li><code>…charging.status</code> — lädt gerade</li>
-                  <li><code>…charging.timeToFullyCharged</code> — Restladedauer</li>
-                  <li><code>…charging.method</code> — Steckertyp</li>
-                  <li><code>…port.anyPosition.isPlugged</code> + <code>vehicle.body.chargingPort.status</code>
-                      — angesteckt (<b>beide</b> anhaken, welcher sendet, ist modellabhängig)</li>
+                  <li><code>…electricEngine.charging.status</code> — lädt gerade</li>
+                  <li><code>…electricEngine.charging.method</code> — Steckertyp</li>
+                  <li><code>vehicle.body.chargingPort.status</code> — angesteckt</li>
                   <li><code>vehicle.body.flap.isLocked</code> — Ladeklappe</li>
                 </ul>
               </div>
 
               <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.05em;
-                          color:var(--text-tertiary); margin:10px 0 4px;">Optional — Komfortanzeige</div>
-              <ul style="margin:0; padding-left:18px; font-size:11.5px; line-height:1.7; color:var(--text-secondary);">
-                <li><code>vehicle.cabin.door.lock.status</code> — Verriegelung</li>
+                          color:var(--text-tertiary); margin:12px 0 4px;">Optional — Zustandsanzeige</div>
+              <ul style="margin:0; padding-left:18px; font-size:12px; line-height:1.8; color:var(--text-secondary);">
                 <li><code>…door.row1/row2.driver/passenger.isOpen</code> — Türen (4×)</li>
                 <li><code>…window.row1/row2.driver/passenger.status</code> — Fenster (4×)</li>
-                <li><code>vehicle.status.serviceDistance.next</code> — km bis Service</li>
-                <li><code>vehicle.status.conditionBasedServices</code> — HU/TÜV &amp; Service</li>
+                <li><code>vehicle.body.hood.isOpen</code> — Motorhaube</li>
+                <li><code>vehicle.body.trunk.door.isOpen</code> — Kofferraum</li>
               </ul>
 
-              <div class="hint" style="margin-top:10px;">
-                <b>Verbrenner:</b> Nur der obere Block „Abrechnung &amp; Fahrten" ist nötig —
-                alle Akku- und Ladefelder entfallen ersatzlos.
-                <br><br>
-                <b>Wenn ein Wert trotz Haken nicht ankommt:</b> Neu angehakte Punkte
-                greifen erst beim nächsten Abruf (die App legt den Container selbst neu an).
-                Ein geparktes Fahrzeug sendet zudem nur bei Änderungen — das ist normal.
-                Was wirklich ankommt, zeigt <b>Protokoll → Quelle „MQTT (roh)"</b>.
+              <div style="font-size:12.5px; line-height:1.7; color:var(--text-secondary); margin-top:12px;">
+                <b>Verbrenner:</b> Nur die drei Pflicht-Einträge sind nötig.<br><br>
+                <b>HU/TÜV, Service, Akkuzustand:</b> kommen <b>nicht</b> über den
+                Datenstrom — BMW liefert sie dort nicht. Bitte unten von Hand
+                eintragen oder per Archiv-Import füllen.
               </div>
             </details>
           </div>
@@ -2447,36 +2438,37 @@
           <table style="font-size:12px;">
             <thead><tr><th>Datenpunkt im BMW-Portal</th><th>Füllt in der App</th><th>Pflicht?</th></tr></thead>
             <tbody>
-              <tr><td class="mono">vehicle.vehicle.travelledDistance</td><td>Kilometerstand, Fahrterkennung</td><td>Pflicht</td></tr>
+              <tr><td class="mono">vehicle.vehicle.travelledDistance</td><td>Kilometerstand</td><td>Pflicht</td></tr>
               <tr><td class="mono">…currentLocation.latitude</td><td>Standort (Hälfte 1)</td><td>Pflicht</td></tr>
               <tr><td class="mono">…currentLocation.longitude</td><td>Standort (Hälfte 2) — <b>ohne beide kein Standort</b></td><td>Pflicht</td></tr>
-              <tr><td class="mono">vehicle.trip.segment.end.travelledDistance</td><td>Fahrtende erkennen</td><td>Pflicht</td></tr>
-              <tr><td class="mono">vehicle.trip.segment.end.time</td><td>Fahrtende erkennen</td><td>Pflicht</td></tr>
-              <tr><td class="mono">…battery.stateOfCharge.displayed</td><td>Ladestand %</td><td>Elektro</td></tr>
-              <tr><td class="mono">…batteryManagement.header</td><td>Ladestand % (Rückfall, falls oberer stumm bleibt)</td><td>Elektro</td></tr>
-              <tr><td class="mono">…battery.stateOfHealth.displayed</td><td>Akkuzustand (SoH)</td><td>Elektro</td></tr>
-              <tr><td class="mono">…batteryManagement.batterySizeMax</td><td>Akkukapazität</td><td>Elektro</td></tr>
-              <tr><td class="mono">…batteryManagement.maxEnergy</td><td>Akkukapazität (Rückfall) — <b>beide anhaken</b></td><td>Elektro</td></tr>
+              <tr><td class="mono">…batteryManagement.header</td><td>Ladestand %</td><td>Elektro</td></tr>
+              <tr><td class="mono">…batteryManagement.maxEnergy</td><td>Akkukapazität</td><td>Elektro</td></tr>
               <tr><td class="mono">…kombiRemainingElectricRange</td><td>Reichweite</td><td>Elektro</td></tr>
               <tr><td class="mono">…avgElectricRangeConsumption</td><td>Ø Verbrauch kWh/100km</td><td>Elektro</td></tr>
               <tr><td class="mono">…electricEngine.charging.status</td><td>Chip „Lädt aktiv"</td><td>Elektro</td></tr>
-              <tr><td class="mono">…electricEngine.charging.timeToFullyCharged</td><td>Restladedauer</td><td>Elektro</td></tr>
               <tr><td class="mono">…electricEngine.charging.method</td><td>Chip Steckertyp (Typ 2 / CCS)</td><td>Elektro</td></tr>
-              <tr><td class="mono">…port.anyPosition.isPlugged</td><td>Chip „Angesteckt"</td><td>Elektro</td></tr>
-              <tr><td class="mono">vehicle.body.chargingPort.status</td><td>Chip „Angesteckt" (Rückfall) — <b>beide anhaken</b></td><td>Elektro</td></tr>
-              <tr><td class="mono">vehicle.body.flap.isLocked</td><td>Chip Ladeklappe verriegelt</td><td>Elektro</td></tr>
-              <tr><td class="mono">vehicle.cabin.door.lock.status</td><td>Chip „Verriegelt / Entriegelt"</td><td>optional</td></tr>
+              <tr><td class="mono">vehicle.body.chargingPort.status</td><td>Chip „Angesteckt"</td><td>Elektro</td></tr>
+              <tr><td class="mono">vehicle.body.flap.isLocked</td><td>Chip Ladeklappe</td><td>Elektro</td></tr>
               <tr><td class="mono">…door.row1/row2.driver/passenger.isOpen</td><td>Chip Türen (4 Einträge)</td><td>optional</td></tr>
               <tr><td class="mono">…window.row1/row2.driver/passenger.status</td><td>Chip Fenster (4 Einträge)</td><td>optional</td></tr>
-              <tr><td class="mono">vehicle.status.serviceDistance.next</td><td>km bis Service</td><td>optional</td></tr>
-              <tr><td class="mono">vehicle.status.conditionBasedServices</td><td>HU/TÜV- und Service-Termine</td><td>optional</td></tr>
+              <tr><td class="mono">vehicle.body.hood.isOpen</td><td>Chip Motorhaube</td><td>optional</td></tr>
+              <tr><td class="mono">vehicle.body.trunk.door.isOpen</td><td>Chip Kofferraum</td><td>optional</td></tr>
             </tbody>
           </table>
           <div class="hint" style="margin-top:12px; line-height:1.7;">
             <b>Verbrenner:</b> Nur die fünf Pflicht-Einträge sind nötig; alle mit
             „Elektro" gekennzeichneten entfallen ersatzlos.<br>
             <b>Neu angehakt?</b> Der Datenpunkt greift erst beim nächsten Abruf —
-            die App legt den Container selbstständig neu an.
+            die App legt den Container selbstständig neu an.<br><br>
+            <b>Bewusst nicht in dieser Liste:</b> Ladestand (stateOfCharge.displayed),
+            Akkuzustand (SoH), Restladedauer, Verriegelung (door.lock.status),
+            Service-Intervall und HU/TÜV (conditionBasedServices) sowie die
+            Fahrt-Segment-Werte. Diese Datenpunkte lieferten in ausgewerteten
+            Stream-Aufzeichnungen über Stunden <b>kein einziges Mal</b> einen Wert
+            und wurden deshalb aus der Anwendung entfernt — ein Feld, das nie
+            gefüllt werden kann, gehört nicht in die Oberfläche.
+            HU/TÜV und Service pflegst du stattdessen im Fahrzeug-Dialog von Hand
+            oder per Archiv-Import.
           </div>
         </div>
 
@@ -2498,6 +2490,60 @@
 
         <!-- Sicherheit zuerst: Der Punkt, an dem ein Anwender sich am
              ehesten selbst schadet. -->
+
+        <!-- Anmeldung: der eigentliche Schutz, direkt ueber dem Hinweistext,
+             der bisher nur das Problem beschrieb ohne eine Loesung anzubieten. -->
+        <div class="card" style="margin-bottom:16px; border-left:3px solid #22c55e;">
+          <div class="section-title">Anmeldung mit Passwort</div>
+          <div class="hint" style="margin-bottom:14px; line-height:1.7;">
+            Standardmäßig aus — im eigenen Heimnetz meist unnötig.
+            <b>Pflicht, sobald die Anwendung von außen erreichbar ist.</b>
+            Ohne sie hat jeder mit der Adresse vollen Zugriff auf Fahrtenbuch,
+            Adressen, Wallbox-Zugangsdaten und Belege.
+          </div>
+
+          <div class="form-row-2" style="margin-bottom:10px;">
+            <div>
+              <label class="field-label" for="auth-alt">Bisheriges Passwort</label>
+              <input type="password" id="auth-alt" style="width:100%;"
+                     autocomplete="current-password"
+                     placeholder="nur beim Ändern nötig">
+            </div>
+            <div>
+              <label class="field-label" for="auth-neu">Neues Passwort</label>
+              <input type="password" id="auth-neu" style="width:100%;"
+                     autocomplete="new-password" placeholder="mindestens 8 Zeichen">
+            </div>
+          </div>
+          <button class="btn btn-sm" onclick="authPasswortSpeichern()">Passwort speichern</button>
+          <span class="feld-hinweis" id="auth-pw-meldung"></span>
+
+          <div style="margin-top:16px; padding-top:14px; border-top:1px solid var(--border);
+                      display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+            <div>
+              <div style="font-size:13px; font-weight:600;">Anmeldung erzwingen</div>
+              <div class="hint" id="auth-status-text">wird geprüft …</div>
+            </div>
+            <div style="display:flex; gap:8px; align-items:center;">
+              <button class="btn btn-sm" id="auth-abmelden-btn" onclick="authAbmelden()"
+                      style="display:none;">Abmelden</button>
+              <div class="toggle-pair" id="auth-schutz-toggle">
+                <button onclick="authSchutzSetzen(false, this)">Aus</button>
+                <button onclick="authSchutzSetzen(true, this)">Ein</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="hint" style="margin-top:14px; padding:10px 12px; background:rgba(234,179,8,.10);
+                      border:1px solid rgba(234,179,8,.4); border-radius:var(--radius-sm); line-height:1.7;">
+            <b style="color:#eab308;">Wichtig bei Zugriff aus dem Internet:</b>
+            Eine Anmeldung allein genügt nicht. Ohne <b>HTTPS</b> wird das Passwort
+            im Klartext übertragen und ist unterwegs mitlesbar. Sicherer und
+            einfacher als eine Portfreigabe ist ein <b>VPN</b> (WireGuard, Tailscale)
+            oder ein <b>Cloudflare Tunnel</b> — dann bleibt die Anwendung von außen
+            unsichtbar und du sparst dir die Freigabe im Router ganz.
+          </div>
+        </div>
 
         <div class="card" style="margin-bottom:16px; border-left:3px solid var(--danger);">
           <div class="section-title" style="color:var(--danger);">

@@ -15,7 +15,7 @@ import json
 import os
 from datetime import datetime
 
-from flask import Flask, render_template, request, jsonify, send_file
+from flask import Flask, render_template, request, jsonify, send_file, redirect, make_response
 
 from services.db_service import init_db, get_connection, write_audit_log
 import services.db_service as db_service  # Alias für direkten Zugriff in Admin-Routen
@@ -42,6 +42,108 @@ from repositories import bmw_trip_repository
 
 app = Flask(__name__)
 
+# ─── Anmeldung (optional) ─────────────────────────────────────────────────
+# Standardmaessig AUS: Die Anwendung ist fuer den Betrieb im eigenen Netz
+# gedacht, ein Update darf einen laufenden Heimbetrieb nicht ploetzlich
+# aussperren. Wer sie von aussen erreichbar macht, schaltet den Schutz in
+# den Einstellungen ein.
+from services import auth_service
+
+SITZUNGS_COOKIE = "echarge_sitzung"
+
+# Pfade, die IMMER ohne Anmeldung erreichbar sein muessen -- sonst kaeme
+# man nicht einmal bis zur Anmeldemaske.
+_OFFENE_PFADE = {"/login", "/api/auth/login", "/api/auth/status"}
+
+
+@app.before_request
+def _anmeldung_pruefen():
+    """Schuetzt ALLE Seiten und Schnittstellen, sobald die Anmeldung aktiv ist.
+
+    Bewusst als before_request und nicht als Dekorator je Route: Bei ueber
+    hundert Routen wuerde frueher oder spaeter eine vergessen -- und eine
+    einzige ungeschuetzte API-Route macht den ganzen Schutz wertlos.
+    """
+    if not auth_service.ist_aktiv():
+        return None
+    pfad = request.path
+    if pfad in _OFFENE_PFADE or pfad.startswith("/static/"):
+        return None
+    if auth_service.sitzung_gueltig(request.cookies.get(SITZUNGS_COOKIE)):
+        return None
+    # Schnittstellen bekommen einen klaren Fehlercode, Seiten die Maske.
+    if pfad.startswith("/api/"):
+        return jsonify({"error": "nicht_angemeldet"}), 401
+    return redirect("/login")
+
+
+@app.route("/login")
+def seite_login():
+    if not auth_service.ist_aktiv():
+        return redirect("/")
+    return render_template("login.html")
+
+
+@app.route("/api/auth/status", methods=["GET"])
+def api_auth_status():
+    return jsonify({
+        "aktiv": auth_service.ist_aktiv(),
+        "passwort_gesetzt": auth_service.passwort_gesetzt(),
+        "angemeldet": auth_service.sitzung_gueltig(request.cookies.get(SITZUNGS_COOKIE)),
+    })
+
+
+@app.route("/api/auth/login", methods=["POST"])
+def api_auth_login():
+    daten = request.get_json(force=True) or {}
+    # Hinter einem Reverse-Proxy steht die echte Herkunft im
+    # X-Forwarded-For-Kopf -- sonst zaehlten alle Fehlversuche auf die
+    # Proxy-Adresse und ein einziger Angreifer wuerde alle aussperren.
+    ip = (request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
+          or request.remote_addr or "")
+    ergebnis = auth_service.anmelden(daten.get("passwort", ""), ip)
+    if not ergebnis["ok"]:
+        event_log_service.log_event("system", "warning",
+            f"Fehlgeschlagener Anmeldeversuch von {ip}")
+        return jsonify(ergebnis), 401
+
+    event_log_service.log_event("system", "info", f"Anmeldung erfolgreich von {ip}")
+    antwort = make_response(jsonify({"ok": True}))
+    antwort.set_cookie(
+        SITZUNGS_COOKIE, ergebnis["token"],
+        max_age=auth_service.SITZUNGSDAUER_S,
+        httponly=True,          # kein Zugriff per JavaScript (Diebstahlschutz)
+        samesite="Lax",         # bremst Anfragen von fremden Seiten aus
+        secure=request.is_secure,  # ueber HTTPS nur verschluesselt senden
+    )
+    return antwort
+
+
+@app.route("/api/auth/logout", methods=["POST"])
+def api_auth_logout():
+    auth_service.abmelden(request.cookies.get(SITZUNGS_COOKIE))
+    antwort = make_response(jsonify({"ok": True}))
+    antwort.delete_cookie(SITZUNGS_COOKIE)
+    return antwort
+
+
+@app.route("/api/auth/passwort", methods=["POST"])
+def api_auth_passwort():
+    daten = request.get_json(force=True) or {}
+    return jsonify(auth_service.passwort_setzen(
+        daten.get("neu", ""), daten.get("alt")))
+
+
+@app.route("/api/auth/schutz", methods=["POST"])
+def api_auth_schutz():
+    daten = request.get_json(force=True) or {}
+    ergebnis = auth_service.schutz_umschalten(bool(daten.get("aktiv")))
+    if ergebnis["ok"]:
+        event_log_service.log_event("system", "info",
+            f"Anmeldeschutz {'eingeschaltet' if daten.get('aktiv') else 'ausgeschaltet'}.")
+    return jsonify(ergebnis)
+
+
 # ─── Globaler Error-Handler: IMMER JSON zurückgeben, nie HTML ─────────────────
 # Flask gibt bei unbehandelten Fehlern standardmäßig eine HTML-Fehlerseite zurück
 # (<!doctype html>...) die das Frontend nicht als JSON parsen kann. Dieser Handler
@@ -60,7 +162,7 @@ def handle_404(exc):
     # Für nicht-API-Routen: normale 404-Seite oder zur App weiterleiten
     return jsonify({"error": "not_found"}), 404
 
-PFLICHTENHEFT_VERSION = "15.9"
+PFLICHTENHEFT_VERSION = "2.0"
 
 # Fassung, die dem Anwender gezeigt wird. Die Pflichtenheft-Nummer daneben ist
 # die interne Baunummer — beide zusammen machen Rückfragen eindeutig.
@@ -209,7 +311,11 @@ PROJECT_STATUS = [
     {"sprint": 9, "id": "S9-60", "modul": "Dashboard", "text": "Rueckmeldung 'Verriegelt keine Funktion': Der Chip verschwand seit S9-56 korrekt, wenn der Datenpunkt fehlt -- aber ohne jede Erklaerung, weshalb er schlicht kaputt wirkte. Statt still zu verschwinden erscheint jetzt ein gestrichelt umrandeter, anklickbarer Hinweis 'Verriegelung nicht aktiviert', der in die Einstellungen zur Feldzuordnung fuehrt.", "status": "fertig", "view": "dashboard"},
     {"sprint": 9, "id": "S9-61", "modul": "Fahrzeuge", "text": "Fahrzeug-Dialog von 480px auf 980px verbreitert. Ursache der Rueckmeldung 'man kann das Menue nicht schliessen': Das Formular ist lang (BMW-Block, Checkliste, Stammdaten, Termine) -- bei schmaler Breite wuchs der Dialog so in die Hoehe, dass der Speichern-Knopf aus dem Bildschirm lief. Zusaetzlich ist die Fusszeile mit Abbrechen/Speichern jetzt festgepinnt (position:sticky), sodass der Knopf UNABHAENGIG von der Formularlaenge immer erreichbar bleibt -- der dauerhafte Schutz statt nur mehr Breite. Beim Beheben festgestellt, dass der Dialog gar nicht .modal nutzt, sondern .modal-box mit einer eigenen Inline-Begrenzung; CSS-Selektor entsprechend auf beide Varianten erweitert. Im Browser nachgemessen: 980px breit, Speichern-Knopf im sichtbaren Bereich.", "status": "fertig", "view": "fahrzeuge"},
     {"sprint": 9, "id": "S9-62", "modul": "Dashboard", "text": "Rueckmeldung 'Animation ist wieder weg' -- Ursache durch Messung im echten Browser gefunden: Die Anzeige stand vom ERSTEN Messwert an auf dem Endwert. Die Hochlauf-Animation der Ladestand-Kreisanzeige lief also waehrend der 5,7 Sekunden Startbildschirm ab und war komplett vorbei, bevor der Anwender das Dashboard ueberhaupt zu sehen bekam. Sie war nie kaputt, nur unsichtbar. Wird jetzt erneut ausgeloest, sobald der Startbildschirm entfernt ist. Nachgemessen: 34 -> 63 -> 86 -> 95 -> 77 -> 68 %, der Hochlauf ist wieder sichtbar.", "status": "fertig", "view": "dashboard"},
-    {"sprint": 9, "id": "S9-63", "modul": "Fahrzeuge", "text": "Gestaltungsfehler in der Fahrzeug-Uebersicht: Die 'Kosten verwalten'-Knoepfe benachbarter Karten sassen auf unterschiedlicher Hoehe, weil ein Verbrenner eine Zusatzzeile ('keine Stromerstattung, nur Fahrtkosten') hat, ein Elektrofahrzeug aber nicht. Karten sind jetzt Flex-Spalten, der Knopf wird per margin-top:auto an den unteren Rand geschoben und fluchtet unabhaengig vom Inhalt darueber. Nachgemessen: beide Knopf-Oberkanten bei identischer Position.", "status": "fertig", "view": "fahrzeuge"},
+    {"sprint": 9, "id": "S9-63", "modul": "Fahrzeuge", "text": "Gestaltungsfehler in der Fahrzeug-Uebersicht: Die 'Kosten verwalten'-Knoepfe benachbarter Karten sassen auf unterschiedlicher Hoehe, weil ein Verbrenner eine Zusatzzeile hat, ein Elektrofahrzeug aber nicht. Karten sind jetzt Flex-Spalten, der Knopf wird per margin-top:auto an den unteren Rand geschoben. Nachgemessen: beide Oberkanten identisch.", "status": "fertig", "view": "fahrzeuge"},
+    {"sprint": 10, "id": "S10-01", "modul": "Sicherheit", "text": "Optionale Anmeldung mit Passwort (neuer services/auth_service.py). Notwendig, weil der Nutzer die Anwendung von aussen erreichbar machen will -- bisher hatte sie bewusst KEINE Anmeldung, wer die Adresse kannte, hatte vollen Zugriff auf Fahrtenbuch, Adressen, Wallbox-Zugangsdaten und Belege. Bewusste Entscheidungen: standardmaessig AUS (ein Update darf einen laufenden Heimbetrieb nicht ploetzlich aussperren); Passwort nur als PBKDF2-HMAC-SHA256-Hash mit Zufallssalz und 240.000 Iterationen, nie im Klartext; Vergleich zeitkonstant per hmac.compare_digest; ausschliesslich Standardbibliothek, keine neue Abhaengigkeit; Sitzungen im Arbeitsspeicher (12h), Cookie mit HttpOnly/SameSite und Secure bei HTTPS; Sperre 15 Minuten nach 5 Fehlversuchen je Herkunftsadresse (X-Forwarded-For beruecksichtigt, sonst wuerde hinter einem Reverse-Proxy ein einziger Angreifer alle aussperren). Schutz greift ueber before_request GLOBAL fuer alle Seiten und Schnittstellen statt als Dekorator je Route -- bei ueber hundert Routen wuerde sonst frueher oder spaeter eine vergessen, und eine einzige ungeschuetzte API-Route macht den ganzen Schutz wertlos. Einschalten ohne gesetztes Passwort wird abgelehnt (Selbstaussperr-Schutz). Zehn Sicherheitstests bestanden: Routenschutz, offene Pfade (Login/Statik), falsches Passwort, Sperre, Abmelden, kein Klartext in der Datenbank. In den Einstellungen ausdruecklicher Hinweis, dass eine Anmeldung OHNE HTTPS nicht genuegt (Passwort waere im Klartext mitlesbar) und ein VPN oder Cloudflare Tunnel der sicherere Weg ist.", "status": "fertig", "view": "einstellungen"},
+    {"sprint": 10, "id": "S10-02", "modul": "BMW Telematik", "text": "GROSSE BEREINIGUNG auf Basis von 788 ausgewerteten echten Stream-Nachrichten. Ergebnis: ELF angeforderte Deskriptoren lieferten ueber Stunden KEIN EINZIGES Mal einen Wert -- stateOfCharge.displayed, stateOfHealth.displayed (Akkuzustand), timeToFullyCharged (Restladedauer), door.lock.status (Verriegelung), conditionBasedServices (HU/Service), serviceDistance.next, averageWeeklyDistanceLongTerm, anyPosition.isPlugged und die drei trip.segment.end-Werte. Zusaetzlich lieferte batterySizeMax durchgaengig den unbrauchbaren Wert '0.0,'. Alle zwoelf ersatzlos entfernt: aus dem Container, aus beiden Verarbeitungspfaden, aus der Merge-Whitelist, aus der Oberflaeche (Akkuzustand-Kachel, Restladedauer im Ladechip, Verriegelungs-Chip) und aus Hilfe wie Feldzuordnung. Begruendung: Ein Feld, das nie gefuellt werden kann, laesst die Anwendung defekt wirken, obwohl sie korrekt arbeitet. Container schrumpft von 30 auf 21 Deskriptoren, alle nachweislich liefernd. NEU aufgenommen, weil zuverlaessig geliefert und echter Zusatznutzen: vehicle.body.hood.isOpen (Motorhaube) und vehicle.body.trunk.door.isOpen (Kofferraum) -- beide fliessen in die Zusammenfassung 'Alles geschlossen' ein. Ladestand kommt jetzt allein aus batteryManagement.header, Akkukapazitaet allein aus maxEnergy, Angesteckt allein aus chargingPort.status. Toter Code entfernt (_kombiniere_akkukapazitaet, _lies_wartungstermine, CBS-Block im Stream, neun ungenutzte Deskriptor-Konstanten). Gegenprobe: alle 600 echten Nachrichten erneut eingespielt, 15 Einzelpruefungen bestanden.", "status": "fertig", "view": "fahrzeuge"},
+    {"sprint": 10, "id": "S10-03", "modul": "Dokumentation", "text": "Hilfe in der Anwendung auf den geprueften Stand gebracht: Kapitel 4 (BMW CarData) komplett neu geschrieben -- Einrichtung in zwei Schritten, vollstaendige Liste der WIRKLICH funktionierenden Datenpunkte, ausdruecklicher Abschnitt daruber, was BMW NICHT liefert (und dass HU/TUEV sowie Service deshalb von Hand zu pflegen sind), Erklaerung Datenstrom vs. Tageslimit, Hinweis zur gemeinsamen Verbindung bei mehreren Fahrzeugen eines Kontos, Fehlersuche ueber das MQTT-Rohprotokoll. Neues Kapitel 12 'Zugriff von aussen absichern' mit Anleitung zur Anmeldung und einer ehrlichen Einordnung der drei Wege (VPN empfohlen, Cloudflare Tunnel, Portfreigabe als riskantester). Feldzuordnungs-Tabelle in den Einstellungen und Checkliste im Fahrzeug-Dialog auf denselben bereinigten Stand gebracht.", "status": "fertig", "view": "einstellungen"},
+    {"sprint": 10, "id": "S10-04", "modul": "Sicherheit", "text": "Beim Abschlusstest eigenen Fehler gefunden: Die Meldung nach dem Einschalten des Anmeldeschutzes behauptete, die laufende Sitzung bleibe gueltig. Das ist falsch -- beim Einschalten existiert noch gar keine Sitzung (der Schutz war ja aus), alle weiteren Aufrufe liefen sofort in 401 und die Oberflaeche wirkte kaputt. Jetzt fuehrt die App nach dem Einschalten sauber zur Anmeldemaske.", "status": "fertig", "view": "einstellungen"},
 
 ]
 

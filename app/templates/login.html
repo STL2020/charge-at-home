@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="de" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Anmelden — eCharge@Home</title>
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/style.css">
+<style>
+  body {
+    display: flex; align-items: center; justify-content: center;
+    min-height: 100vh; margin: 0;
+    background: radial-gradient(ellipse at 50% 0%, #0d2818, var(--bg-app, #07090e) 70%);
+  }
+  .anmelde-karte {
+    width: 100%; max-width: 380px; padding: 32px 30px;
+    background: var(--bg-elevated); border: 1px solid var(--border-strong);
+    border-radius: var(--radius); box-shadow: 0 20px 60px rgba(0,0,0,.5);
+  }
+  .anmelde-logo { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+  .anmelde-logo svg { color: #22c55e; }
+  .anmelde-titel { font-family: var(--font-display); font-size: 19px; font-weight: 700; }
+  .anmelde-sub {
+    font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--text-tertiary); margin-bottom: 24px;
+  }
+  #meldung { font-size: 12.5px; min-height: 18px; margin-top: 10px; color: var(--danger); }
+</style>
+</head>
+<body>
+  <div class="anmelde-karte">
+    <div class="anmelde-logo">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M3 11l9-8 9 8v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+        <path d="M12 8l-2 4h4l-2 4"/>
+      </svg>
+      <span class="anmelde-titel">eCharge@Home</span>
+    </div>
+    <div class="anmelde-sub">Abrechnungssystem</div>
+
+    <label class="field-label" for="passwort">Passwort</label>
+    <input type="password" id="passwort" style="width:100%;" autofocus
+           autocomplete="current-password" onkeydown="if(event.key==='Enter')anmelden()">
+
+    <button class="btn btn-primary" style="width:100%; margin-top:14px;"
+            id="anmelde-btn" onclick="anmelden()">Anmelden</button>
+
+    <div id="meldung"></div>
+  </div>
+
+<script>
+async function anmelden() {
+  const feld = document.getElementById('passwort');
+  const knopf = document.getElementById('anmelde-btn');
+  const meldung = document.getElementById('meldung');
+  meldung.textContent = '';
+  knopf.disabled = true;
+  knopf.textContent = 'Prüfe …';
+  try {
+    const r = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ passwort: feld.value }),
+    });
+    const d = await r.json();
+    if (d.ok) {
+      // Vollstaendiges Neuladen statt Weiterleitung per JavaScript: so
+      // startet die Anwendung sauber mit gueltiger Sitzung.
+      window.location.href = '/';
+      return;
+    }
+    meldung.textContent = d.meldung || 'Anmeldung fehlgeschlagen.';
+  } catch (e) {
+    meldung.textContent = 'Server nicht erreichbar.';
+  }
+  knopf.disabled = false;
+  knopf.textContent = 'Anmelden';
+  feld.select();
+}
+</script>
+</body>
+</html>

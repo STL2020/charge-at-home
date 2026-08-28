@@ -61,23 +61,17 @@ DESCRIPTOR_TRIP_SOC = "vehicle.trip.segment.end.drivetrain.batteryManagement.hvS
 # Fahrzeugdaten fuer die Stammdatenanzeige und den Konfigurator. Besonders
 # wertvoll: der echte Durchschnittsverbrauch ersetzt den bisherigen Schaetzwert.
 DESCRIPTOR_VERBRAUCH = "vehicle.drivetrain.avgElectricRangeConsumption"
-DESCRIPTOR_AKKU_MAX = "vehicle.drivetrain.batteryManagement.batterySizeMax"
 # Fallback: batterySizeMax liefert bei manchen Fahrzeugen/Konfigurationen
 # zuverlaessig 0 statt eines echten Werts oder eines fehlenden Feldes (siehe
 # BUG-Hinweis bei _kombiniere_akkukapazitaet). maxEnergy gilt in der
 # Community als das verlaesslichere Aequivalent fuer dieselbe Kenngroesse.
 DESCRIPTOR_AKKU_MAX_ALT = "vehicle.drivetrain.batteryManagement.maxEnergy"
-DESCRIPTOR_AKKU_SOH = "vehicle.powertrain.electric.battery.stateOfHealth.displayed"
-DESCRIPTOR_SOC = "vehicle.powertrain.electric.battery.stateOfCharge.displayed"
 DESCRIPTOR_REICHWEITE = "vehicle.drivetrain.electricEngine.kombiRemainingElectricRange"
-DESCRIPTOR_SERVICE = "vehicle.status.serviceDistance.next"
-DESCRIPTOR_WOCHE = "vehicle.vehicle.averageWeeklyDistanceLongTerm"
 
 # Wartungstermine ueber die Live-Schnittstelle. Bisher standen sie nur im
 # Datenarchiv — auf das man nach der Anforderung Stunden warten muss.
 # 'conditionBasedServices' liefert dieselben Angaben sofort: naechste
 # Hauptuntersuchung, Service, Bremsfluessigkeit.
-DESCRIPTOR_CBS = "vehicle.status.conditionBasedServices"
 # Angesteckt/laedt — der einzige Live-Status, der wirklich zur Ladeabrechnung
 # gehoert statt zur Fernbedienung (siehe Diskussion: Tueren/Fenster bewusst
 # nicht erfasst, das deckt die BMW-App bereits ab).
@@ -100,13 +94,11 @@ DESCRIPTOR_CBS = "vehicle.status.conditionBasedServices"
 # nur als RUECKFALL: der offizielle Wert hat immer Vorrang, sobald er kommt.
 DESCRIPTOR_SOC_ALT = "vehicle.drivetrain.batteryManagement.header"
 
-DESCRIPTOR_ANGESTECKT = "vehicle.powertrain.tractionBattery.charging.port.anyPosition.isPlugged"
 DESCRIPTOR_ANGESTECKT_ALT = "vehicle.body.chargingPort.status"
 
 # Ladevorgang im Detail — "angesteckt" allein sagt nichts darueber, ob
 # gerade tatsaechlich geladen wird oder die Sitzung pausiert/beendet ist.
 DESCRIPTOR_LADESTATUS = "vehicle.drivetrain.electricEngine.charging.status"
-DESCRIPTOR_RESTLADEDAUER = "vehicle.drivetrain.electricEngine.charging.timeToFullyCharged"
 DESCRIPTOR_STECKERTYP = "vehicle.drivetrain.electricEngine.charging.method"
 
 # Ladeklappe und allgemeine Fahrzeugverriegelung — beide ladebezogen
@@ -115,7 +107,6 @@ DESCRIPTOR_STECKERTYP = "vehicle.drivetrain.electricEngine.charging.method"
 # Einzelwerte, sondern nur zusammengefasst als ein "offen/zu"-Signal
 # gefuehrt werden (siehe DESCRIPTOR_TUEREN/_FENSTER unten).
 DESCRIPTOR_LADEKLAPPE = "vehicle.body.flap.isLocked"
-DESCRIPTOR_VERRIEGELUNG = "vehicle.cabin.door.lock.status"
 
 # Tueren und Fenster einzeln abgefragt (BMW liefert keinen Sammelwert),
 # aber im Frontend zu einem einzigen Chip zusammengefasst -- siehe
@@ -129,22 +120,36 @@ DESCRIPTOR_FENSTER_VR = "vehicle.cabin.window.row1.passenger.status"
 DESCRIPTOR_FENSTER_HL = "vehicle.cabin.window.row2.driver.status"
 DESCRIPTOR_FENSTER_HR = "vehicle.cabin.window.row2.passenger.status"
 
+# Motorhaube und Kofferraum: kommen im Stream zuverlaessig an, obwohl sie
+# frueher nicht angefordert wurden. Ein offener Kofferraum ist genauso
+# meldenswert wie eine offene Tuer -- deshalb in dieselbe Zusammenfassung.
+DESCRIPTOR_MOTORHAUBE = "vehicle.body.hood.isOpen"
+DESCRIPTOR_KOFFERRAUM = "vehicle.body.trunk.door.isOpen"
+
 CONTAINER_DESCRIPTORS = [
+    # AUFGERAEUMT (28.08., Release 2.0): Nur noch Deskriptoren, die in 788
+    # ausgewerteten echten Stream-Nachrichten TATSAECHLICH geliefert haben.
+    # Elf zuvor angeforderte Deskriptoren kamen ueber Stunden kein einziges
+    # Mal an (u.a. stateOfCharge.displayed, stateOfHealth.displayed,
+    # conditionBasedServices, door.lock.status, timeToFullyCharged,
+    # trip.segment.end.*) und wurden ersatzlos entfernt -- sie belegten
+    # Platz im Container, erzeugten leere Felder in der Oberflaeche und
+    # liessen die App kaputt wirken, obwohl sie korrekt arbeitete.
+    # Ebenfalls entfernt: batterySizeMax, das durchgaengig den
+    # unbrauchbaren Wert '0.0,' lieferte -- maxEnergy ist der echte Wert.
+
     # Fahrterfassung
     DESCRIPTOR_KM, DESCRIPTOR_LAT, DESCRIPTOR_LON,
-    DESCRIPTOR_TRIP_KM, DESCRIPTOR_TRIP_ZEIT, DESCRIPTOR_TRIP_SOC,
     # Fahrzeugdaten
-    DESCRIPTOR_VERBRAUCH, DESCRIPTOR_AKKU_MAX, DESCRIPTOR_AKKU_MAX_ALT, DESCRIPTOR_AKKU_SOH,
-    DESCRIPTOR_SOC, DESCRIPTOR_SOC_ALT, DESCRIPTOR_REICHWEITE, DESCRIPTOR_SERVICE, DESCRIPTOR_WOCHE,
-    DESCRIPTOR_ANGESTECKT, DESCRIPTOR_ANGESTECKT_ALT,
-    # Ladevorgang im Detail
-    DESCRIPTOR_LADESTATUS, DESCRIPTOR_RESTLADEDAUER, DESCRIPTOR_STECKERTYP,
-    # Verriegelung
-    DESCRIPTOR_LADEKLAPPE, DESCRIPTOR_VERRIEGELUNG,
+    DESCRIPTOR_VERBRAUCH, DESCRIPTOR_AKKU_MAX_ALT, DESCRIPTOR_SOC_ALT,
+    DESCRIPTOR_REICHWEITE,
+    # Ladevorgang
+    DESCRIPTOR_ANGESTECKT_ALT, DESCRIPTOR_LADESTATUS, DESCRIPTOR_STECKERTYP,
+    DESCRIPTOR_LADEKLAPPE,
+    # Tueren, Fenster, Klappen -- alle bestaetigt liefernd
     DESCRIPTOR_TUER_VL, DESCRIPTOR_TUER_VR, DESCRIPTOR_TUER_HL, DESCRIPTOR_TUER_HR,
     DESCRIPTOR_FENSTER_VL, DESCRIPTOR_FENSTER_VR, DESCRIPTOR_FENSTER_HL, DESCRIPTOR_FENSTER_HR,
-    # Wartung
-    DESCRIPTOR_CBS,
+    DESCRIPTOR_MOTORHAUBE, DESCRIPTOR_KOFFERRAUM,
 ]
 
 # Unterhalb dieser Distanz gilt eine Aenderung als Messrauschen bzw.
@@ -449,21 +454,6 @@ def _bool(wert) -> bool | None:
     return None
 
 
-def _kombiniere_akkukapazitaet(feld) -> float | None:
-    """Akkukapazitaet aus zwei moeglichen Deskriptoren.
-
-    BUG BEHOBEN (28.08.): batterySizeMax lieferte bei manchen Fahrzeugen
-    zuverlaessig 0 statt eines echten Werts — eine Hochvoltbatterie mit
-    0 kWh gibt es nicht, das ist immer ein fehlender/nicht unterstuetzter
-    Wert, keine echte Angabe. maxEnergy gilt als das robustere Aequivalent
-    (siehe DESCRIPTOR_AKKU_MAX_ALT-Kommentar) und wird als Rueckfalloption
-    genutzt, wenn die erste Quelle leer oder 0 ist."""
-    primaer = _zahl(feld(DESCRIPTOR_AKKU_MAX)[0])
-    if primaer:
-        return primaer
-    return _zahl(feld(DESCRIPTOR_AKKU_MAX_ALT)[0])
-
-
 def _fenster_offen(wert) -> bool | None:
     """Fenster liefern einen Zustandstext (CLOSED/INTERMEDIATE/OPEN/INVALID),
     kein reines Bool. INTERMEDIATE (einen Spalt offen) zaehlt als "offen" —
@@ -603,22 +593,22 @@ def lese_telematik(vehicle_id: int, vin: str) -> dict:
         "trip_soc": _zahl(trip_soc),
         # Fahrzeugdaten
         "verbrauch_kwh_100": _zahl(feld(DESCRIPTOR_VERBRAUCH)[0]),
-        "akku_max_kwh": _kombiniere_akkukapazitaet(feld),
-        "akku_soh_prozent": _zahl(feld(DESCRIPTOR_AKKU_SOH)[0]),
-        "soc_prozent": _zahl(feld(DESCRIPTOR_SOC)[0]) if _zahl(feld(DESCRIPTOR_SOC)[0]) is not None else _zahl(feld(DESCRIPTOR_SOC_ALT)[0]),
+        # batterySizeMax lieferte durchgaengig '0.0,' -- entfernt,
+        # maxEnergy ist der einzige echte Wert.
+        "akku_max_kwh": _zahl(feld(DESCRIPTOR_AKKU_MAX_ALT)[0]),
+        # batteryManagement.header ist die EINZIGE Quelle, die den
+        # Ladestand liefert -- stateOfCharge.displayed kam in 788
+        # ausgewerteten Nachrichten kein einziges Mal an.
+        "soc_prozent": _zahl(feld(DESCRIPTOR_SOC_ALT)[0]),
         "reichweite_km": _zahl(feld(DESCRIPTOR_REICHWEITE)[0]),
-        "service_in_km": _zahl(feld(DESCRIPTOR_SERVICE)[0]),
-        "woche_km": _zahl(feld(DESCRIPTOR_WOCHE)[0]),
-        "angesteckt": _bool(feld(DESCRIPTOR_ANGESTECKT)[0])
-                      if _bool(feld(DESCRIPTOR_ANGESTECKT)[0]) is not None
-                      else _bool(feld(DESCRIPTOR_ANGESTECKT_ALT)[0]),
+        # anyPosition.isPlugged kam nie an -- chargingPort.status ist
+        # die einzige verlaessliche Quelle.
+        "angesteckt": _bool(feld(DESCRIPTOR_ANGESTECKT_ALT)[0]),
         # Ladevorgang im Detail
         "laedt_aktiv_text": laedt_aktiv_text,
-        "restladedauer_min": _zahl(feld(DESCRIPTOR_RESTLADEDAUER)[0]),
         "steckertyp": _steckertyp_anzeige(feld(DESCRIPTOR_STECKERTYP)[0]),
         # Verriegelung
         "ladeklappe_zu": _bool(feld(DESCRIPTOR_LADEKLAPPE)[0]),
-        "verriegelt": _bool(feld(DESCRIPTOR_VERRIEGELUNG)[0]),
         # Acht Einzelwerte statt vorberechneter Zusammenfassung -- die
         # Zusammenfassung entsteht erst beim Lesen in fahrzeugdaten(), aus
         # dem GESAMTEN gespeicherten Stand (siehe dortiger Kommentar).
@@ -630,50 +620,10 @@ def lese_telematik(vehicle_id: int, vin: str) -> dict:
         "fenster_vr": _fenster_offen(feld(DESCRIPTOR_FENSTER_VR)[0]),
         "fenster_hl": _fenster_offen(feld(DESCRIPTOR_FENSTER_HL)[0]),
         "fenster_hr": _fenster_offen(feld(DESCRIPTOR_FENSTER_HR)[0]),
-        # Wartungstermine live statt aus dem Archiv
-        "wartung": _lies_wartungstermine(feld(DESCRIPTOR_CBS)[0]),
+        "motorhaube": _bool(feld(DESCRIPTOR_MOTORHAUBE)[0]),
+        "kofferraum": _bool(feld(DESCRIPTOR_KOFFERRAUM)[0]),
         "roh": roh,
     }
-
-
-def _lies_wartungstermine(wert) -> dict:
-    """Wandelt 'conditionBasedServices' in Termine um.
-
-    BMW liefert eine Liste je Wartungsposition mit Typ, Faelligkeitsdatum
-    und Restkilometern. Die Bezeichnungen weichen je nach Sprache ab,
-    deshalb wird auf Schluesselwoerter geprueft statt auf exakte Namen.
-    """
-    if not wert:
-        return {}
-    posten = wert
-    if isinstance(posten, str):
-        try:
-            posten = json.loads(posten)
-        except Exception:
-            return {}
-    if isinstance(posten, dict):
-        posten = posten.get("items") or posten.get("services") or []
-    if not isinstance(posten, list):
-        return {}
-
-    ergebnis: dict = {}
-    for p in posten:
-        if not isinstance(p, dict):
-            continue
-        typ = str(p.get("type") or p.get("name") or "").lower()
-        datum = (p.get("dateTime") or p.get("date") or "")[:10]
-        rest_km = p.get("distance") or p.get("remainingDistance")
-        if not datum and not rest_km:
-            continue
-        if "vehicle_check" in typ or "untersuchung" in typ or "inspect" in typ:
-            ergebnis["hu_faellig"] = datum
-        elif "brake_fluid" in typ or "brems" in typ:
-            ergebnis["bremsfluessigkeit"] = datum
-        elif "oil" in typ or "service" in typ or "check" in typ:
-            ergebnis["service_faellig"] = datum
-            if rest_km:
-                ergebnis["service_in_km"] = rest_km
-    return ergebnis
 
 
 def _koordinaten_text(lat, lon) -> str:
@@ -710,15 +660,16 @@ def status(vehicle_id: int) -> dict:
 # ── Fahrzeugdaten (Stammdaten aus dem Fahrzeug) ────────────────────────────
 
 FAHRZEUGDATEN_FELDER = (
-    "verbrauch_kwh_100", "akku_max_kwh", "akku_soh_prozent", "soc_prozent",
-    "reichweite_km", "service_in_km", "woche_km", "km", "angesteckt",
-    # Ladevorgang im Detail
-    "laedt_aktiv_text", "restladedauer_min", "steckertyp",
-    # Verriegelung -- acht Einzelwerte statt vorberechneter Zusammenfassung,
-    # siehe Kommentar bei _tueren_fenster_offen()/fahrzeugdaten().
-    "ladeklappe_zu", "verriegelt",
+    # Nur Felder, die nachweislich befuellt werden (siehe Kommentar bei
+    # CONTAINER_DESCRIPTORS). Entfernt: akku_soh_prozent, service_in_km,
+    # woche_km, restladedauer_min, verriegelt -- deren Deskriptoren
+    # lieferten nie.
+    "verbrauch_kwh_100", "akku_max_kwh", "soc_prozent",
+    "reichweite_km", "km", "angesteckt",
+    "laedt_aktiv_text", "steckertyp", "ladeklappe_zu",
     "tuer_vl", "tuer_vr", "tuer_hl", "tuer_hr",
     "fenster_vl", "fenster_vr", "fenster_hl", "fenster_hr",
+    "motorhaube", "kofferraum",
 )
 
 
@@ -795,7 +746,8 @@ def _tueren_fenster_offen(d: dict) -> tuple[bool | None, int]:
     Merge in _speichere_fahrzeugdaten) enthaelt dagegen den jeweils
     letzten bekannten Wert jeder einzelnen Tuer/jedes Fensters."""
     schluessel = ("tuer_vl", "tuer_vr", "tuer_hl", "tuer_hr",
-                  "fenster_vl", "fenster_vr", "fenster_hl", "fenster_hr")
+                  "fenster_vl", "fenster_vr", "fenster_hl", "fenster_hr",
+                  "motorhaube", "kofferraum")
     bekannte = [d[s] for s in schluessel if d.get(s) is not None]
     if not bekannte:
         return None, 0
