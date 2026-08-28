@@ -548,6 +548,32 @@
       </div>
       <div id="import-result" style="margin-bottom:14px; font-size:13px;"></div>
 
+      <!-- Kennzahlen zum gewählten Zeitraum: zeigt auf einen Blick, was die
+           gefilterte Liste darunter in Summe bedeutet. Passt sich jedem
+           Filter an (Monat, Quartal, Jahr, Wallbox, Ladeort). -->
+      <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
+                  gap:12px; margin-bottom:16px;">
+        <div class="card" style="margin:0; padding:14px 16px;">
+          <div class="dash-kpi-label">Geladene Energie</div>
+          <div style="font-family:var(--font-mono); font-size:22px; font-weight:700;" id="sess-kpi-kwh">–</div>
+          <div class="hint" id="sess-kpi-kwh-sub">–</div>
+        </div>
+        <div class="card" style="margin:0; padding:14px 16px;">
+          <div class="dash-kpi-label">Kosten gesamt</div>
+          <div style="font-family:var(--font-mono); font-size:22px; font-weight:700; color:var(--akz-geld);" id="sess-kpi-kosten">–</div>
+          <div class="hint" id="sess-kpi-kosten-sub">–</div>
+        </div>
+        <div class="card" style="margin:0; padding:14px 16px;">
+          <div class="dash-kpi-label">Ø Preis je kWh</div>
+          <div style="font-family:var(--font-mono); font-size:22px; font-weight:700;" id="sess-kpi-preis">–</div>
+          <div class="hint">gewichteter Mittelwert</div>
+        </div>
+        <div class="card" style="margin:0; padding:14px 16px;">
+          <div class="dash-kpi-label">Zuhause / Unterwegs</div>
+          <div style="font-family:var(--font-mono); font-size:22px; font-weight:700;" id="sess-kpi-orte">–</div>
+          <div class="hint" id="sess-kpi-orte-sub">nur zuhause ist erstattungsfähig</div>
+        </div>
+      </div>
 
       <!-- Zweispaltig wie bei den Fahrten: Liste links, Bearbeitung rechts.
            Gleiches Verhalten in beiden Ansichten — wer eine kennt, kennt beide. -->
@@ -694,12 +720,12 @@
   <section class="view" id="view-fahrten">
     <div class="topbar">
       <div><div class="page-title">Fahrten</div><div class="page-sub">Dienstfahrten mit dem Privatfahrzeug — nur relevant für Abrechnungsfall C</div></div>
+      <!-- "BMW CarData — Fahrten" entfernt: Der Abruf laeuft laengst
+           automatisch ueber den Datenstrom bzw. den Fahrzeug-Dialog.
+           Ein zweiter, manueller Knopf an dieser Stelle war eine
+           Doppelung ohne eigenen Nutzen und verbrauchte stillschweigend
+           vom knappen Tageskontingent (50 Abrufe). -->
       <div style="display:flex; gap:8px;">
-        <button class="btn btn-sm bmw-funktion" onclick="cardataAbrufen(true)" id="bmw-fahrt-btn"
-                title="Neue Fahrten aus dem Fahrzeug abrufen">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="margin-right:5px;vertical-align:-2px;"><path d="M4 15h13M4 15a1.6 1.6 0 0 1-1.6-1.6v-2.6l1.8-3.4h9.6l2.6 3.4v2.6A1.6 1.6 0 0 1 14.8 15M6 15v1.6M15 15v1.6"/><circle cx="6.4" cy="11.6" r=".8"/><circle cx="13.2" cy="11.6" r=".8"/><path d="M18.5 8.5a4 4 0 0 1 0 5M21 6.5a7 7 0 0 1 0 9"/></svg>
-          BMW CarData — Fahrten
-        </button>
         <button class="btn btn-primary" onclick="toggleNewTrip()">+ Fahrt erfassen</button>
       </div>
     </div>
@@ -1104,6 +1130,69 @@
               dann startet die Anmeldung — jedes Fahrzeug bekommt seine eigene,
               unabhängige BMW-Verbindung.
             </div>
+
+            <!-- Pflichtangaben-Checkliste: Ohne diese Haken im BMW-Portal
+                 bleibt die Fahrzeugkachel leer, obwohl die Anmeldung
+                 funktioniert. Das war zuvor nirgends in der Oberfläche
+                 erklärt — der Anwender konnte es nicht wissen. -->
+            <details style="margin-top:12px; border-top:1px solid var(--border); padding-top:10px;">
+              <summary style="cursor:pointer; font-size:12.5px; font-weight:600; color:var(--amber);">
+                ⚠ Wichtig: Diese Datenpunkte musst du im BMW-Portal aktivieren
+              </summary>
+              <div class="hint" style="margin-top:8px;">
+                Im BMW-Portal unter <b>BMW CarData → Configure data stream</b> anhaken.
+                Ohne sie bleibt die Fahrzeugkachel leer, obwohl die Anmeldung klappt.
+                BMW setzt sie <b>nicht</b> automatisch.
+              </div>
+
+              <div id="bmw-felder-elektro">
+                <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.05em;
+                            color:var(--text-tertiary); margin:10px 0 4px;">Pflicht — Abrechnung &amp; Fahrten</div>
+                <ul style="margin:0; padding-left:18px; font-size:11.5px; line-height:1.7; color:var(--text-secondary);">
+                  <li><code>vehicle.vehicle.travelledDistance</code> — Kilometerstand</li>
+                  <li><code>…navigation.currentLocation.latitude</code> — Standort</li>
+                  <li><code>…navigation.currentLocation.longitude</code> — Standort</li>
+                  <li><code>vehicle.trip.segment.end.travelledDistance</code> — Fahrtende</li>
+                  <li><code>vehicle.trip.segment.end.time</code> — Fahrtende</li>
+                </ul>
+
+                <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.05em;
+                            color:var(--text-tertiary); margin:10px 0 4px;">Nur Elektro — Akku &amp; Laden</div>
+                <ul style="margin:0; padding-left:18px; font-size:11.5px; line-height:1.7; color:var(--text-secondary);">
+                  <li><code>…battery.stateOfCharge.displayed</code> — Ladestand %</li>
+                  <li><code>…battery.stateOfHealth.displayed</code> — Akkuzustand</li>
+                  <li><code>…batteryManagement.batterySizeMax</code> + <code>maxEnergy</code> — Kapazität (beide anhaken)</li>
+                  <li><code>…kombiRemainingElectricRange</code> — Reichweite</li>
+                  <li><code>…avgElectricRangeConsumption</code> — Ø Verbrauch</li>
+                  <li><code>…charging.status</code> — lädt gerade</li>
+                  <li><code>…charging.timeToFullyCharged</code> — Restladedauer</li>
+                  <li><code>…charging.method</code> — Steckertyp</li>
+                  <li><code>…port.anyPosition.isPlugged</code> + <code>vehicle.body.chargingPort.status</code>
+                      — angesteckt (<b>beide</b> anhaken, welcher sendet, ist modellabhängig)</li>
+                  <li><code>vehicle.body.flap.isLocked</code> — Ladeklappe</li>
+                </ul>
+              </div>
+
+              <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.05em;
+                          color:var(--text-tertiary); margin:10px 0 4px;">Optional — Komfortanzeige</div>
+              <ul style="margin:0; padding-left:18px; font-size:11.5px; line-height:1.7; color:var(--text-secondary);">
+                <li><code>vehicle.cabin.door.lock.status</code> — Verriegelung</li>
+                <li><code>…door.row1/row2.driver/passenger.isOpen</code> — Türen (4×)</li>
+                <li><code>…window.row1/row2.driver/passenger.status</code> — Fenster (4×)</li>
+                <li><code>vehicle.status.serviceDistance.next</code> — km bis Service</li>
+                <li><code>vehicle.status.conditionBasedServices</code> — HU/TÜV &amp; Service</li>
+              </ul>
+
+              <div class="hint" style="margin-top:10px;">
+                <b>Verbrenner:</b> Nur der obere Block „Abrechnung &amp; Fahrten" ist nötig —
+                alle Akku- und Ladefelder entfallen ersatzlos.
+                <br><br>
+                <b>Wenn ein Wert trotz Haken nicht ankommt:</b> Neu angehakte Punkte
+                greifen erst beim nächsten Abruf (die App legt den Container selbst neu an).
+                Ein geparktes Fahrzeug sendet zudem nur bei Änderungen — das ist normal.
+                Was wirklich ankommt, zeigt <b>Protokoll → Quelle „MQTT (roh)"</b>.
+              </div>
+            </details>
           </div>
 
           <div id="vehicle-bmw-bestaetigung" style="display:none;">
@@ -2795,7 +2884,11 @@
     </div>
     <div class="content">
 
-      <div class="card" style="margin-bottom:16px;">
+      <!-- Filterleiste: eigene ID, damit sie beim Umschalten auf "MQTT (roh)"
+           NICHT mit ausgeblendet wird. Genau das passierte zuvor -- der
+           Selektor traf per Position die erste Karte, also diese hier, und
+           der Anwender kam ohne Neuladen der Seite nicht mehr heraus. -->
+      <div class="card" id="protokoll-filter-card" style="margin-bottom:16px;">
         <div style="display:flex; gap:12px; align-items:flex-end; flex-wrap:wrap;">
           <div>
             <label class="field-label" for="protokoll-source">Quelle</label>

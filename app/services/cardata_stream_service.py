@@ -224,11 +224,47 @@ def starte(vehicle_id: int) -> dict:
                        "entstehen bei der Anmeldung dieses Fahrzeugs.")
         return {"ok": False, "meldung": z["fehler"]}
 
+    # Alle Fahrzeuge dieses BMW-Kontos (gleiche GCID) sammeln: BMW erlaubt
+    # nur EINE Verbindung je GCID, deshalb bedient ein einziger Thread die
+    # Themen aller zugehoerigen Fahrzeuge.
+    vin_je_fahrzeug = {}
+    for f in vehicle_repository.list_vehicles():
+        f_vin = (f.get("vin") or "").strip()
+        if not f_vin:
+            continue
+        try:
+            if bmw_repo.get(f["id"])["gcid"] == gcid:
+                vin_je_fahrzeug[f["id"]] = f_vin
+        except Exception:
+            continue
+    vin_je_fahrzeug.setdefault(vehicle_id, vin)
+
+    # Laeuft fuer dieses Konto bereits ein Thread (durch ein anderes
+    # Fahrzeug gestartet), keinen zweiten aufmachen -- das war genau die
+    # Ursache der gegenseitigen "Quota exceeded"-Rauswuerfe.
+    for anderes_id in vin_je_fahrzeug:
+        if anderes_id == vehicle_id:
+            continue
+        laufend = _thread.get(anderes_id)
+        if laufend is not None and laufend.is_alive() and _z(anderes_id)["laeuft"]:
+            z["laeuft"] = True
+            z["fehler"] = ""
+            _protokoll_schreiben(vehicle_id,
+                "Nutzt die bestehende Verbindung dieses BMW-Kontos mit "
+                f"({len(vin_je_fahrzeug)} Fahrzeuge, eine Verbindung).")
+            return {"ok": True,
+                    "meldung": "Stream läuft über die gemeinsame Verbindung dieses BMW-Kontos."}
+
     z["laeuft"] = True
     z["fehler"] = ""
     z["versuch_seit"] = datetime.now().isoformat(timespec="seconds")
-    _protokoll_schreiben(vehicle_id, f"Stream wird gestartet (GCID {gcid}, VIN {vin}) …")
-    t = threading.Thread(target=_schleife, args=(vehicle_id, gcid, vin), daemon=True)
+    for weiteres_id in vin_je_fahrzeug:
+        if weiteres_id != vehicle_id:
+            _z(weiteres_id)["laeuft"] = True
+    _protokoll_schreiben(vehicle_id,
+        f"Stream wird gestartet (GCID {gcid}, "
+        f"{len(vin_je_fahrzeug)} Fahrzeug(e): {', '.join(vin_je_fahrzeug.values())}) …")
+    t = threading.Thread(target=_schleife, args=(vehicle_id, gcid, vin_je_fahrzeug), daemon=True)
     _thread[vehicle_id] = t
     t.start()
     event_log_service.log_event("bmw", "info",
@@ -257,7 +293,7 @@ def stream_laeuft_irgendwo() -> list[int]:
     return [vid for vid, z in _zustand.items() if z.get("laeuft")]
 
 
-def _schleife(vehicle_id: int, gcid: str, vin: str) -> None:
+def _schleife(vehicle_id: int, gcid: str, vin_je_fahrzeug: dict[int, str]) -> None:
     """Haelt die Verbindung dieses Fahrzeugs offen und erneuert den Token
     rechtzeitig.
 
@@ -291,14 +327,27 @@ def _schleife(vehicle_id: int, gcid: str, vin: str) -> None:
 
             client = mqtt.Client(
                 mqtt.CallbackAPIVersion.VERSION2,
-                client_id=f"echarge-{vin[-6:]}",
+                # Eigene, stabile Client-Kennung je BMW-Konto. NICHT die
+                # GCID selbst verwenden: meldet sich ein zweiter Client mit
+                # derselben Kennung an, wirft der Broker den ersten hinaus.
+                client_id=f"echarge-{gcid[-8:]}",
                 protocol=mqtt.MQTTv5,
             )
             client.username_pw_set(gcid, token)
             client.tls_set()
 
             # Zusammensetzung nach offizieller BMW-Doku (Kapitel "Streaming").
-            thema = f"{gcid}/{vin}"
+            # KERN-FEHLER BEHOBEN (28.08.): BMW erlaubt nur EINE
+            # MQTT-Verbindung je GCID. Bisher startete die App eine
+            # Verbindung PRO FAHRZEUG -- teilen sich zwei Fahrzeuge ein
+            # BMW-Konto (dieselbe GCID), warfen sie sich gegenseitig
+            # endlos hinaus. In den Protokollen des Nutzers lueckenlos
+            # belegt: exakt komplementaeres Muster, immer war genau eines
+            # verbunden und das andere bekam "Quota exceeded", im Wechsel.
+            # Jetzt haelt EIN Thread je GCID die Verbindung und abonniert
+            # die Themen ALLER Fahrzeuge dieses Kontos.
+            themen = {f"{gcid}/{v}": vid for vid, v in vin_je_fahrzeug.items()}
+            thema = ", ".join(themen)
             erstverbindung = {"erledigt": False}
 
             def bei_verbindung(c, userdata, flags, rc, props=None):
@@ -311,7 +360,8 @@ def _schleife(vehicle_id: int, gcid: str, vin: str) -> None:
                     z["verbindungen"] = z.get("verbindungen", 0) + 1
                     _protokoll_schreiben(vehicle_id,
                         f"✓ Verbunden (Code {rc}). Abonniere Thema {thema} …")
-                    c.subscribe(thema, qos=1)
+                    for t in themen:
+                        c.subscribe(t, qos=1)
                     if not erstverbindung["erledigt"]:
                         erstverbindung["erledigt"] = True
                         event_log_service.log_event("bmw", "info",
@@ -319,7 +369,19 @@ def _schleife(vehicle_id: int, gcid: str, vin: str) -> None:
                 else:
                     z["verbunden"] = False
                     z["fehler"] = f"Verbindung abgelehnt (Code {rc})"
-                    _protokoll_schreiben(vehicle_id, f"✕ Verbindung abgelehnt (Code {rc}).")
+                    # BUG BEHOBEN (28.08.): Eine ABGELEHNTE Verbindung
+                    # (rc != 0) lief bisher nur durch diesen Rueckruf und
+                    # erhoehte den Fehlschlag-Zaehler NICHT -- der stieg
+                    # allein bei echten Ausnahmen. Dadurch griff die
+                    # Zwangs-Token-Erneuerung nach zwei Fehlschlaegen nie,
+                    # und die App versuchte es endlos mit demselben toten
+                    # Token weiter. Genau das zeigen die Protokolle des
+                    # Nutzers: ab 09:11 nur noch "Bad user name or
+                    # password", ueber zehn Minuten ohne Selbstheilung.
+                    fehlschlaege_in_folge += 1
+                    _protokoll_schreiben(vehicle_id,
+                        f"✕ Verbindung abgelehnt (Code {rc}). "
+                        f"{fehlschlaege_in_folge}. Fehlschlag in Folge.")
 
             def bei_abonnement(c, userdata, mid, reason_codes, properties=None):
                 abgelehnt = any(getattr(code, "value", code) is not None
@@ -347,8 +409,13 @@ def _schleife(vehicle_id: int, gcid: str, vin: str) -> None:
                 try:
                     roh = msg.payload.decode("utf-8")
                     vorschau = roh if len(roh) <= 1000 else roh[:1000] + " …(gekürzt)"
-                    _protokoll_schreiben(vehicle_id, f"★ Nachricht auf '{msg.topic}': {vorschau}")
-                    verarbeite_nachricht(vehicle_id, roh)
+                    # Auf der gemeinsamen Verbindung kommen die Nachrichten
+                    # ALLER Fahrzeuge dieses Kontos an -- anhand des Themas
+                    # dem richtigen Fahrzeug zuordnen, sonst landen die
+                    # Werte des einen Autos beim anderen.
+                    ziel = themen.get(msg.topic, vehicle_id)
+                    _protokoll_schreiben(ziel, f"★ Nachricht auf '{msg.topic}': {vorschau}")
+                    verarbeite_nachricht(ziel, roh)
                 except Exception as e:
                     _protokoll_schreiben(vehicle_id,
                         f"✕ Nachricht nicht verarbeitbar ({type(e).__name__}).")
@@ -362,20 +429,21 @@ def _schleife(vehicle_id: int, gcid: str, vin: str) -> None:
 
             _protokoll_schreiben(vehicle_id,
                 f"Verbinde zu {mqtt_host(vehicle_id)}:{mqtt_port(vehicle_id)} als {gcid} …")
-            # BUG-VERDACHT BEHOBEN (28.08.): Die Verbindung riss zuverlaessig
-            # alle 60-70 Sekunden mit MQTTv5-Grund "Unspecified error" ab —
-            # exakt im Takt des bisherigen keepalive-Werts von 60s. Das
-            # deutet auf einen zu knapp bemessenen Ping-Zyklus hin (Latenz
-            # zu BMWs Streaming-Server oder ein Ping-Timing-Problem im
-            # Hintergrund-Thread von loop_start()), nicht auf ein
-            # grundsaetzliches Verbindungsproblem — jeder einzelne
-            # Verbindungsaufbau gelang ja. Deutlich groesserer Puffer
-            # (240s statt 60s) reduziert, wie oft ueberhaupt gepingt werden
-            # muss, und damit die Angriffsflaeche fuer genau diesen
-            # Zeitmangel. Der bestehende Wiederverbindungs-Mechanismus
-            # bleibt als Sicherheitsnetz unveraendert bestehen, falls die
-            # Verbindung aus einem anderen Grund doch abbricht.
-            client.connect(mqtt_host(vehicle_id), mqtt_port(vehicle_id), keepalive=240)
+            # KORREKTUR eines eigenen Fehlers (28.08., zweiter Anlauf):
+            # Der erste Versuch hatte keepalive von 60 auf 240 ERHOEHT, in
+            # der Annahme, seltener zu pingen entschaerfe das Problem. Die
+            # Protokolle des Nutzers widerlegen das eindeutig: die
+            # Verbindung riss danach exakt alle 60,0 Sekunden ab (vorher
+            # 60-70s) — also schlimmer, nicht besser.
+            #
+            # Richtige Deutung: paho sendet seinen Ping erst nach rund 75 %
+            # des keepalive-Werts, bei 240s also nach ~180s. BMWs Server
+            # trennt aber bereits nach 60s ohne jeden Verkehr. Da ein
+            # geparktes Fahrzeug minutenlang nichts sendet, lief die
+            # Verbindung zwangslaeufig in diese Leerlauf-Grenze.
+            # Ein KURZER keepalive erzwingt Pings etwa alle 22s und haelt
+            # die Verbindung damit sicher innerhalb des 60s-Fensters.
+            client.connect(mqtt_host(vehicle_id), mqtt_port(vehicle_id), keepalive=30)
             _client[vehicle_id] = client
             client.loop_start()
 

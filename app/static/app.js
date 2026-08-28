@@ -402,6 +402,38 @@ async function loadSessions() {
 }
 
 function renderSessionsTable(sessions, showClassification) {
+function _sessionKennzahlenAktualisieren(sessions) {
+  const setze = (id, wert) => { const el = document.getElementById(id); if (el) el.textContent = wert; };
+
+  let kwh = 0, kosten = 0, zuhauseKwh = 0, unterwegsKwh = 0;
+  let zuhauseKosten = 0, zuhauseAnzahl = 0, unterwegsAnzahl = 0;
+  sessions.forEach(s => {
+    const e = s.energy_kwh || 0;
+    const b = s.amount_eur != null ? s.amount_eur : e * (s.price_per_kwh || 0);
+    kwh += e;
+    kosten += b;
+    if ((s.charging_location || 'zuhause') === 'zuhause') {
+      zuhauseKwh += e; zuhauseKosten += b; zuhauseAnzahl++;
+    } else {
+      unterwegsKwh += e; unterwegsAnzahl++;
+    }
+  });
+
+  setze('sess-kpi-kwh', fmtDe(kwh, 2) + ' kWh');
+  setze('sess-kpi-kwh-sub', `${sessions.length} ${sessions.length === 1 ? 'Ladevorgang' : 'Ladevorgänge'}`);
+  setze('sess-kpi-kosten', fmtDe(kosten, 2) + ' €');
+  // Nur der zuhause geladene Strom ist nach § 3 Nr. 50 EStG erstattungsfaehig
+  // -- unterwegs wird meist ohnehin direkt vom Arbeitgeber bezahlt.
+  // Heimladekosten DIREKT aufsummieren, nicht ueber den Durchschnittspreis
+  // hochrechnen: unterwegs kostet die kWh ein Vielfaches (z. B. 0,79 statt
+  // 0,34 €), ein gemeinsamer Mittelwert verfaelscht den Heimanteil massiv.
+  setze('sess-kpi-kosten-sub', `davon zuhause ${fmtDe(zuhauseKosten, 2)} €`);
+  setze('sess-kpi-preis', kwh > 0 ? fmtDe(kosten / kwh, 4) + ' €' : '–');
+  setze('sess-kpi-orte', `${fmtDe(zuhauseKwh, 1)} / ${fmtDe(unterwegsKwh, 1)} kWh`);
+  setze('sess-kpi-orte-sub',
+    `${zuhauseAnzahl} zuhause · ${unterwegsAnzahl} unterwegs — nur zuhause ist erstattungsfähig`);
+}
+
   const thead = document.getElementById('sessions-thead');
   const tbody = document.getElementById('sessions-tbody');
   const klassTh = thead.querySelector('.th-klass');
@@ -427,6 +459,11 @@ function renderSessionsTable(sessions, showClassification) {
       return true;
     });
   }
+
+  // Kennzahlen aus der FERTIG gefilterten Liste berechnen -- so passen sie
+  // immer exakt zu dem, was darunter in der Tabelle steht (Zeitraum,
+  // Wallbox, Quelle, 0-kWh-Schalter).
+  _sessionKennzahlenAktualisieren(sessions);
 
   if (sessions.length === 0) {
     tbody.innerHTML = '<tr><td colspan="12" class="hint">Keine Sessions im gewählten Zeitraum.</td></tr>';
@@ -4407,7 +4444,12 @@ function onProtokollSourceChange() {
   // normale Ereignistabelle, weil rohe Stream-Nachrichten so haeufig und
   // detailliert sind, dass sie in der Tabelle nur stoeren wuerden.
   const mqttCard = document.getElementById('bmw-mqtt-rawlog-card');
-  const tabelle = document.querySelector('#view-protokoll .card:not(#ocpp-rawlog-card):not(#bmw-mqtt-rawlog-card)');
+  // Filterkarte ausdruecklich ausnehmen: sie war zuvor die erste
+  // passende Karte und wurde beim Wechsel auf "MQTT (roh)" mit
+  // ausgeblendet -- der Anwender kam dann nur noch per Seiten-Neuladen
+  // aus der Ansicht heraus.
+  const tabelle = document.querySelector(
+    '#view-protokoll .card:not(#protokoll-filter-card):not(#ocpp-rawlog-card):not(#bmw-mqtt-rawlog-card)');
   if (mqttCard) {
     mqttCard.style.display = quelle === 'bmw_mqtt' ? '' : 'none';
     if (quelle === 'bmw_mqtt') {
@@ -4976,6 +5018,11 @@ function setVehicleAntrieb(btn, antrieb) {
   // daher keine Ladekarte.
   const rfidBlock = document.getElementById('vehicle-rfid-block');
   if (rfidBlock) rfidBlock.style.display = antrieb === 'elektro' ? 'block' : 'none';
+  // Ebenso die Akku-/Ladefelder in der BMW-Checkliste: bei einem
+  // Verbrenner sind sie schlicht nicht vorhanden und wuerden nur
+  // verunsichern.
+  const bmwElektro = document.getElementById('bmw-felder-elektro');
+  if (bmwElektro) bmwElektro.style.display = antrieb === 'elektro' ? 'block' : 'none';
 }
 
 // Fahrzeug aus der laufenden CarData-Verbindung anlegen. Nutzt die
