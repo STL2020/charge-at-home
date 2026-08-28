@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>eCharge@Home — Hilfe</title>
+<style>
+  :root {
+    --bg: #0d1117; --card: #161b22; --border: #30363d;
+    --text: #e6edf3; --muted: #8b949e; --accent: #4ade80; --amber: #eab308;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, "Segoe UI", Roboto, sans-serif; line-height: 1.65; }
+  .wrap { max-width: 900px; margin: 0 auto; padding: 32px 24px 80px; }
+  header { border-bottom: 1px solid var(--border); padding-bottom: 20px; margin-bottom: 28px; }
+  h1 { margin: 0 0 4px; font-size: 26px; }
+  .sub { color: var(--muted); font-size: 14px; }
+  nav { background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+    padding: 14px 18px; margin-bottom: 28px; }
+  nav a { color: var(--accent); text-decoration: none; display: block; padding: 3px 0; font-size: 14px; }
+  nav a:hover { text-decoration: underline; }
+  h2 { font-size: 19px; margin: 34px 0 10px; padding-top: 10px; border-top: 1px solid var(--border); }
+  h3 { font-size: 15px; margin: 22px 0 6px; color: var(--accent); }
+  p, li { font-size: 14px; }
+  ol, ul { padding-left: 22px; }
+  li { margin-bottom: 6px; }
+  code { background: #1f2937; padding: 2px 6px; border-radius: 4px;
+    font-family: "IBM Plex Mono", monospace; font-size: 13px; }
+  .box { background: var(--card); border-left: 3px solid var(--accent);
+    padding: 12px 16px; border-radius: 6px; margin: 14px 0; font-size: 14px; }
+  .box.warn { border-left-color: var(--amber); }
+  table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+  footer { margin-top: 50px; padding-top: 18px; border-top: 1px solid var(--border);
+    color: var(--muted); font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>eCharge@Home — Hilfe</h1>
+  <div class="sub">Automatisierte Erfassung &amp; steuerliche Abrechnung für Heimladestrom und betriebliche Fahrten</div>
+</header>
+
+<nav>
+  <a href="#start">1 · Erste Schritte</a>
+  <a href="#steuer">2 · Steuer-Ratgeber: BMF-Sätze und Abrechnungswege</a>
+  <a href="#hardware">3 · Hardware anbinden: Loxone und OCPP</a>
+  <a href="#bmw">4 · BMW ConnectedDrive: Fahrten automatisch importieren</a>
+  <a href="#monatsabschluss">5 · Monatsabschluss in zwei Klicks</a>
+  <a href="#ladevorgang-erfassen">6 · Ladevorgang von Hand erfassen</a>
+  <a href="#belege">7 · Belege erzeugen</a>
+  <a href="#beispieldaten">8 · Beispieldaten zum Ausprobieren</a>
+  <a href="#sicherung">9 · Datensicherung und Neuanfang</a>
+  <a href="#ausgaben">10 · Demo und Vollversion</a>
+  <a href="#installation">11 · Installationsarten</a>
+  <a href="#faq">12 · Häufige Fragen</a>
+</nav>
+
+<h2 id="start">1 · Erste Schritte</h2>
+<p>Vier Schritte, dann läuft die Abrechnung. Plane etwa 15 Minuten ein.</p>
+
+<h3>Schritt 1: Fahrzeug anlegen</h3>
+<ol>
+  <li>Menü <b>Fahrzeuge</b> öffnen und ein Fahrzeug hinzufügen.</li>
+  <li>Bezeichnung, Kennzeichen und <b>Antriebsart</b> eintragen. Die Antriebsart steuert,
+      welche Felder später erscheinen: Bei Verbrennern verschwinden Ladestrom und PV,
+      stattdessen erscheinen Kraftstoffkosten.</li>
+  <li>Ein Fahrzeug als <b>Standard</b> markieren — es wird überall vorausgewählt.</li>
+</ol>
+
+<h3>Schritt 2: Laufende Kosten erfassen</h3>
+<p>Unter <b>Fahrzeuge → Fahrzeugdaten &amp; Kosten</b> die tatsächlichen Kosten eintragen:
+Leasing oder Finanzierung, Versicherung, Kfz-Steuer, TÜV, Wartung, Reifen, Ladestrom.
+Diese Werte sind die Grundlage für den individuellen Kilometersatz.</p>
+<div class="box">
+  Ohne erfasste Kosten rechnet der Konfigurator mit Beispielwerten. Die Empfehlung ist
+  dann unverbindlich — für eine belastbare Aussage brauchst du deine echten Zahlen.
+</div>
+
+<h3>Schritt 3: Stromtarif und Zuschüsse hinterlegen</h3>
+<ul>
+  <li><b>Einstellungen → Allgemein:</b> BMF-Pauschale (Standard 0,34 €/kWh) prüfen.</li>
+  <li><b>Fahrzeuge → AG-Zuschüsse:</b> Car Allowance, Tankkarten-Pauschale, Jobticket
+      oder Aufwandsentschädigung eintragen — je Posten getrennt als steuerpflichtig
+      oder steuerfrei (§ 3 Nr. 50 EStG).</li>
+</ul>
+
+<h3>Schritt 4: Datenquelle verbinden</h3>
+<p>Wähle den Weg, der zu deiner Hardware passt — Details in Kapitel 3:</p>
+<table>
+  <tr><th>Situation</th><th>Empfohlener Weg</th></tr>
+  <tr><td>Loxone Miniserver vorhanden</td><td>Loxone-API (Weg A) oder Log-Tracker (Weg B)</td></tr>
+  <tr><td>Andere Wallbox mit OCPP</td><td>Integrierter OCPP-Server (Port 9000)</td></tr>
+  <tr><td>Keine Anbindung möglich</td><td>Manuelle Erfassung oder CSV-Import</td></tr>
+</table>
+
+<h2 id="steuer">2 · Steuer-Ratgeber</h2>
+
+<h3>Die beiden BMF-Sätze</h3>
+<table>
+  <tr><th>Satz</th><th>Höhe</th><th>Wofür</th></tr>
+  <tr><td>Ladestrom-Pauschale</td><td><b>0,34 €/kWh</b></td>
+      <td>Steuerfreier Auslagenersatz für Heimladen, wenn kein betrieblicher Ladepunkt
+          zur Verfügung steht (§ 3 Nr. 50 EStG)</td></tr>
+  <tr><td>Kilometerpauschale</td><td><b>0,30 €/km</b></td>
+      <td>Gesetzlicher Höchstsatz für dienstliche Fahrten mit dem Privat-Pkw
+          (§ 9 Abs. 1 Satz 3 Nr. 4a EStG)</td></tr>
+</table>
+
+<h3>Der wichtigste Unterschied: Erstattung ist nicht gleich Werbungskosten</h3>
+<div class="box warn">
+  <b>Merke:</b> Was der Arbeitgeber erstattet, bekommst du <b>vollständig</b> ausgezahlt.
+  Werbungskosten mindern dagegen nur dein zu versteuerndes Einkommen — zurück kommt
+  lediglich dein Grenzsteuersatz.<br><br>
+  Beispiel bei 45 % Grenzsteuersatz und 10.000 Dienstkilometern:
+  <ul style="margin-top:8px;">
+    <li>AG zahlt 0,30 €/km → <b>3.000 € bar</b></li>
+    <li>AG zahlt nichts, du setzt 0,30 €/km ab → <b>1.350 € über die Steuer</b></li>
+  </ul>
+  Ein höherer Arbeitgebersatz ist daher immer besser — es lohnt sich, darüber zu verhandeln.
+</div>
+
+<h3>Pauschale oder Fahrtenbuch?</h3>
+<p>Der <b>Konfigurator</b> vergleicht alle vier Wege und empfiehlt einen. Kurz gefasst:</p>
+<table>
+  <tr><th>Weg</th><th>Wann sinnvoll</th><th>Aufwand</th></tr>
+  <tr><td><b>C1</b> Privat-Pkw Pauschale</td><td>Echter km-Satz unter 0,30 €</td><td>Formlose Fahrtenliste</td></tr>
+  <tr><td><b>C2</b> Privat-Pkw Vollkosten</td><td>Echter km-Satz über 0,30 €</td><td>Fahrtenbuch, 12 Monate</td></tr>
+  <tr><td><b>A</b> Firmenwagen pauschal</td><td>Niedriger Listenpreis, viel Privatnutzung</td><td>Keiner</td></tr>
+  <tr><td><b>B</b> Firmenwagen Fahrtenbuch</td><td>Dienstquote über etwa 60 %</td><td>Fahrtenbuch, lückenlos</td></tr>
+</table>
+<p>Ein Klick auf eine der Vergleichskarten im Konfigurator öffnet die ausführliche
+steuerliche Einordnung mit Pflichten und Stolperfallen.</p>
+
+<h3>PV-Strom: der Margeneffekt</h3>
+<p>Lädst du mit eigenem Solarstrom, erstattet der Arbeitgeber trotzdem die vollen
+0,34 €/kWh. Deine tatsächlichen Kosten sind aber nur die entgangene Einspeisevergütung
+(etwa 0,08 €/kWh). Die Differenz ist steuerfreier Reingewinn.</p>
+<div class="box">
+  Wichtig: PV-Strom ist nicht kostenlos. Was du selbst verbrauchst, kannst du nicht
+  einspeisen — deshalb rechnet die Software korrekt mit Opportunitätskosten.
+</div>
+
+<h2 id="hardware">3 · Hardware anbinden</h2>
+
+<h3>Loxone Miniserver</h3>
+<p>Zwei Wege stehen zur Wahl, einstellbar im Wallbox-Dialog:</p>
+<p>Der Wallbox-Dialog ist in drei Abschnitte gegliedert, die man von oben nach
+unten durchgeht:</p>
+<table>
+  <tr><th>Abschnitt</th><th>Was dort hingehört</th></tr>
+  <tr><td>Zugang zum Miniserver</td><td>IP-Adresse, Benutzername, Passwort. Die IP wird
+      beim Tippen geprüft — ein Zahlendreher fällt sofort auf statt erst beim Verbindungstest.</td></tr>
+  <tr><td>Wallbox im Miniserver finden</td><td>„Bausteine suchen" liest die Konfiguration aus
+      und bietet die gefundenen Wallboxen zur Auswahl. Es wird dabei nichts verändert.
+      Erkannt wird ein Baustein am Typ, an seinen Ausgängen (Mr, Ccc, Cac) oder am Namen —
+      findet die Suche nichts, zeigt der Haken „auch andere Bausteine zeigen" alle an.</td></tr>
+  <tr><td>Abfrage-Rhythmus</td><td>Wie oft die Software nachsieht. Betrifft nur die
+      Live-Anzeige — abgerechnet wird immer der vollständige Ladevorgang.</td></tr>
+</table>
+<div class="box">
+  Die Baustein-Kennung (UUID) musst du normalerweise nicht kennen — sie wird beim Suchen
+  automatisch eingetragen. Nur falls die Suche nichts findet, lässt sie sich unter
+  „Baustein-Kennung von Hand eintragen" direkt aus Loxone Config übernehmen.
+</div>
+
+<div class="box">
+  <b>Was die Direktabfrage liefert:</b> Der Loxone-Wallbox-Baustein stellt über
+  <code>/dev/sps/io/&lt;UUID&gt;/all</code> alle seine Ausgänge bereit — darunter den
+  <b>absoluten Zählerstand</b> (Mr), Verbrauch der laufenden und letzten Ladung, die
+  Zählwerke für Tag, Woche, Monat und Jahr sowie die vom Baustein berechneten Ladekosten.
+  Damit sind die Loxone-Daten genauso belastbar wie ein OCPP-Nachweis, ohne dass in
+  Loxone Config etwas verändert werden müsste.
+</div>
+
+<h3>Wallboxen anderer Hersteller</h3>
+<p>Für Easee, go-e, Webasto und andere spricht die Wallbox das Protokoll <b>OCPP 1.6-J</b>.
+Der Server, der die Verbindung entgegennimmt, muss laufen, <i>wenn geladen wird</i> —
+also auch nachts. Auf einem Arbeitsplatzrechner ist das nicht gegeben.</p>
+<div class="box">
+  <b>Empfohlener Weg:</b> Den OCPP-Dienst auf einem Gerät betreiben, das durchgehend
+  eingeschaltet ist — ein <b>LoxBerry</b>, NAS oder Raspberry Pi. Diese Anwendung holt
+  die gesammelten Ladevorgänge dort ab, wann immer sie gestartet wird.
+</div>
+<p>Einzurichten unter <b>Einstellungen → OCPP → Externer OCPP-Dienst</b>: Adresse und
+Pfad eintragen, Verbindung prüfen, fertig. Unterstützt werden das eCharge@Home
+LoxBerry-Plugin, evcc und SteVe.</p>
+
+<h3>Mit dem LoxBerry-Plugin</h3>
+<ol>
+  <li>Plugin auf dem LoxBerry installieren</li>
+  <li>In der Wallbox als Adresse eintragen:
+      <code>ws://&lt;IP-des-LoxBerry&gt;:9000/ocpp</code><br>
+      Die Wallbox hängt ihre eigene Kennung an, etwa <code>/ocpp/WB1</code></li>
+  <li>In dieser Anwendung als Dienst eintragen:
+      <code>&lt;IP-des-LoxBerry&gt;:8042</code> mit Pfad <code>/api/sessions</code></li>
+</ol>
+<div class="box">
+  Das Plugin stellt die Wallbox nach dem ersten Kontakt selbst ein: Messwerte alle
+  15 Sekunden, erfasst werden Energie, Leistung, Strom und Spannung. In Loxone Config
+  ist dafür nichts zu ändern.
+</div>
+<p>Bei einer <b>Loxone-Wallbox entfällt das vollständig</b> — deren Daten liest die
+Anwendung unmittelbar über den Miniserver.</p>
+
+<div class="box warn">
+  <b>In der Demo:</b> Es lässt sich <b>eine</b> Wallbox über die <b>Loxone-API</b> anbinden.
+  Der integrierte OCPP-Server für Wallboxen anderer Hersteller (Easee, go-e, Webasto)
+  und der Betrieb mehrerer Ladepunkte sind der Vollversion vorbehalten.
+</div>
+
+<p><b>Weg A — Direktabfrage (empfohlen):</b> Die Software fragt den Wallbox-Baustein
+zyklisch ab über <code>/dev/sps/io/&lt;UUID&gt;/all</code>. Keine Änderung in der
+Loxone Config nötig.</p>
+<ol>
+  <li>Wallbox anlegen, Typ <b>Direkte Loxone-API</b> wählen.</li>
+  <li>IP-Adresse des Miniservers, Benutzername und Passwort eintragen.</li>
+  <li><b>Struktur laden</b> klicken — die Wallbox-Bausteine werden automatisch erkannt.</li>
+  <li>Passenden Baustein auswählen, speichern.</li>
+</ol>
+
+<p><b>Weg B — Log-Tracker:</b> Wenn die Direktabfrage nicht möglich ist.</p>
+<ol>
+  <li>In der Loxone Config einen Baustein <b>Tracker / Logger</b> anlegen.</li>
+  <li>Dessen Eingang mit dem Ausgang <b>LCL</b> (Last Charging Log) des
+      Wallbox-Bausteins verbinden.</li>
+  <li>Als Speicherziel <code>wallbox.log</code> festlegen und in den Miniserver laden.</li>
+  <li>In der Software: <b>Ladesessions → Loxone-Log importieren</b>.</li>
+</ol>
+
+<h3>OCPP-Wallbox (herstellerunabhängig)</h3>
+<p>Die Software bringt einen eigenen OCPP-1.6-J-Server mit. Kompatibel mit Easee,
+go-e, Webasto, ABL, Zaptec und weiteren.</p>
+<ol>
+  <li><b>Einstellungen → OCPP</b> öffnen, Dienst auf <b>Aktiv</b> stellen.</li>
+  <li>Die dort angezeigte Basis-URL kopieren, etwa <code>ws://192.168.1.10:9000/ocpp</code>.</li>
+  <li>Diese URL in der Wallbox-Konfiguration eintragen — <b>ohne</b> die Charge-Point-ID,
+      die ergänzt die Wallbox selbst.</li>
+  <li>Wallbox neu starten. Nach dem Verbindungsaufbau erscheinen Livewerte
+      (Leistung, Phasenströme, Zählerstand) in der Wallbox-Karte.</li>
+</ol>
+<div class="box warn">
+  Port 9000 muss im Netzwerk erreichbar sein. Läuft die Software in Docker, ist der
+  Port bereits durchgereicht. Bei Firewall-Problemen prüfen, ob Wallbox und Server
+  im selben Netz sind.
+</div>
+
+<h2 id="bmw">4 · BMW ConnectedDrive</h2>
+<p>Fahrten lassen sich direkt aus dem MyBMW-Konto importieren, ohne OBD-Stecker
+und ohne manuelle Eingabe.</p>
+<ol>
+  <li><b>Einstellungen → BMW Sync</b> öffnen.</li>
+  <li>MyBMW-Zugangsdaten eintragen, optional die Fahrgestellnummer bei mehreren Fahrzeugen.</li>
+  <li>Auf <b>Jetzt synchronisieren</b> klicken.</li>
+  <li>Im Dashboard erscheinen die neuen Fahrten. Pro Fahrt mit einem Klick
+      <b>Dienstlich</b> oder <b>Privat</b> wählen.</li>
+</ol>
+<p>Dienstliche Fahrten werden automatisch als abrechenbare Fahrt übernommen. Private
+Fahrten bleiben in der Rohtabelle und tauchen in keinem Beleg auf — sie zählen nur
+für den Gesamtkilometer-Nachweis.</p>
+<h3>Ladevorgänge aus dem Fahrzeug</h3>
+<div class="box">
+  <b>Preise werden automatisch zugeordnet.</b> Die Software erkennt die Ladeart an der
+  gemeldeten Leistung: Über 25 kW kann es sich nur um einen Gleichstrom-Schnelllader
+  handeln, denn eine Heim-Wallbox schafft höchstens 22 kW. Entsprechend werden drei
+  Preise angesetzt — Vertragspreis zuhause, ein Tarif für Wechselstrom unterwegs und
+  ein höherer fürs Schnellladen. Die beiden externen Preise stellst du unter
+  <b>Einstellungen → BMW CarData</b> ein.
+</div>
+
+<div class="box">
+  <b>Woher die Zahlen stammen:</b> BMW liefert je Ladevorgang eine Folge von Blöcken
+  mit Beginn, Ende und mittlerer <b>netzseitiger</b> Ladeleistung. Daraus errechnet die
+  Software die bezogene Energiemenge — dieselbe Größe, die auch dein Hausstromzähler
+  misst und die erstattet wird.<br><br>
+  Die Alternative über den Ladezustand des Akkus läge systematisch zu niedrig: Beim
+  AC-Laden zuhause gehen rund 8 % als Ladeverlust verloren, die trotzdem bezahlt werden
+  müssen. Sie dient nur als Rückfallebene, wenn keine Blöcke vorliegen — dann mit
+  Verlustaufschlag.
+</div>
+
+<p>BMW führt eine eigene Ladehistorie der letzten 30 Tage. Über
+<b>Einstellungen → BMW Sync → Ladevorgänge abrufen</b> lässt sie sich übernehmen
+(ein Abruf vom Tageslimit).</p>
+<div class="box">
+  Jeder Ladevorgang trägt den <b>Ladeort mit Adresse</b>. Die Software gleicht ihn mit
+  deiner Heimadresse ab und kennzeichnet die Session als „zuhause" oder „unterwegs".
+  Das ist steuerlich entscheidend: Nur zuhause geladener Strom fällt unter den
+  steuerfreien Auslagenersatz nach § 3 Nr. 50 EStG.
+</div>
+<p>Kleine Abweichungen der Hausnummer werden dabei toleriert, weil BMW den Ladeort
+über GPS bestimmt und dieser um wenige Meter danebenliegen kann.</p>
+
+<h3>Die 30-Tage-Grenze</h3>
+<div class="box warn">
+  <b>BMW hält die Ladehistorie 30 Tage vor.</b> Ein Abruf im Monat genügt also — die
+  Anwendung muss nicht dauerhaft laufen, es geht nichts verloren. Wartest du länger als
+  30 Tage, fehlen die älteren Ladevorgänge dauerhaft und lassen sich nur noch über das
+  Datenarchiv nachholen.
+</div>
+<p>Ein Klick auf <b>BMW-Ladehistorie</b> holt beides: die Ladevorgänge <i>und</i> die
+Fahrten dazwischen. Letztere entstehen aus Kilometerstand und Ladeort — zwischen zwei
+Ladungen an verschiedenen Orten liegt zwangsläufig die gefahrene Strecke.</p>
+
+<h3>Vergangene Fahrten aus dem Datenarchiv</h3>
+<p>Der laufende Abruf kennt nur den aktuellen Kilometerstand. Für die Vergangenheit
+gibt es das <b>historische Datenarchiv</b>:</p>
+<ol>
+  <li>Im BMW-Portal unter <code>BMW CarData → Historisches Datenarchiv</code> anfordern.</li>
+  <li>Nach einigen Stunden steht das ZIP zum Download bereit (zwei Wochen lang).</li>
+  <li>In der App unter <b>Einstellungen → BMW Sync</b> hochladen.</li>
+</ol>
+<div class="box">
+  Die Fahrten entstehen aus den Ladevorgängen: Jeder trägt Kilometerstand und Ladeort.
+  Zwischen zwei Ladungen an verschiedenen Orten liegt die gefahrene Strecke — die
+  Kilometer stammen vom Tacho und stimmen exakt.
+</div>
+<div class="box warn">
+  <b>Wichtig fürs Fahrtenbuch:</b> Wurde zwischen zwei Ladungen mehrfach gefahren,
+  entsteht ein einzelner Eintrag über die Gesamtstrecke. Solche Fälle sind mit
+  „Rundfahrt — Zwischenziele bitte ergänzen" gekennzeichnet. Die Kilometer stimmen,
+  die Route musst du ergänzen — sonst erkennt das Finanzamt das Fahrtenbuch nicht an.
+</div>
+
+<h3>Zuordnung beschleunigen</h3>
+<p>Über der Fahrtenliste im Dashboard lässt sich eine <b>Distanzschwelle</b> einstellen
+(Standard 15 km). Sie wirkt zweifach:</p>
+<ul>
+  <li>Bei jeder Fahrt wird der passende Knopf farblich hervorgehoben — kurze Strecken
+      schlagen „Privat" vor, längere „Dienstlich".</li>
+  <li>Ein Sammelknopf übernimmt alle Fahrten unter der Schwelle auf einmal als privat.</li>
+</ul>
+<div class="box">
+  Bewusst nur ein Vorschlag: Die Zuordnung bleibt deine Entscheidung. Ein Fahrtenbuch
+  mit automatisch gesetzten Klassifizierungen wäre gegenüber dem Finanzamt schwer zu
+  vertreten — der Vorschlag nimmt dir nur das Suchen ab, nicht das Prüfen.
+</div>
+
+<h3>Wo die importierten Fahrten landen</h3>
+<p>Alle Fahrten — importierte wie selbst erfasste — stehen in <b>einer</b> Liste unter
+<b>Fahrten</b>. Frisch importierte sind gelb als „noch zuzuordnen" markiert.</p>
+<ol>
+  <li>Über den Filter <b>Art</b> auf „Noch zuzuordnen" wechseln.</li>
+  <li>Fahrten per Häkchen auswählen (mehrere gleichzeitig).</li>
+  <li>Über die Sammelaktionen einstufen und den Erstattungssatz zuweisen.</li>
+</ol>
+<div class="box">
+  Private Fahrten bleiben in der Liste und im Fahrtenbuch stehen — das verlangt die
+  Lückenlosigkeit. In Belegen für Arbeitgeber und Finanzamt erscheinen sie nicht.
+</div>
+
+<h3>Zuordnung nachträglich ändern</h3>
+<p>Unter <b>Einstellungen → BMW Sync</b> steht die Liste <b>„Alle importierten Fahrten"</b>
+mit Filter nach Offen, Dienstlich und Privat. Dort lässt sich jede Zuordnung
+jederzeit umstellen.</p>
+<div class="box">
+  Der Abrechnungseintrag wird dabei automatisch mitgeführt: Wird eine Fahrt von
+  dienstlich auf privat zurückgesetzt, verschwindet sie aus der Abrechnung und taucht
+  in keinem Beleg mehr auf. Umgekehrt entsteht der Eintrag neu.
+</div>
+
+<h3>Captcha bei der Erstanmeldung</h3>
+<p>BMW verlangt beim <b>ersten</b> Login eine Captcha-Bestätigung. Der Ablauf:</p>
+<ol>
+  <li>Im BMW-Tab auf <b>Captcha-Token erzeugen</b> klicken — die passende Seite
+      öffnet sich (je nach Region unterschiedlich).</li>
+  <li>Dort das Captcha lösen, den erzeugten Token kopieren.</li>
+  <li>Token in das Feld einfügen und auf <b>Jetzt synchronisieren</b> klicken.</li>
+</ol>
+<div class="box">
+  Der Token ist nur wenige Minuten gültig und lässt sich <b>nur einmal</b> verwenden.
+  Nach erfolgreicher Anmeldung speichert die Software die Sitzung — alle weiteren
+  Synchronisierungen laufen ohne Captcha. Das Feld verschwindet dann automatisch.
+</div>
+<p>Erscheint das Captcha-Feld später erneut, ist die gespeicherte Sitzung abgelaufen.
+Dann einmalig einen neuen Token erzeugen.</p>
+
+<h3>Wenn das Captcha „zu viele Anfragen" meldet</h3>
+<p>Diese Meldung kommt von hCaptcha, nicht von BMW oder dieser Software. Sie erscheint,
+wenn von derselben IP-Adresse in kurzer Zeit mehrere Anfragen kamen. Was hilft:</p>
+<ul>
+  <li><b>15–30 Minuten warten</b> — die Drosselung löst sich von selbst</li>
+  <li><b>Anderes Netz nutzen</b>, etwa den Handy-Hotspot statt WLAN — wirkt sofort</li>
+  <li><b>VPN abschalten</b>, falls aktiv: VPN-Adressen werden besonders oft gedrosselt</li>
+  <li><b>Privates Browserfenster</b> ohne Erweiterungen — Adblocker stören hCaptcha häufig</li>
+  <li>Die Seite <b>nicht mehrfach neu laden</b>, jeder Versuch zählt auf das Limit</li>
+</ul>
+
+<div class="box warn">
+  Die Anbindung nutzt die MyBMW-Schnittstelle mit deinen eigenen Zugangsdaten. Es
+  besteht keine offizielle Partnerschaft mit der BMW AG.
+</div>
+
+<h2 id="monatsabschluss">5 · Monatsabschluss in zwei Klicks</h2>
+<p>Auf dem <b>Dashboard</b> steht die Karte <b>Monatsabschluss</b> — der schnellste Weg
+zur Abrechnung:</p>
+<ol>
+  <li>Monat oben rechts auswählen (zwölf Monate rückwärts verfügbar).</li>
+  <li>Auf <b>Ladestrom-Beleg</b> oder <b>Fahrtkosten-Beleg</b> klicken. Fertig.</li>
+</ol>
+<p>Die Karte zeigt vorher, was zusammenkommt: erstattungsfähiger Ladestrom, Dienstfahrten
+und die Summe für den Arbeitgeber.</p>
+<div class="box">
+  <b>Die Statuszeile warnt, bevor etwas fehlt.</b> Sind noch Fahrten aus dem BMW-Import
+  nicht zugeordnet, steht das dort — mit einem Link, der direkt zur Zuordnung springt.
+  So entsteht kein Beleg, in dem Fahrten fehlen, die eigentlich dienstlich waren.
+</div>
+<p>Sind für einen Monat keine passenden Daten vorhanden, sind die Knöpfe abgeblendet.
+Ein leerer Beleg entsteht dadurch gar nicht erst.</p>
+
+<h2 id="ladevorgang-erfassen">6 · Ladevorgang von Hand erfassen</h2>
+<p>Unter <b>Ladevorgänge → + Session erfassen</b>. Das Formular folgt dem Ablauf, in dem
+man einen Ladevorgang rekonstruiert:</p>
+<ol>
+  <li><b>Wann</b> — Beginn und Ende</li>
+  <li><b>Wie viel</b> — entweder direkt in kWh oder über zwei Zählerstände</li>
+  <li><b>Wo</b> — zuhause oder unterwegs</li>
+</ol>
+<div class="box">
+  <b>Zwei Wege zur Menge:</b> „Direkt in kWh" entspricht dem, was Wallbox oder
+  Fahrzeug-App anzeigen — der schnellste Weg. „Aus Zählerständen" ist der belastbarere
+  Nachweis, weil ein geeichter Zähler dahintersteht. Beides in kWh, nicht in Wattstunden.
+</div>
+<div class="box warn">
+  <b>Der Ladeort entscheidet über Geld.</b> Zuhause geladener Strom fällt unter den
+  steuerfreien Auslagenersatz (§ 3 Nr. 50 EStG) und wird mit deinem Vertragspreis
+  gerechnet. Unterwegs geladener wird meist über Ladekarte abgerechnet und ist nicht
+  erstattungsfähig — er erscheint in keinem Arbeitgeberbeleg.
+</div>
+<p>Unter dem Formular stehen Menge, Dauer und Betrag, noch bevor du speicherst.</p>
+
+<h2 id="belege">7 · Belege erzeugen</h2>
+<p>Unter <b>Belege</b> stehen vier Dokumenttypen bereit:</p>
+<table>
+  <tr><th>Beleg</th><th>Für wen</th><th>Inhalt</th></tr>
+  <tr><td>Ladestrom-Kostennachweis</td><td>Arbeitgeber</td>
+      <td>Geladene kWh × BMF-Pauschale, mit Zählernachweis</td></tr>
+  <tr><td>Fahrtkosten Arbeitgeber</td><td>Arbeitgeber</td>
+      <td>Dienstfahrten mit dem vereinbarten km-Satz</td></tr>
+  <tr><td>Fahrtkosten Finanzamt</td><td>Steuererklärung</td>
+      <td>Differenz zur 0,30-€-Pauschale als Werbungskosten</td></tr>
+  <tr><td>Fahrtenbuch</td><td>Finanzamt</td>
+      <td>Chronologische Fahrtenkette mit Kilometerständen</td></tr>
+</table>
+<p>Zusätzlich gibt es unter <b>Auswertung Stromkosten</b> eine persönliche
+Monatsübersicht als PDF, die deine tatsächlichen Stromkosten der
+Arbeitgeber-Erstattung gegenüberstellt.</p>
+<div class="box">
+  Hast du für einen Zeitraum keine Arbeitgeber-Erstattung erhalten, wähle beim
+  Finanzamt-Beleg die Option <b>„Keine AG-Erstattung"</b> — dann werden die vollen
+  0,30 €/km angesetzt.
+</div>
+
+<h2 id="beispieldaten">8 · Beispieldaten zum Ausprobieren</h2>
+<p>Unter <b>Einstellungen → System → Beispieldaten</b> füllt ein Klick die Anwendung
+mit einem vollständigen Jahr: Wallbox, Ladevorgänge zuhause und an Schnellladern,
+Dienst- und Privatfahrten, Fahrzeugkosten.</p>
+<p>Damit lassen sich alle Auswertungen, Belege und Kennzahlen ausprobieren, ohne
+selbst etwas erfassen zu müssen — nützlich, um vor dem Kauf zu sehen, was die
+Software leistet.</p>
+<div class="box">
+  <b>Die Daten sind gekennzeichnet</b> und lassen sich jederzeit vollständig entfernen.
+  Selbst erfasste Fahrten und Ladevorgänge bleiben dabei unberührt, auch wenn sie im
+  selben Zeitraum liegen.
+</div>
+
+<h2 id="sicherung">9 · Datensicherung und Neuanfang</h2>
+<p>Unter <b>Einstellungen → System</b> stehen drei Funktionen:</p>
+
+<h3>Sichern</h3>
+<p><b>Sicherung herunterladen</b> erzeugt ein ZIP mit der vollständigen Datenbank und
+allen erzeugten Belegen. Damit lässt sich der Stand auf einem anderen Rechner
+wiederherstellen.</p>
+<div class="box">
+  Die Datenbank wird dabei über die Sicherungsschnittstelle von SQLite kopiert, nicht
+  über das Dateisystem. Das ist auch dann verlässlich, wenn gerade ein Ladevorgang
+  geschrieben wird.
+</div>
+<p><b>Daten als CSV exportieren</b> liefert dieselben Daten als Tabellen — lesbar ohne
+diese Software, geeignet für den Steuerberater. Die Dateien öffnen sich in Excel ohne
+Nachfrage nach Trennzeichen.</p>
+
+<h3>Wiederherstellen</h3>
+<p>Sicherung auswählen, einspielen. Der aktuelle Stand wird vorher automatisch gesichert
+und liegt im Ordner <code>data/</code> — ein versehentliches Einspielen ist also nicht
+das Ende der Daten.</p>
+<div class="box warn">
+  <b>Zugangsdaten müssen neu eingegeben werden.</b> Gespeicherte Passwörter für Loxone
+  und BMW sind verschlüsselt, und der Schlüssel liegt außerhalb der Sicherung im
+  Benutzerverzeichnis. Auf einem anderen Rechner sind diese Felder deshalb leer —
+  alle übrigen Daten bleiben vollständig.
+</div>
+
+<h3>Zurücksetzen</h3>
+<p>Versetzt die Anwendung in den Auslieferungszustand. Zwei Varianten:</p>
+<table>
+  <tr><th>Einstellung</th><th>Was passiert</th></tr>
+  <tr><td>Stammdaten behalten <i>(Standard)</i></td>
+      <td>Ladevorgänge, Fahrten und Belege werden entfernt. Fahrzeuge, Personen und
+          Wallboxen bleiben — der übliche Fall nach einer Testphase.</td></tr>
+  <tr><td>Vollständig</td>
+      <td>Alles wird gelöscht, auch Stammdaten und Zugänge. Für die Weitergabe an
+          einen anderen Nutzer.</td></tr>
+</table>
+<p>Vor dem Löschen wird immer gesichert. Die Datei liegt im Ordner <code>data/</code>
+und heißt <code>vor_zuruecksetzen_JJJJ-MM-TT_HHMM.zip</code>.</p>
+<div class="box">
+  <b>Nach vollständigem Zurücksetzen startet die Einrichtung von vorn</b> — mit
+  Haftungshinweis, Name, Fahrzeug und Datenquelle. Das entspricht dem Zustand einer
+  frischen Installation und ist der richtige Weg, bevor die Anwendung an jemand
+  anderen übergeben wird.
+</div>
+
+<h2 id="ausgaben">10 · Demo und Vollversion</h2>
+<p>Es gibt <b>ein</b> Paket. Ohne Lizenzschlüssel läuft es als Demo, mit Schlüssel
+als Vollversion — einzugeben unter <b>Einstellungen → Lizenz</b>.</p>
+<table>
+  <tr><th>Funktion</th><th>Demo</th><th>Vollversion</th></tr>
+  <tr><td>Ladevorgänge und Fahrten erfassen</td><td>unbegrenzt</td><td>unbegrenzt</td></tr>
+  <tr><td>Auswertungen und Kennzahlen</td><td>vollständig</td><td>vollständig</td></tr>
+  <tr><td>Belege</td><td>mit Wasserzeichen</td><td>ohne Wasserzeichen</td></tr>
+  <tr><td>Wallboxen</td><td>eine</td><td>beliebig viele</td></tr>
+  <tr><td>Loxone-Anbindung</td><td>ja</td><td>ja</td></tr>
+  <tr><td>OCPP-Server (andere Hersteller)</td><td>—</td><td>ja</td></tr>
+  <tr><td>BMW CarData</td><td>—</td><td>ja</td></tr>
+  <tr><td>Datensicherung und Export</td><td>ja</td><td>ja</td></tr>
+</table>
+<div class="box">
+  <b>Erfassen ist unbegrenzt.</b> Wer die Software beurteilen will, muss sie mit echten
+  Daten füllen können — eine Mengengrenze bricht den Test genau dann ab, wenn es
+  interessant wird. Eingeschränkt sind stattdessen die Funktionen für den laufenden
+  Betrieb: verwertbare Belege, mehrere Ladepunkte, die BMW-Anbindung und der
+  OCPP-Server.
+</div>
+
+<h3>Wechsel zur Vollversion</h3>
+<p>Nach dem Kauf bei Payhip erhältst du einen <b>Lizenzschlüssel</b> per E-Mail.
+Einmal unter <b>Einstellungen → Lizenz</b> eingeben — fertig. Kein neues Paket,
+keine Neuinstallation, alle Daten bleiben.</p>
+<div class="box">
+  Die Prüfung läuft höchstens alle 14 Tage. Ist Payhip einmal nicht erreichbar, gilt
+  die Lizenz weitere 30 Tage — ein Serverausfall sperrt niemanden aus. Zwischendurch
+  arbeitet die Anwendung ohne Internetverbindung.
+</div>
+<p>Bei einem Rechnerwechsel lässt sich die Lizenz unter <b>Von diesem Rechner lösen</b>
+freigeben und anderswo erneut eingeben.</p>
+<div class="box">
+  Die Vollversion wird auf den Namen des Käufers ausgestellt. Er erscheint in der
+  Fußzeile jedes erzeugten Belegs — ein Hinweis darauf, dass die Fassung persönlich
+  lizenziert ist.
+</div>
+
+<h2 id="installation">11 · Installationsarten</h2>
+<table>
+  <tr><th>Art</th><th>Für wen</th><th>Besonderheit</th></tr>
+  <tr><td><b>Portabel</b> (Ordner)</td><td>Windows-Arbeitsplatz</td>
+      <td>Keine Installation, läuft vom USB-Stick, keine Administratorrechte</td></tr>
+  <tr><td><b>Docker</b></td><td>NAS, Raspberry Pi, Server</td>
+      <td>Läuft dauerhaft — nötig für den OCPP-Server und den automatischen Abruf</td></tr>
+</table>
+
+<h3>Portable Fassung</h3>
+<p>Ordner entpacken, auf <b>„eCharge@Home starten.cmd"</b> doppelklicken. Der Browser
+öffnet sich von selbst. Alles liegt im Unterordner <code>daten</code>.</p>
+<div class="box">
+  <b>Für ein Update</b> genügt es, den Ordner <code>daten</code> zu sichern, das neue
+  Paket zu entpacken und den Ordner zurückzukopieren.
+</div>
+
+<h3>Dauerbetrieb auf einem NAS</h3>
+<p>Nur nötig, wenn du den <b>OCPP-Server</b> für eine Nicht-Loxone-Wallbox brauchst oder
+die genauere Fahrterkennung über den Telematik-Abruf willst. Für Ladevorgänge und die
+daraus abgeleiteten Fahrten reicht die portable Fassung — BMW hält die Daten 30 Tage vor.</p>
+
+<h2 id="faq">12 · Häufige Fragen</h2>
+
+<h3>Warum sehe ich Ladesessions mit 0 kWh?</h3>
+<p>Manche Wallboxen melden Verbindungsvorgänge ohne Energiefluss. Diese Zeilen
+werden standardmäßig ausgeblendet; über die Checkbox „0-kWh anzeigen" lassen sie
+sich einblenden.</p>
+
+<h3>Der Konfigurator empfiehlt die Pauschale, obwohl mein Auto teuer ist</h3>
+<p>Entscheidend ist der Kilometersatz, nicht der Kaufpreis. Bei hoher Jahresfahrleistung
+verteilen sich die Fixkosten auf viele Kilometer — dann liegt der echte Satz oft unter
+0,30 €. Prüfe, ob deine Jahresfahrleistung realistisch eingetragen ist.</p>
+
+<h3>Muss ich das Fahrtenbuch das ganze Jahr führen?</h3>
+<p>Ja. Ein Fahrtenbuch wird nur anerkannt, wenn es lückenlos über mindestens
+zwölf Monate geführt wird. Ein unvollständiges Fahrtenbuch verwirft das Finanzamt
+komplett — dann greift nur noch die Pauschale.</p>
+
+<h3>Wo liegen meine Daten?</h3>
+<p>Ausschließlich lokal in der Datei <code>data/charging.db</code>. Es findet keine
+Übertragung an Dritte statt. Sichere diese Datei regelmäßig.</p>
+
+<h3>Ersetzt die Software einen Steuerberater?</h3>
+<p>Nein. Alle Berechnungen erfolgen ohne Gewähr und dienen der Orientierung. Die
+Anerkennung im Einzelfall obliegt dem Finanzamt.</p>
+
+<footer>
+  eCharge@Home · Version 1.0.0 (Release Build 2026.08)<br>
+  © 2026 Löwemann IT Consulting. Alle Rechte vorbehalten.<br><br>
+  BMW, Loxone, EnBW, Ionity und weitere genannte Marken sind eingetragene Warenzeichen
+  der jeweiligen Inhaber. eCharge@Home steht in keiner offiziellen Verbindung zu diesen
+  Unternehmen.
+</footer>
+
+</div>
+</body>
+</html>

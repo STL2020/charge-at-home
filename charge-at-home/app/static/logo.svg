@@ -1,0 +1,22 @@
+<svg width="36" height="36" viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg">
+  <!--
+    eCharge@Home — Bildmarke
+
+    Reduziert und geometrisch statt verspielt: Der frühere Entwurf arbeitete
+    mit Radialverlauf, Weichzeichner und Farbverlauf im Blitz. Solche Effekte
+    wirken bei kleiner Darstellung unruhig und lassen ein Fachprodukt für
+    Steuerabrechnung wie eine Freizeit-App aussehen.
+
+    Jetzt: Ein Hausumriss in gleichmäßiger Strichstärke, darin ein Blitz als
+    einzige Vollfläche. Zwei Elemente, eine Akzentfarbe, klare Kanten — bleibt
+    bis 16 Pixel lesbar und funktioniert einfarbig auf Papier.
+  -->
+  <g fill="none" stroke="#16a34a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Dach: eine durchgehende Linie, keine Rundungen -->
+    <path d="M5 15.5 18 5.5l13 10"/>
+    <!-- Seitenwände, unten offen — hält die Marke leicht -->
+    <path d="M8 17.5v12.5h20V17.5"/>
+  </g>
+  <!-- Blitz als einzige gefüllte Fläche: der Blickfang -->
+  <path d="M19.6 17.2h4.2l-6.6 8.6.9-5.6h-4l6.3-8.4z" fill="#16a34a"/>
+</svg>

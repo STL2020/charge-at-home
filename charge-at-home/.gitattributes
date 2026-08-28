@@ -1,0 +1,35 @@
+# Zeilenenden festlegen.
+#
+# Git für Windows wandelt beim Einchecken standardmäßig CRLF nach LF und
+# beim Auschecken zurück. Für dieses Projekt geht das schief:
+#
+#   start.bat und install.bat brauchen CRLF  — sonst startet der Batch nicht
+#   start.sh und install.sh brauchen LF      — sonst meldet die Shell
+#                                              "bad interpreter: No such file"
+#
+# Diese Datei legt das Verhalten unabhängig vom Betriebssystem fest.
+
+# Standard: Git entscheidet, im Arbeitsverzeichnis wie üblich
+*               text=auto
+
+# Immer LF — auch wenn unter Windows ausgecheckt wird
+*.sh            text eol=lf
+*.py            text eol=lf
+*.yml           text eol=lf
+*.yaml          text eol=lf
+*.cgi           text eol=lf
+Dockerfile      text eol=lf
+entrypoint.sh   text eol=lf
+
+# Immer CRLF — Windows-Batchdateien
+*.bat           text eol=crlf
+*.cmd           text eol=crlf
+*.ps1           text eol=crlf
+
+# Binärdateien nicht anfassen
+*.png           binary
+*.PNG           binary
+*.jpg           binary
+*.pdf           binary
+*.zip           binary
+*.db            binary
