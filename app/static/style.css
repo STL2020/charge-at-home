@@ -322,6 +322,22 @@
   .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.55); backdrop-filter: blur(2px); z-index: 50; align-items: center; justify-content: center; }
   .modal-overlay.open { display: flex; }
   .modal { width: 460px; max-width: 90vw; max-height: 80vh; overflow-y: auto; background: var(--bg-elevated); border: 1px solid var(--border-strong); border-radius: var(--radius); padding: 24px 26px; box-shadow: 0 20px 60px rgba(0,0,0,0.5); }
+  /* Breite Variante fuer lange Formulare (Fahrzeug): Mit nur 460px wurde
+     der Dialog so hoch, dass der Speichern-Knopf aus dem Bild lief und man
+     ihn nicht mehr erreichte. Mehr Breite = weniger Hoehe. Zusaetzlich ist
+     die Fusszeile festgepinnt, damit der Knopf unabhaengig von der
+     Formularlaenge IMMER sichtbar bleibt -- der eigentliche, dauerhafte
+     Schutz gegen genau dieses Problem. */
+  .modal.modal-breit, .modal-box.modal-breit {
+    width: 980px; max-width: 94vw; max-height: 88vh;
+    padding-bottom: 0; overflow-y: auto;
+  }
+  .modal.modal-breit .modal-fuss, .modal-box.modal-breit .modal-fuss {
+    position: sticky; bottom: 0; z-index: 2;
+    background: var(--bg-elevated);
+    border-top: 1px solid var(--border);
+    margin: 14px -26px 0; padding: 14px 26px;
+  }
   .modal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
   .modal-title { font-family: var(--font-display); font-weight: 600; font-size: 17px; }
   .modal-close { cursor: pointer; color: var(--text-tertiary); font-size: 18px; background: none; border: none; }

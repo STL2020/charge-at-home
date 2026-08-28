@@ -4426,7 +4426,19 @@ async function generateTripSelectionBeleg() {
   // Splash nach 5s ausblenden (Mindeststandzeit fuer die Markenwahrnehmung)
   setTimeout(() => {
     splash.style.animation = 'splash-out .7s ease forwards';
-    setTimeout(() => splash.remove(), 700);
+    setTimeout(() => {
+      splash.remove();
+      // BUG BEHOBEN (28.08.): Die Hochlauf-Animation der Ladestand-Anzeige
+      // lief WAEHREND der 5,7 Sekunden Startbildschirm ab -- also komplett
+      // unsichtbar. Sie war nie kaputt, nur immer schon vorbei, wenn der
+      // Anwender das Dashboard zu sehen bekam. Mit einer Messung im echten
+      // Browser bestaetigt: die Anzeige stand vom ersten Messwert an auf
+      // dem Endwert. Deshalb hier erneut ausloesen, sobald der
+      // Startbildschirm wirklich weg ist.
+      if (typeof _fahrzeugStatusBatterienAnimieren === 'function') {
+        _fahrzeugStatusBatterienAnimieren();
+      }
+    }, 700);
   }, 5000);
 })();
 
@@ -4956,7 +4968,7 @@ async function loadVehiclesGrid() {
       return;
     }
     grid.innerHTML = vehicles.map(v => `
-      <div class="card" style="padding:16px; ${v.ist_standard ? 'border-left:3px solid var(--amber);' : ''}">
+      <div class="card" style="padding:16px; display:flex; flex-direction:column; height:100%; ${v.ist_standard ? 'border-left:3px solid var(--amber);' : ''}">
         <div style="display:flex; align-items:start; justify-content:space-between; margin-bottom:10px;">
           <div>
             <div style="font-size:15px; font-weight:600;">${v.bezeichnung}</div>
@@ -4973,7 +4985,12 @@ async function loadVehiclesGrid() {
         </div>
         ${v.antrieb==='verbrenner' ? '<div class="hint" style="margin-top:8px;">Verbrenner: keine Stromerstattung, nur Fahrtkosten.</div>' : ''}
         ${_fahrzeugDaten(v)}
-        <div style="margin-top:12px;">
+        <!-- "margin-top:auto" schiebt den Knopf an den unteren Kartenrand.
+             Zuvor sassen die Knoepfe benachbarter Karten auf
+             UNTERSCHIEDLICHER Hoehe, weil ein Verbrenner eine Zusatzzeile
+             ("keine Stromerstattung") hat, ein Elektrofahrzeug aber nicht.
+             Jetzt fluchten sie unabhaengig vom Inhalt darueber. -->
+        <div style="margin-top:auto; padding-top:12px;">
           <button class="btn btn-sm" onclick="manageVehicleCosts(${v.id}, '${v.bezeichnung.replace(/'/g,"")}')" style="width:100%;">Kosten verwalten →</button>
         </div>
       </div>`).join('');
