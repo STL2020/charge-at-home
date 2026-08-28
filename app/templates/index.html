@@ -868,6 +868,20 @@
                    der Katalog ist dort bearbeitbar. -->
               <datalist id="purpose-presets"></datalist>
             </div>
+
+            <!-- Dienstlich/Privat: zuvor NUR als Pille direkt in der
+                 Tabellenzeile aenderbar, im Bearbeiten-Formular selbst
+                 fehlte das Feld komplett -- echte Luecke, jetzt behoben.
+                 Nutzt denselben Sammel-Endpunkt wie die Tabellen-Pille
+                 (/api/trips/sammel-fahrtart), keine doppelte Logik. -->
+            <div style="margin-top:10px;">
+              <label class="field-label">Art der Fahrt</label>
+              <div class="toggle-pair" id="trip-fahrtart-toggle">
+                <button class="on" onclick="setTripFahrtart(this, 'dienstlich')" title="Wird erstattet">dienstlich</button>
+                <button onclick="setTripFahrtart(this, 'privat')" title="Keine Erstattung, zaehlt nicht als Dienstfahrt">privat</button>
+              </div>
+            </div>
+
             <!-- Wer und womit — steht bewusst unter der Strecke: Person und
                  Fahrzeug sind im Alltag fast immer dieselben und werden
                  vorbelegt, waehrend Datum und Ziel jedes Mal neu sind. -->
@@ -890,7 +904,7 @@
             <div style="margin-top:10px;">
               <label class="field-label">Erstattungssatz</label>
               <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-                <div class="toggle-pair">
+                <div class="toggle-pair" id="trip-rate-toggle">
                   <button class="on" onclick="setTripRate(this, 0.15)" title="Üblicher Arbeitgebersatz">0,15 €/km</button>
                   <button onclick="setTripRate(this, 0.30)" title="Gesetzlicher Höchstsatz nach § 9 EStG">0,30 €/km</button>
                   <button onclick="setTripRate(this, null)" title="Eigenen Satz eintragen">anderer Satz</button>

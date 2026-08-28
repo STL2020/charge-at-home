@@ -142,7 +142,11 @@
      auseinandergezogen. Eine Hoechstbreite, zentriert, behebt das
      automatisch — auf normalen und schmalen Fenstern aendert sich nichts,
      da die Breite dort ohnehin unter der Grenze bleibt. */
-  .topbar, .content { max-width: 1680px; margin-left: auto; margin-right: auto; }
+  /* Anchor left statt zentriert: "margin-left/right: auto" mit
+     max-width erzeugte auf breiten Bildschirmen bis zu 300+ Pixel toten
+     Raum links UND rechts -- der Inhalt haengt links an der Sidebar,
+     kein Zentrieren mehr. */
+  .topbar, .content { max-width: 1680px; margin-left: 0; margin-right: auto; }
   .topbar { display: flex; align-items: center; justify-content: space-between; padding: 22px 34px 0 34px; }
   .page-title { font-family: var(--font-display); font-size: 22px; font-weight: 600; letter-spacing: .01em;}
   .page-sub { color: var(--text-secondary); font-size: 13px; margin-top: 3px; }
@@ -1000,7 +1004,20 @@ table td.mono, .mono { font-family: var(--font-mono); }
 @media (prefers-reduced-motion: reduce) { .sp-dot.aktiv { animation: none } }
 
 /* ─── Fahrzeugstatus-Kachel: dezenter Auftritt statt hartem Einblenden ───── */
-.fzg-status-karte { animation: fzg-einblenden .45s cubic-bezier(.22,.9,.3,1); }
+/* Gruener Verlauf + Glow-Kreis aus dem freigegebenen Entwurf -- war bei der
+   Uebernahme in die echte App versehentlich verloren gegangen (die Kachel
+   nutzte nur die neutrale Standard-.card-Optik statt dieser eigenen). */
+.fzg-status-karte {
+  animation: fzg-einblenden .45s cubic-bezier(.22,.9,.3,1);
+  background: radial-gradient(ellipse at 75% 20%, #0d2818, var(--bg-card) 70%) !important;
+}
+[data-theme="light"] .fzg-status-karte {
+  background: radial-gradient(ellipse at 75% 20%, #dcf5e6, var(--bg-card) 70%) !important;
+}
+.fzg-status-karte::before {
+  content: ""; position: absolute; top: -60px; right: 10px; width: 220px; height: 220px;
+  border-radius: 50%; background: #22c55e18; filter: blur(5px); pointer-events: none;
+}
 @keyframes fzg-einblenden {
   from { opacity: 0; transform: translateY(8px); }
   to   { opacity: 1; transform: translateY(0); }

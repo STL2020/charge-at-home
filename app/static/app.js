@@ -761,6 +761,16 @@ async function downloadLadestromBeleg(vonId, bisId) {
 
 let editingTripId = null;
 let tripRateChosen = 0.15;
+// "dienstlich" als Voreinstellung -- neue Fahrten sind im ganz
+// ueberwiegenden Regelfall dienstlich, das war schon vor dieser Aenderung
+// der implizite Standard (Tabellen-Pille startete ebenso auf "dienstlich").
+let tripFahrtart = 'dienstlich';
+
+function setTripFahrtart(btn, art) {
+  tripFahrtart = art;
+  btn.parentNode.querySelectorAll('button').forEach(b => b.classList.remove('on'));
+  btn.classList.add('on');
+}
 
 function setTripRate(btn, rate) {
   btn.parentElement.querySelectorAll('button').forEach(b => b.classList.remove('on'));
@@ -1059,7 +1069,13 @@ function resetTripForm() {
   document.getElementById('trip-distance').value = '';
   document.getElementById('trip-distance-hint').textContent = '';
   document.getElementById('trip-form-message').textContent = '';
-  const pair = document.querySelector('#new-trip-form .toggle-pair');
+  const artToggle = document.getElementById('trip-fahrtart-toggle');
+  if (artToggle) {
+    artToggle.querySelectorAll('button').forEach(b => b.classList.remove('on'));
+    artToggle.children[0].classList.add('on');
+  }
+  tripFahrtart = 'dienstlich';
+  const pair = document.getElementById('trip-rate-toggle');
   pair.querySelectorAll('button').forEach(b => b.classList.remove('on'));
   pair.querySelector('button').classList.add('on');
   tripRateChosen = 0.15;
@@ -1318,7 +1334,7 @@ async function duplicateTrip(tripId) {
   document.getElementById('trip-distance').value = t.distance_km;
 
   tripRateChosen = t.rate_chosen;
-  const pair = document.querySelector('#new-trip-form .toggle-pair');
+  const pair = document.getElementById('trip-rate-toggle');
   if (pair) {
     pair.querySelectorAll('button').forEach(b => b.classList.remove('on'));
     if (t.rate_chosen === 0.15) pair.children[0].classList.add('on');
@@ -1378,8 +1394,16 @@ async function editTrip(tripId) {
   document.getElementById('trip-start').value = t.start_address;
   document.getElementById('trip-end').value = t.end_address;
   document.getElementById('trip-distance').value = t.distance_km;
+  // Art der Fahrt vorbelegen -- Standard "dienstlich" wie in der Tabelle.
+  tripFahrtart = t.fahrtart || 'dienstlich';
+  const artToggle = document.getElementById('trip-fahrtart-toggle');
+  if (artToggle) {
+    artToggle.querySelectorAll('button').forEach(b => b.classList.remove('on'));
+    const index = tripFahrtart === 'privat' ? 1 : 0;
+    artToggle.children[index].classList.add('on');
+  }
   tripRateChosen = t.rate_chosen;
-  const pair = document.querySelector('#new-trip-form .toggle-pair');
+  const pair = document.getElementById('trip-rate-toggle');
   pair.querySelectorAll('button').forEach(b => b.classList.remove('on'));
   if (t.rate_chosen === 0.15) pair.children[0].classList.add('on');
   else if (t.rate_chosen === 0.30) pair.children[1].classList.add('on');
@@ -1449,6 +1473,20 @@ async function saveTrip() {
     });
     const data = await resp.json();
     if (resp.ok) {
+      // Art der Fahrt separat setzen -- nutzt denselben Sammel-Endpunkt
+      // wie die Tabellen-Pille (/api/trips/sammel-fahrtart), damit keine
+      // zweite Speicherlogik dafuer entsteht. Nur bei Abweichung vom
+      // Standard noetig, aber immer mitschicken ist einfacher und
+      // fehlerfreier als den Ausgangszustand mitzufuehren.
+      const savedTripId = isEdit ? editingTripId : data.trip_id;
+      if (savedTripId) {
+        try {
+          await fetch('/api/trips/sammel-fahrtart', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ trip_ids: [savedTripId], fahrtart: tripFahrtart }),
+          });
+        } catch (e) { /* Fahrt ist trotzdem gespeichert, Art bleibt ggf. auf altem Stand */ }
+      }
       const label = isReturn ? `Hin+Rück (${fmtDe(baseDist,1)}×2=${fmtDe(totalKm,1)} km)` : `${fmtDe(totalKm,1)} km`;
       msgEl.textContent = (isEdit ? 'Änderungen gespeichert' : 'Fahrt gespeichert') + ` — ${label}`;
       msgEl.style.color = 'var(--success)';
@@ -6929,31 +6967,36 @@ async function ladeFahrzeugStatusKachel(erzwingen = false) {
   if (!card || !grid) return;
   try {
     const vs = await (await hole('/api/vehicles')).json();
-    const fahrzeuge = (vs.vehicles || []).filter(v => v.vin);
+    // Jedes aktive Fahrzeug zaehlt fuers Karussell -- nicht nur BMW-
+    // authentifizierte. Das war zuvor mein eigenes, nie abgesprochenes
+    // Kriterium: v.vin + status.angemeldet==true. Ein manuell angelegtes
+    // oder nur mit VIN, aber (noch) nicht eingeloggtes Fahrzeug fiel dadurch
+    // lautlos komplett raus. Die Kachel selbst zeigt seit S9-27 ohnehin
+    // immer einen vollstaendigen Rahmen mit Leerstaenden, wenn keine
+    // Live-Daten vorliegen -- ein leerer Stand ist also kein Problem.
+    const fahrzeuge = vs.vehicles || [];
     if (!fahrzeuge.length) { card.style.display = 'none'; return; }
 
     const kacheln = [];
     const meta = [];
     const signaturTeile = [];
     for (const v of fahrzeuge) {
-      let status;
-      try {
-        status = await (await hole(`/api/vehicles/${v.id}/cardata/status`)).json();
-      } catch (e) { continue; }
-      if (!status.angemeldet) continue;
-
       let d = {};
-      try {
-        d = await (await hole(`/api/vehicles/${v.id}/cardata/fahrzeugdaten`)).json();
-      } catch (e) {}
-
-      // Tageskontingent sichtbar mitfuehren statt nur als fluechtige Meldung
-      // beim Fehlschlag zu zeigen — sonst bleibt unklar, warum "Aktualisieren"
-      // wirkungslos bleibt, sobald das Limit erreicht ist.
       let kont = null;
-      try {
-        kont = await (await hole(`/api/vehicles/${v.id}/cardata/kontingent`)).json();
-      } catch (e) {}
+      // BMW-Live-Daten nur abrufen, wenn ueberhaupt eine VIN hinterlegt ist
+      // -- ohne VIN gibt es dort ohnehin nichts zu holen.
+      if (v.vin) {
+        try {
+          const status = await (await hole(`/api/vehicles/${v.id}/cardata/status`)).json();
+          if (status.angemeldet) {
+            try { d = await (await hole(`/api/vehicles/${v.id}/cardata/fahrzeugdaten`)).json(); } catch (e) {}
+            // Tageskontingent sichtbar mitfuehren statt nur als fluechtige
+            // Meldung beim Fehlschlag zu zeigen — sonst bleibt unklar, warum
+            // "Aktualisieren" wirkungslos bleibt, sobald das Limit erreicht ist.
+            try { kont = await (await hole(`/api/vehicles/${v.id}/cardata/kontingent`)).json(); } catch (e) {}
+          }
+        } catch (e) {}
+      }
 
       kacheln.push(_fahrzeugStatusKachelHtml(v, d, kont));
       meta.push({ id: v.id, bezeichnung: v.bezeichnung || 'Fahrzeug', soc: d.soc_prozent, laedt: !!d.laedt_aktiv_text });
@@ -6967,6 +7010,7 @@ async function ladeFahrzeugStatusKachel(erzwingen = false) {
     if (!kacheln.length) { card.style.display = 'none'; return; }
     card.style.display = 'block';
     _fahrzeugStatusEingeklapptWiederherstellen();
+
 
     // BUG BEHOBEN (28.08.): Der Dashboard-Refresh (alle 10s) hat die Kachel
     // jedes Mal komplett neu aufgebaut — inklusive der Karten-iframe, die
