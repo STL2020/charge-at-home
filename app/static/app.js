@@ -7167,9 +7167,13 @@ function _fahrzeugStatusKachelHtml(v, d, kont) {
                    angesteckt ? 'Angesteckt' : 'Nicht angesteckt', angesteckt ? 'on' : 'off'));
 
   const chipsZeile2 = [];
+  // Beschriftung korrigiert: "flap.isLocked" misst die Verriegelung, nicht
+  // die physische Klappen-Position. "Ladeklappe zu/offen" war deshalb
+  // irrefuehrend -- ein Auto kann beim Laden die Klappe offen UND
+  // trotzdem verriegelt haben (Kabel steckt, Diebstahlschutz aktiv).
   chipsZeile2.push(d.ladeklappe_zu === false
-    ? chip('mdi-lock-open-outline', 'Ladeklappe offen', 'warn')
-    : chip('mdi-lock', 'Ladeklappe zu', 'off'));
+    ? chip('mdi-lock-open-outline', 'Ladeklappe entriegelt', 'warn')
+    : chip('mdi-lock', 'Ladeklappe verriegelt', 'off'));
   chipsZeile2.push(d.verriegelt === false
     ? chip('mdi-car-door-lock', 'Entriegelt', 'warn')
     : chip('mdi-car-door-lock', 'Verriegelt', 'off'));

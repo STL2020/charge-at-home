@@ -1024,6 +1024,13 @@ table td.mono, .mono { font-family: var(--font-mono); }
 }
 @media (prefers-reduced-motion: reduce) { .fzg-status-karte { animation: none; } }
 
+/* Karussell-Spur: horizontales Scrollen (Wisch-Geste, Reiter-Klick) bleibt
+   voll funktionsfaehig, nur die sichtbare Scrollleiste selbst wird
+   ausgeblendet -- Pseudo-Elemente wie ::-webkit-scrollbar gehen nicht
+   inline, deshalb eine eigene Klasse statt Inline-Style. */
+#fzg-karussell-track { scrollbar-width: none; -ms-overflow-style: none; }
+#fzg-karussell-track::-webkit-scrollbar { display: none; height: 0; }
+
 /* ─── Kartenkopf mit Filtern ───────────────────────────────────────────────
    Titel links, Steuerung rechts — die Filter gehören zur Tabelle und stehen
    deshalb an ihr, nicht darüber im luftleeren Raum. */
