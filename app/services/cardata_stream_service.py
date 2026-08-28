@@ -566,6 +566,15 @@ def verarbeite_nachricht(vehicle_id: int, roh: str) -> dict:
     elif akku_alt:
         fahrzeugdaten_gefunden["akku_max_kwh"] = akku_alt
 
+    # Ladestand-Rueckfall: der offizielle Deskriptor kam in keinem
+    # Protokoll je an, dieser hier liefert stattdessen zuverlaessig einen
+    # Prozentwert. Nur setzen, wenn der offizielle Wert in DIESER Nachricht
+    # fehlt -- er behaelt damit immer Vorrang, sobald er doch eintrifft.
+    if "soc_prozent" not in fahrzeugdaten_gefunden:
+        soc_alt = zahl(_cds.DESCRIPTOR_SOC_ALT)
+        if soc_alt is not None and 0 <= soc_alt <= 100:
+            fahrzeugdaten_gefunden["soc_prozent"] = soc_alt
+
     # Beide moeglichen Deskriptoren pruefen — welcher tatsaechlich sendet,
     # ist je Fahrzeug unterschiedlich (siehe Kommentar bei der Definition
     # in cardata_service.py). Der erste, der in DIESER Nachricht einen

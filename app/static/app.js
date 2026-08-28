@@ -664,7 +664,12 @@ async function importCsv(input) {
     } else {
       resultEl.style.color = 'var(--success)';
     }
-    resultEl.textContent = msg;
+    // Verweis mitgeben: Der Import laeuft jetzt in der Wallbox-Ansicht,
+    // die importierten Ladevorgaenge landen aber in der Ladevorgaenge-
+    // Ansicht -- ohne Hinweis waere unklar, wo das Ergebnis zu sehen ist.
+    resultEl.innerHTML = msg +
+      ' <a href="#" onclick="showView(\'ladesessions\'); return false;"' +
+      ' style="text-decoration:underline;">Zu den Ladevorgängen →</a>';
     await loadWallboxesIntoFilter();
     await loadSessions();
   } catch (e) {
@@ -7072,16 +7077,35 @@ function _fahrzeugStatusKachelHtml(v, d, kont) {
   // die physische Klappen-Position. "Ladeklappe zu/offen" war deshalb
   // irrefuehrend -- ein Auto kann beim Laden die Klappe offen UND
   // trotzdem verriegelt haben (Kabel steckt, Diebstahlschutz aktiv).
-  chipsZeile2.push(d.ladeklappe_zu === false
-    ? chip('mdi-lock-open-outline', 'Ladeklappe entriegelt', 'warn')
-    : chip('mdi-lock', 'Ladeklappe verriegelt', 'off'));
-  chipsZeile2.push(d.verriegelt === false
-    ? chip('mdi-car-door-lock', 'Entriegelt', 'warn')
-    : chip('mdi-car-door-lock', 'Verriegelt', 'off'));
+  if (d.ladeklappe_zu === false) {
+    chipsZeile2.push(chip('mdi-lock-open-outline', 'Ladeklappe entriegelt', 'warn'));
+  } else if (d.ladeklappe_zu === true) {
+    chipsZeile2.push(chip('mdi-lock', 'Ladeklappe verriegelt', 'off'));
+  }
+  // Verriegelung: nur bei wirklich bekanntem Wert eine Aussage treffen.
+  // Zuvor wurde bei fehlendem Wert "Verriegelt" behauptet -- frei erfunden.
+  // Fehlt der Wert, erscheint statt einer Falschaussage ein anklickbarer
+  // Hinweis, WARUM nichts da ist: der Datenpunkt ist im BMW-Portal nicht
+  // aktiviert. Ohne diesen Hinweis wirkt der Chip schlicht "ohne Funktion".
+  if (d.verriegelt === true) {
+    chipsZeile2.push(chip('mdi-car-door-lock', 'Verriegelt', 'off'));
+  } else if (d.verriegelt === false) {
+    chipsZeile2.push(chip('mdi-lock-open-variant', 'Entriegelt', 'warn'));
+  } else {
+    chipsZeile2.push(`<span onclick="showView('einstellungen')" title="Datenpunkt vehicle.cabin.door.lock.status im BMW-Portal aktivieren"
+      style="display:inline-flex; align-items:center; gap:5px; font-size:11.5px; font-weight:600;
+             padding:3px 9px; border-radius:13px; cursor:pointer; background:var(--bg-input);
+             color:var(--text-tertiary); border:1px dashed var(--border-strong);">
+      <i class="mdi mdi-car-door-lock" style="font-size:13px;"></i> Verriegelung nicht aktiviert</span>`);
+  }
+
+  // Tueren/Fenster: ebenso nur bei bekanntem Zustand. Kommen nur einzelne
+  // der acht Werte an (bei diesem Fahrzeug z. B. nur die Beifahrertueren),
+  // bezieht sich die Aussage ausdruecklich auf die bekannten.
   if (d.tueren_fenster_offen === true) {
     const anzahl = d.tueren_fenster_anzahl_offen || 1;
-    chipsZeile2.push(chip('mdi-car-door', `${anzahl} ${anzahl === 1 ? 'offen' : 'offen'}`, 'warn'));
-  } else {
+    chipsZeile2.push(chip('mdi-car-door', `${anzahl} offen`, 'warn'));
+  } else if (d.tueren_fenster_offen === false) {
     chipsZeile2.push(chip('mdi-car-door', 'Türen/Fenster zu', 'off'));
   }
 

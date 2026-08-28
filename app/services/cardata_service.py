@@ -92,6 +92,14 @@ DESCRIPTOR_CBS = "vehicle.status.conditionBasedServices"
 # jetzt aktiv — welcher tatsaechlich zuverlaessig sendet, ist offen, daher
 # werden beide gelesen: das echte Bool zuerst (direkter, kein Text-Umweg),
 # der Text-Status als Rueckfall.
+# Ladestand-Rueckfall. Der offizielle Deskriptor (stateOfCharge.displayed)
+# kam in KEINEM einzigen Protokoll des Nutzers je an -- ueber Stunden nicht,
+# obwohl im Portal aktiviert. Dieser hier liefert stattdessen zuverlaessig
+# einen Prozentwert im Batterie-Namensraum. Der Name "header" ist
+# ungluecklich gewaehlt und nicht offiziell dokumentiert, deshalb bewusst
+# nur als RUECKFALL: der offizielle Wert hat immer Vorrang, sobald er kommt.
+DESCRIPTOR_SOC_ALT = "vehicle.drivetrain.batteryManagement.header"
+
 DESCRIPTOR_ANGESTECKT = "vehicle.powertrain.tractionBattery.charging.port.anyPosition.isPlugged"
 DESCRIPTOR_ANGESTECKT_ALT = "vehicle.body.chargingPort.status"
 
@@ -127,7 +135,7 @@ CONTAINER_DESCRIPTORS = [
     DESCRIPTOR_TRIP_KM, DESCRIPTOR_TRIP_ZEIT, DESCRIPTOR_TRIP_SOC,
     # Fahrzeugdaten
     DESCRIPTOR_VERBRAUCH, DESCRIPTOR_AKKU_MAX, DESCRIPTOR_AKKU_MAX_ALT, DESCRIPTOR_AKKU_SOH,
-    DESCRIPTOR_SOC, DESCRIPTOR_REICHWEITE, DESCRIPTOR_SERVICE, DESCRIPTOR_WOCHE,
+    DESCRIPTOR_SOC, DESCRIPTOR_SOC_ALT, DESCRIPTOR_REICHWEITE, DESCRIPTOR_SERVICE, DESCRIPTOR_WOCHE,
     DESCRIPTOR_ANGESTECKT, DESCRIPTOR_ANGESTECKT_ALT,
     # Ladevorgang im Detail
     DESCRIPTOR_LADESTATUS, DESCRIPTOR_RESTLADEDAUER, DESCRIPTOR_STECKERTYP,
@@ -477,28 +485,46 @@ def _fenster_offen(wert) -> bool | None:
 # demselben Namensmuster, aber NICHT am echten HPC-Ladevorgang
 # gegengeprueft — muss beim ersten echten Schnellladevorgang verifiziert
 # werden (siehe Protokoll-Auswertung dafuer nutzen).
-STECKERTYP_ANZEIGE = {
-    "AC_TYPE1PLUG": ("Typ 1 · AC", "mdi-ev-plug-type1", False),
-    "AC_TYPE2PLUG": ("Typ 2 · AC", "mdi-ev-plug-type2", False),
-    "DC_CCS1PLUG": ("CCS1 · HPC", "mdi-ev-plug-ccs1", True),
-    "DC_CCS2PLUG": ("CCS2 · HPC", "mdi-ev-plug-ccs2", True),
-    "DC_COMBO1": ("CCS1 · HPC", "mdi-ev-plug-ccs1", True),
-    "DC_COMBO2": ("CCS2 · HPC", "mdi-ev-plug-ccs2", True),
-}
-
-
 def _steckertyp_anzeige(wert) -> dict | None:
     """Wandelt den rohen Lademethoden-Code in eine anzeigefertige Form um.
-    None, wenn kein Wert vorliegt oder der Code unbekannt ist (dann zeigt
-    das Frontend einfach keinen Steckertyp-Chip, statt einen falschen zu
-    erfinden)."""
+
+    BUG BEHOBEN (28.08.): Zuvor eine feste Zuordnungstabelle mit geratenen
+    Bezeichnern ("AC_TYPE2PLUG"). Das echte Fahrzeug sendet laut Protokoll
+    aber "AC_TYP2COMBO" -- also TYP statt TYPE und COMBO statt PLUG. Der
+    Steckertyp-Chip konnte deshalb NIE erscheinen. BMW schreibt diese Codes
+    offenbar nicht einheitlich, deshalb jetzt eine Auswertung nach
+    Bestandteilen statt exaktem Abgleich: robust gegen weitere Schreibweisen
+    (TYPE2/TYP2, PLUG/COMBO, CCS/COMBO), ohne dass jede Variante einzeln
+    bekannt sein muss.
+
+    None, wenn kein Wert vorliegt oder er sich nicht deuten laesst -- dann
+    zeigt das Frontend lieber keinen Chip als einen falschen.
+    """
     if not wert:
         return None
-    eintrag = STECKERTYP_ANZEIGE.get(str(wert).strip().upper())
-    if not eintrag:
-        return None
-    text, icon, ist_dc = eintrag
-    return {"text": text, "icon": icon, "dc": ist_dc}
+    code = str(wert).strip().upper()
+
+    # Gleichstrom (Schnellladen) erkennen: entweder ausdruecklich per
+    # DC-Praefix oder am CCS-Steckerbild.
+    ist_dc = code.startswith("DC") or "CCS" in code
+
+    if "TYP1" in code or "TYPE1" in code:
+        return {"text": "Typ 1 · AC", "icon": "mdi-ev-plug-type1", "dc": False}
+    if "TYP2" in code or "TYPE2" in code:
+        # Typ-2-Buchse: bei Wechselstrom Typ 2, bei Gleichstrom CCS2
+        # (CCS2 nutzt dieselbe Buchse mit zwei zusaetzlichen Kontakten).
+        if ist_dc:
+            return {"text": "CCS2 · HPC", "icon": "mdi-ev-plug-ccs2", "dc": True}
+        return {"text": "Typ 2 · AC", "icon": "mdi-ev-plug-type2", "dc": False}
+    if "CCS1" in code or "COMBO1" in code:
+        return {"text": "CCS1 · HPC", "icon": "mdi-ev-plug-ccs1", "dc": True}
+    if "CCS2" in code or "COMBO2" in code:
+        return {"text": "CCS2 · HPC", "icon": "mdi-ev-plug-ccs2", "dc": True}
+    if code.startswith("AC"):
+        return {"text": "AC-Laden", "icon": "mdi-ev-plug-type2", "dc": False}
+    if ist_dc:
+        return {"text": "Schnellladen · DC", "icon": "mdi-ev-plug-ccs2", "dc": True}
+    return None
 
 
 # Ladestatus-Rohwert -> anzeigefertiger Text. NOCHARGING bewusst als "None"
@@ -579,7 +605,7 @@ def lese_telematik(vehicle_id: int, vin: str) -> dict:
         "verbrauch_kwh_100": _zahl(feld(DESCRIPTOR_VERBRAUCH)[0]),
         "akku_max_kwh": _kombiniere_akkukapazitaet(feld),
         "akku_soh_prozent": _zahl(feld(DESCRIPTOR_AKKU_SOH)[0]),
-        "soc_prozent": _zahl(feld(DESCRIPTOR_SOC)[0]),
+        "soc_prozent": _zahl(feld(DESCRIPTOR_SOC)[0]) if _zahl(feld(DESCRIPTOR_SOC)[0]) is not None else _zahl(feld(DESCRIPTOR_SOC_ALT)[0]),
         "reichweite_km": _zahl(feld(DESCRIPTOR_REICHWEITE)[0]),
         "service_in_km": _zahl(feld(DESCRIPTOR_SERVICE)[0]),
         "woche_km": _zahl(feld(DESCRIPTOR_WOCHE)[0]),

@@ -451,9 +451,15 @@
           </div>
         </div>
       </div>
-      <div class="toolbar" style="flex-wrap:wrap; gap:8px;">
-        <!-- Schnellfilter (identisch zu Fahrten) -->
-        <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:flex-end;">
+      <!-- Werkzeugleiste: Zeitraum-Knoepfe und Feldfilter stehen jetzt
+           UNTEREINANDER statt nebeneinander. Zuvor lagen sie in einer Reihe,
+           obwohl die Feldgruppe wegen ihrer Beschriftungen deutlich hoeher
+           ist -- dadurch wirkte die Leiste sichtbar schief, egal wie man
+           ausrichtet. Zwei ruhige Zeilen statt einer unruhigen. -->
+      <div class="toolbar" style="flex-direction:column; align-items:stretch; gap:10px;">
+        <!-- Zeile 1: Zeitraum-Schnellfilter + Aktionen rechts -->
+        <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+        <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
           <button class="btn btn-sm sess-qf on" onclick="setSessQuickFilter('all',this)">Alle</button>
           <button class="btn btn-sm sess-qf" onclick="setSessQuickFilter('thismonth',this)">Dieser Monat</button>
           <button class="btn btn-sm sess-qf" onclick="setSessQuickFilter('lastmonth',this)">Letzter Monat</button>
@@ -463,8 +469,15 @@
           <button class="btn btn-sm sess-qf" onclick="setSessQuickFilter('q4',this)">Q4</button>
           <button class="btn btn-sm sess-qf" onclick="setSessQuickFilter('thisyear',this)">Dieses Jahr</button>
         </div>
-        <!-- Von/Bis + Wallbox -->
-        <div style="display:flex; gap:6px; align-items:flex-end; flex-wrap:wrap;">
+        <!-- Aktionen bleiben in Zeile 1, rechtsbuendig -->
+        <div style="margin-left:auto; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+          <button class="btn btn-sm" onclick="downloadLadestromBeleg()">Beleg Zeitraum</button>
+          <button class="btn btn-sm" onclick="deleteAllSessions()" style="color:var(--danger); border-color:var(--danger);">Alle löschen</button>
+        </div>
+        </div>
+
+        <!-- Zeile 2: Von/Bis + Wallbox + Quelle -->
+        <div style="display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap;">
           <div><label class="field-label" style="font-size:10px;">Von</label>
             <input type="date" id="filter-von" onchange="setSessQuickFilter('custom');loadSessions()" style="padding:4px 6px; font-size:12px;"></div>
           <div><label class="field-label" style="font-size:10px;">Bis</label>
@@ -482,20 +495,6 @@
             <input type="checkbox" id="filter-show-zero" onchange="loadSessions()" style="width:auto; margin:0;"> 0-kWh anzeigen
           </label>
           <span id="zero-sessions-info" style="font-size:10px; color:var(--text-tertiary); padding-bottom:7px;"></span>
-        </div>
-        <!-- Aktionen rechts -->
-        <div style="margin-left:auto; display:flex; gap:8px; align-items:flex-end; flex-wrap:wrap;">
-          <button class="btn btn-sm" onclick="toggleLoxoneLogImport()">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="margin-right:5px;vertical-align:-2px;"><path d="M4 15h13M4 15a1.6 1.6 0 0 1-1.6-1.6v-2.6l1.8-3.4h9.6l2.6 3.4v2.6A1.6 1.6 0 0 1 14.8 15M6 15v1.6M15 15v1.6"/><circle cx="6.4" cy="11.6" r=".8"/><circle cx="13.2" cy="11.6" r=".8"/><path d="M18.5 8.5a4 4 0 0 1 0 5M21 6.5a7 7 0 0 1 0 9"/></svg>
-            Loxone-Log importieren
-          </button>
-          <button class="btn btn-sm" onclick="document.getElementById('csv-file-input').click()">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="margin-right:5px;vertical-align:-2px;"><path d="M4 15h13M4 15a1.6 1.6 0 0 1-1.6-1.6v-2.6l1.8-3.4h9.6l2.6 3.4v2.6A1.6 1.6 0 0 1 14.8 15M6 15v1.6M15 15v1.6"/><circle cx="6.4" cy="11.6" r=".8"/><circle cx="13.2" cy="11.6" r=".8"/><path d="M18.5 8.5a4 4 0 0 1 0 5M21 6.5a7 7 0 0 1 0 9"/></svg>
-            CSV importieren</button>
-          <a href="/static/beispiel-import.csv" download class="btn btn-sm">Beispieldatei</a>
-          <input type="file" id="csv-file-input" accept=".csv" style="display:none" onchange="importCsv(this)">
-          <button class="btn btn-sm" onclick="downloadLadestromBeleg()">Beleg Zeitraum</button>
-          <button class="btn btn-sm" onclick="deleteAllSessions()" style="color:var(--danger); border-color:var(--danger);">Alle löschen</button>
         </div>
       </div>
 
@@ -520,34 +519,7 @@
       </div>
 
       <!-- Loxone-Log-Import-Panel (aufklappbar) -->
-      <div id="loxone-log-import-panel" style="display:none; margin-bottom:14px;">
-        <div class="card" style="border-color:var(--teal);">
-          <div class="section-title">Loxone-Log importieren</div>
-          <div class="hint" style="margin-bottom:12px;">
-            Importiert Sessions aus der Loxone-Logger-Datei (<code>wallbox.log</code> vom Miniserver).
-            Der Import ist duplikatsicher — bereits vorhandene Sessions werden nicht doppelt angelegt.<br>
-            <b>Zwei Wege:</b> Datei hochladen, oder direkt vom Miniserver laden (wenn Zugangsdaten konfiguriert).
-          </div>
-          <div class="form-row-2" style="margin-bottom:10px;">
-            <div>
-              <label class="field-label">Wallbox zuordnen</label>
-              <select id="log-import-wallbox-select" style="width:100%;"></select>
-            </div>
-            <div style="display:flex; flex-direction:column; gap:6px; justify-content:flex-end;">
-              <button class="btn btn-primary" onclick="triggerLoxoneLogFileUpload()">
-                Datei hochladen (wallbox.log)
-              </button>
-              <button class="btn btn-sm" onclick="triggerLoxoneLogFromMiniserver()">
-                Direkt vom Miniserver laden
-              </button>
-            </div>
-          </div>
-          <input type="file" id="loxone-log-file-input" accept=".log,.txt" style="display:none" onchange="importLoxoneLogFile(this)">
-          <div id="loxone-log-import-result" style="font-size:13px; margin-top:8px;"></div>
-        </div>
       </div>
-      <div id="import-result" style="margin-bottom:14px; font-size:13px;"></div>
-
       <!-- Kennzahlen zum gewählten Zeitraum: zeigt auf einen Blick, was die
            gefilterte Liste darunter in Summe bedeutet. Passt sich jedem
            Filter an (Monat, Quartal, Jahr, Wallbox, Ladeort). -->
@@ -1135,14 +1107,23 @@
                  bleibt die Fahrzeugkachel leer, obwohl die Anmeldung
                  funktioniert. Das war zuvor nirgends in der Oberfläche
                  erklärt — der Anwender konnte es nicht wissen. -->
-            <details style="margin-top:12px; border-top:1px solid var(--border); padding-top:10px;">
-              <summary style="cursor:pointer; font-size:12.5px; font-weight:600; color:var(--amber);">
-                ⚠ Wichtig: Diese Datenpunkte musst du im BMW-Portal aktivieren
+            <!-- Aufgeklappt und farblich hervorgehoben: als zugeklappter,
+                 kleiner Aufklapper wurde dieser Hinweis schlicht uebersehen --
+                 mit der Folge, dass die Fahrzeugkachel leer blieb und die
+                 Ursache nicht auffindbar war. -->
+            <details open style="margin-top:14px; background:rgba(234,179,8,.10);
+                     border:1px solid rgba(234,179,8,.45); border-radius:var(--radius-sm);
+                     padding:14px 16px;">
+              <summary style="cursor:pointer; font-size:15px; font-weight:700; color:#eab308;
+                              list-style:none; margin-bottom:4px;">
+                ⚠ Pflichtschritt: Datenpunkte im BMW-Portal aktivieren
               </summary>
-              <div class="hint" style="margin-top:8px;">
-                Im BMW-Portal unter <b>BMW CarData → Configure data stream</b> anhaken.
-                Ohne sie bleibt die Fahrzeugkachel leer, obwohl die Anmeldung klappt.
-                BMW setzt sie <b>nicht</b> automatisch.
+              <div style="font-size:13px; line-height:1.7; color:var(--text-secondary); margin-top:8px;">
+                Ohne diesen Schritt bleibt die Fahrzeugkachel <b>leer</b>, obwohl die
+                Anmeldung erfolgreich ist. BMW aktiviert die Datenpunkte
+                <b>nicht</b> von selbst.<br>
+                Im BMW-Portal: <b>BMW CarData → Configure data stream</b> → folgende
+                Einträge anhaken.
               </div>
 
               <div id="bmw-felder-elektro">
@@ -1900,6 +1881,53 @@
     </div>
     <div class="content">
       <div id="wallboxes-tree"></div>
+
+      <!-- Datenimport: gehoert hierher, nicht in die Ladevorgaenge-Ansicht.
+           Ein Import wird immer einer Wallbox zugeordnet -- die Auswahl
+           steht hier ohnehin schon zur Verfuegung. -->
+      <div class="card" style="margin-top:16px;">
+        <div class="section-title">Ladevorgänge importieren</div>
+        <div class="hint" style="margin-bottom:12px;">
+          Ergänzt Ladevorgänge aus vorhandenen Dateien. Alle Importe sind
+          duplikatsicher — bereits erfasste Ladevorgänge werden nicht doppelt angelegt.
+        </div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+          <button class="btn btn-sm" onclick="toggleLoxoneLogImport()">
+            Loxone-Log (wallbox.log)
+          </button>
+          <button class="btn btn-sm" onclick="document.getElementById('csv-file-input').click()">
+            CSV importieren
+          </button>
+          <a href="/static/beispiel-import.csv" download class="btn btn-sm">CSV-Beispieldatei</a>
+          <input type="file" id="csv-file-input" accept=".csv" style="display:none" onchange="importCsv(this)">
+        </div>
+        <div id="import-result" style="margin-top:12px; font-size:13px;"></div>
+      <div id="loxone-log-import-panel" style="display:none; margin-bottom:14px;">
+        <div class="card" style="border-color:var(--teal);">
+          <div class="section-title">Loxone-Log importieren</div>
+          <div class="hint" style="margin-bottom:12px;">
+            Importiert Sessions aus der Loxone-Logger-Datei (<code>wallbox.log</code> vom Miniserver).
+            Der Import ist duplikatsicher — bereits vorhandene Sessions werden nicht doppelt angelegt.<br>
+            <b>Zwei Wege:</b> Datei hochladen, oder direkt vom Miniserver laden (wenn Zugangsdaten konfiguriert).
+          </div>
+          <div class="form-row-2" style="margin-bottom:10px;">
+            <div>
+              <label class="field-label">Wallbox zuordnen</label>
+              <select id="log-import-wallbox-select" style="width:100%;"></select>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:6px; justify-content:flex-end;">
+              <button class="btn btn-primary" onclick="triggerLoxoneLogFileUpload()">
+                Datei hochladen (wallbox.log)
+              </button>
+              <button class="btn btn-sm" onclick="triggerLoxoneLogFromMiniserver()">
+                Direkt vom Miniserver laden
+              </button>
+            </div>
+          </div>
+          <input type="file" id="loxone-log-file-input" accept=".log,.txt" style="display:none" onchange="importLoxoneLogFile(this)">
+          <div id="loxone-log-import-result" style="font-size:13px; margin-top:8px;"></div>
+        </div>
+      </div>
       <div id="ftp-browser-card" style="display:none; margin-top:16px;" class="card">
         <div class="section-title" style="display:flex; justify-content:space-between; align-items:center;">
           <span>FTP-Browser <span id="ftp-browser-path" class="mono" style="font-size:12px; color:var(--text-tertiary); font-weight:400;"></span></span>
@@ -2397,6 +2425,54 @@
           </div>
         </div>
 
+        <!-- Vollstaendige Feldzuordnung: Welcher BMW-Datenpunkt fuellt
+             welches Feld in dieser App. Steht bewusst AUCH hier, nicht nur
+             im Fahrzeug-Dialog -- wer in den Einstellungen nach der
+             BMW-Anbindung sucht, erwartet die Erklaerung an dieser Stelle. -->
+        <div class="card" style="margin-bottom:16px; border-left:3px solid #eab308;">
+          <div class="section-title">Feldzuordnung — welcher Datenpunkt füllt was</div>
+          <div class="hint" style="margin-bottom:12px; line-height:1.7;">
+            Im BMW-Portal unter <b>BMW CarData → Configure data stream</b> anhaken.
+            Was nicht aktiviert ist, bleibt in der App leer — BMW aktiviert nichts
+            von selbst. Ein geparktes Fahrzeug sendet zudem nur bei Änderungen;
+            was wirklich ankommt, zeigt <b>Protokoll → Quelle „MQTT (roh)"</b>.
+          </div>
+          <table style="font-size:12px;">
+            <thead><tr><th>Datenpunkt im BMW-Portal</th><th>Füllt in der App</th><th>Pflicht?</th></tr></thead>
+            <tbody>
+              <tr><td class="mono">vehicle.vehicle.travelledDistance</td><td>Kilometerstand, Fahrterkennung</td><td>Pflicht</td></tr>
+              <tr><td class="mono">…currentLocation.latitude</td><td>Standort (Hälfte 1)</td><td>Pflicht</td></tr>
+              <tr><td class="mono">…currentLocation.longitude</td><td>Standort (Hälfte 2) — <b>ohne beide kein Standort</b></td><td>Pflicht</td></tr>
+              <tr><td class="mono">vehicle.trip.segment.end.travelledDistance</td><td>Fahrtende erkennen</td><td>Pflicht</td></tr>
+              <tr><td class="mono">vehicle.trip.segment.end.time</td><td>Fahrtende erkennen</td><td>Pflicht</td></tr>
+              <tr><td class="mono">…battery.stateOfCharge.displayed</td><td>Ladestand %</td><td>Elektro</td></tr>
+              <tr><td class="mono">…batteryManagement.header</td><td>Ladestand % (Rückfall, falls oberer stumm bleibt)</td><td>Elektro</td></tr>
+              <tr><td class="mono">…battery.stateOfHealth.displayed</td><td>Akkuzustand (SoH)</td><td>Elektro</td></tr>
+              <tr><td class="mono">…batteryManagement.batterySizeMax</td><td>Akkukapazität</td><td>Elektro</td></tr>
+              <tr><td class="mono">…batteryManagement.maxEnergy</td><td>Akkukapazität (Rückfall) — <b>beide anhaken</b></td><td>Elektro</td></tr>
+              <tr><td class="mono">…kombiRemainingElectricRange</td><td>Reichweite</td><td>Elektro</td></tr>
+              <tr><td class="mono">…avgElectricRangeConsumption</td><td>Ø Verbrauch kWh/100km</td><td>Elektro</td></tr>
+              <tr><td class="mono">…electricEngine.charging.status</td><td>Chip „Lädt aktiv"</td><td>Elektro</td></tr>
+              <tr><td class="mono">…electricEngine.charging.timeToFullyCharged</td><td>Restladedauer</td><td>Elektro</td></tr>
+              <tr><td class="mono">…electricEngine.charging.method</td><td>Chip Steckertyp (Typ 2 / CCS)</td><td>Elektro</td></tr>
+              <tr><td class="mono">…port.anyPosition.isPlugged</td><td>Chip „Angesteckt"</td><td>Elektro</td></tr>
+              <tr><td class="mono">vehicle.body.chargingPort.status</td><td>Chip „Angesteckt" (Rückfall) — <b>beide anhaken</b></td><td>Elektro</td></tr>
+              <tr><td class="mono">vehicle.body.flap.isLocked</td><td>Chip Ladeklappe verriegelt</td><td>Elektro</td></tr>
+              <tr><td class="mono">vehicle.cabin.door.lock.status</td><td>Chip „Verriegelt / Entriegelt"</td><td>optional</td></tr>
+              <tr><td class="mono">…door.row1/row2.driver/passenger.isOpen</td><td>Chip Türen (4 Einträge)</td><td>optional</td></tr>
+              <tr><td class="mono">…window.row1/row2.driver/passenger.status</td><td>Chip Fenster (4 Einträge)</td><td>optional</td></tr>
+              <tr><td class="mono">vehicle.status.serviceDistance.next</td><td>km bis Service</td><td>optional</td></tr>
+              <tr><td class="mono">vehicle.status.conditionBasedServices</td><td>HU/TÜV- und Service-Termine</td><td>optional</td></tr>
+            </tbody>
+          </table>
+          <div class="hint" style="margin-top:12px; line-height:1.7;">
+            <b>Verbrenner:</b> Nur die fünf Pflicht-Einträge sind nötig; alle mit
+            „Elektro" gekennzeichneten entfallen ersatzlos.<br>
+            <b>Neu angehakt?</b> Der Datenpunkt greift erst beim nächsten Abruf —
+            die App legt den Container selbstständig neu an.
+          </div>
+        </div>
+
         <!-- Hinweise -->
         <div class="card" style="border-left:3px solid var(--warning, #eab308);">
           <div class="section-title" style="font-size:13px;">Wissenswertes</div>
@@ -2415,28 +2491,6 @@
 
         <!-- Sicherheit zuerst: Der Punkt, an dem ein Anwender sich am
              ehesten selbst schadet. -->
-        <div class="card" style="margin-bottom:16px;">
-          <div class="section-title">Anlässe für Fahrten</div>
-          <div class="hint" style="margin-bottom:14px;">
-            Diese Einträge erscheinen beim Erfassen einer Fahrt zur Auswahl.
-            Eigene Begriffe lassen sich ergänzen — ein Anlass pro Zeile.
-            Die Reihenfolge bleibt erhalten.
-          </div>
-          <textarea id="anlass-liste" rows="9"
-                    style="width:100%; font-family:var(--font-mono); font-size:13px;
-                           line-height:1.7; resize:vertical;"
-                    placeholder="Kundentermin&#10;Projektbesprechung&#10;…"></textarea>
-          <div style="display:flex; gap:9px; flex-wrap:wrap; align-items:center;
-               margin-top:12px;">
-            <button class="btn btn-sm btn-primary" onclick="anlaesseSpeichern()">
-              Speichern
-            </button>
-            <button class="btn btn-sm" onclick="anlaesseZuruecksetzen()">
-              Vorschläge wiederherstellen
-            </button>
-            <span class="feld-hinweis" id="anlass-meldung"></span>
-          </div>
-        </div>
 
         <div class="card" style="margin-bottom:16px; border-left:3px solid var(--danger);">
           <div class="section-title" style="color:var(--danger);">
@@ -2708,6 +2762,34 @@
       </div>
 
       <div id="stab-system" style="display:none;">
+
+        <!-- Kataloge: nachschlagbare Listen, die der Anwender selbst pflegt.
+             Die Anlaesse standen zuvor unter "Recht & Sicherheit" -- dort
+             suchte sie niemand. Kataloge gehoeren fachlich zu System. -->
+        <div class="section-title" style="margin-bottom:10px;">Kataloge</div>
+        <div class="card" style="margin-bottom:16px;">
+          <div class="section-title">Anlässe für Fahrten</div>
+          <div class="hint" style="margin-bottom:14px;">
+            Diese Einträge erscheinen beim Erfassen einer Fahrt zur Auswahl.
+            Eigene Begriffe lassen sich ergänzen — ein Anlass pro Zeile.
+            Die Reihenfolge bleibt erhalten.
+          </div>
+          <textarea id="anlass-liste" rows="9"
+                    style="width:100%; font-family:var(--font-mono); font-size:13px;
+                           line-height:1.7; resize:vertical;"
+                    placeholder="Kundentermin&#10;Projektbesprechung&#10;…"></textarea>
+          <div style="display:flex; gap:9px; flex-wrap:wrap; align-items:center;
+               margin-top:12px;">
+            <button class="btn btn-sm btn-primary" onclick="anlaesseSpeichern()">
+              Speichern
+            </button>
+            <button class="btn btn-sm" onclick="anlaesseZuruecksetzen()">
+              Vorschläge wiederherstellen
+            </button>
+            <span class="feld-hinweis" id="anlass-meldung"></span>
+          </div>
+        </div>
+
         <!-- Datensicherung: gehoert an den Anfang des Systembereichs, weil sie
              die Voraussetzung fuer alles Weitere darunter ist. -->
         <div class="card" style="margin-bottom:16px;">
