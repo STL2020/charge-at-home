@@ -60,7 +60,7 @@ def handle_404(exc):
     # Für nicht-API-Routen: normale 404-Seite oder zur App weiterleiten
     return jsonify({"error": "not_found"}), 404
 
-PFLICHTENHEFT_VERSION = "15.3"
+PFLICHTENHEFT_VERSION = "15.4"
 
 # Fassung, die dem Anwender gezeigt wird. Die Pflichtenheft-Nummer daneben ist
 # die interne Baunummer — beide zusammen machen Rückfragen eindeutig.
@@ -193,6 +193,8 @@ PROJECT_STATUS = [
     {"sprint": 9, "id": "S9-44", "modul": "Dashboard", "text": "Gruener Radial-Verlauf + Glow-Kreis der Fahrzeugstatus-Kachel (Teil des urspruenglich freigegebenen Entwurfs) war bei der Uebernahme in die echte App verloren gegangen -- die Kachel nutzte nur die neutrale Standard-.card-Optik. Per Nutzer-Vergleichsbild entdeckt, nicht selbst gefunden. CSS ergaenzt (.fzg-status-karte Hintergrund + ::before Glow-Kreis, Light-Mode-Variante mit hellerem Gruenton), mit echtem Playwright-Screenshot bestaetigt.", "status": "fertig", "view": "dashboard"},
     {"sprint": 9, "id": "S9-45", "modul": "Fahrten", "text": "Dienstlich/Privat war ausschliesslich als Pille direkt in der Tabellenzeile aenderbar -- im 'Fahrt bearbeiten'-Formular selbst fehlte das Feld komplett, eine echte Luecke. Neues Umschaltfeld 'Art der Fahrt' im Formular ergaenzt (nach 'Anlass', vor Fahrer/Fahrzeug), nutzt denselben bestehenden Sammel-Endpunkt (/api/trips/sammel-fahrtart) wie die Tabellen-Pille -- keine doppelte Speicherlogik. WICHTIGER EIGENER BUG waehrend des Baus gefunden und behoben: der neue Umschalter ist ebenfalls ein .toggle-pair und sitzt im DOM VOR dem bestehenden Erstattungssatz-Umschalter -- drei Stellen im Code griffen bisher per position-basiertem Selektor (erstes .toggle-pair im Formular) darauf zu und haetten dadurch pltzlich den FALSCHEN Umschalter erwischt. Erstattungssatz-Feld bekam eine eigene ID (trip-rate-toggle), alle drei Stellen umgestellt, mit Backend-Test bestaetigt.", "status": "fertig", "view": "fahrten"},
     {"sprint": 9, "id": "S9-46", "modul": "Dashboard", "text": "Ladeklappen-Chip zeigte 'Ladeklappe zu/offen' -- inhaltlich falsch, denn der zugrunde liegende BMW-Deskriptor (flap.isLocked) misst die VERRIEGELUNG, nicht die physische Klappen-Position. Ein Fahrzeug kann beim Laden die Klappe offen UND trotzdem verriegelt haben (Kabel gesichert gegen Diebstahl). Nutzer wies darauf hin, dass die Anzeige der Realitaet widersprach. Beschriftung korrigiert auf 'Ladeklappe verriegelt/entriegelt' -- entspricht jetzt tatsaechlich dem, was der Datenpunkt misst. Ausserdem: sichtbare Scrollleiste unter dem Fahrzeug-Karussell ausgeblendet (scrollbar-width/::-webkit-scrollbar), Wisch- und Reiter-Navigation bleiben unveraendert funktionsfaehig.", "status": "fertig", "view": "dashboard"},
+    {"sprint": 9, "id": "S9-47", "modul": "Fahrzeuge", "text": "Fahrzeugbezogene Kennzahlen im Dashboard-Karussell -- der eigentliche Zweck des Karussells, bisher fehlte die Datengrundlage. Problem: Ladevorgaenge waren KEINEM Fahrzeug zuordenbar (die Wallbox misst nur Strom und kennt kein Fahrzeug). Loesung auf Hinweis des Nutzers: Zuordnung ueber den RFID-Tag der Ladekarte, der beim Anstecken ohnehin uebermittelt und bereits in charging_sessions.rfid_tag gespeichert wird. Neu: Spalte vehicles.rfid_tag (nur bei Elektro sichtbar/befuellbar -- ein Verbrenner laedt nicht), Spalte charging_sessions.vehicle_id (Migration nach bestehendem Muster), automatische Zuordnung zentral in session_repository.insert_session (gilt damit fuer ALLE Quellen: Loxone, OCPP, CSV, manuell -- statt viermal gepflegt zu werden), Gross-/Kleinschreibung vereinheitlicht (Wallboxen schreiben Tags herstellerabhaengig unterschiedlich). Sessions ohne Tag bleiben BEWUSST unzugeordnet statt einem willkuerlichen Fahrzeug zugeschlagen zu werden -- eine falsche Zuordnung waere im Abrechnungsbeleg schlimmer als gar keine. Zusaetzlich ordne_sessions_nachtraeglich_zu(): der Tag wird typischerweise erst NACH den ersten Ladevorgaengen hinterlegt, ohne diesen Nachlauf blieben genau die Bestandsdaten unzugeordnet, die man sehen moechte -- laeuft automatisch beim Speichern eines Tags. Dashboard-Endpunkt und analytics_service.period_summary akzeptieren jetzt vehicle_id; das Karussell gibt das gewaehlte Fahrzeug mit und laedt die Kennzahlen bei jedem Wechsel neu. Bei nur EINEM Fahrzeug wird bewusst NICHT gefiltert, sonst wuerden Sessions ohne RFID-Zuordnung faelschlich ausgeblendet. End-zu-Ende getestet: automatische Zuordnung (inkl. Kleinschreibung), Nicht-Zuordnung ohne Tag, nachtraegliche Zuordnung, Filterung von kWh UND Kilometern je Fahrzeug.", "status": "fertig", "view": "dashboard"},
+    {"sprint": 9, "id": "S9-48", "modul": "Fahrten", "text": "Detail-Formular quetschte die Tabelle daneben zusammen, anders als bei Ladevorgaenge wo dasselbe Nebeneinander gut funktioniert. Ursache war eine eigene frueherer Aenderung: .trips-detail hatte STARRE 620px (gegen 400px bei .sessions-detail), gesetzt um die interne Routenkarte unterzubringen -- die Tabelle bekam dadurch kaum Platz. Jetzt flexibel (flex: 0 1 470px, min 380px, max 620px) plus umbruchfaehiges internes Raster (auto-fit/minmax statt starrer '1fr 300px'): bei Platzmangel rutscht die Karte unter die Felder, statt beides zu quetschen.", "status": "fertig", "view": "fahrten"},
 
 ]
 
@@ -1047,6 +1049,9 @@ def api_dashboard_summary():
     von_param = (request.args.get("von") or "").strip()
     bis_param = (request.args.get("bis") or "").strip()
     zeit_label = (request.args.get("label") or "").strip()
+    # Fahrzeug-Eingrenzung fuer das Dashboard-Karussell. Ohne Angabe gelten
+    # wie bisher alle Fahrzeuge zusammen.
+    fahrzeug_id = request.args.get("vehicle_id", type=int)
 
     month_label_de = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August",
                        "September", "Oktober", "November", "Dezember"][today.month - 1]
@@ -1059,9 +1064,12 @@ def api_dashboard_summary():
         month_end = today.strftime("%Y-%m-%d")
         zeit_label = f"{month_label_de} {today.year}"
 
-    ls_summary = analytics_service.period_summary(user["id"], month_start, month_end)
+    ls_summary = analytics_service.period_summary(user["id"], month_start, month_end,
+                                                   vehicle_id=fahrzeug_id)
 
     trips = trip_repository.list_trips(user["id"], month_start, month_end, nur_dienstlich=True)
+    if fahrzeug_id:
+        trips = [t for t in trips if t.get("vehicle_id") == fahrzeug_id]
     trip_km = sum(t.get("distance_km") or 0 for t in trips)
 
     # ALLE Fahrten fuer die Verbrauchsrechnung — dienstlich wie privat.
@@ -1069,6 +1077,8 @@ def api_dashboard_summary():
     # ergaebe einen zu hohen Verbrauch. Bei 1084 dienstlichen und 500
     # privaten Kilometern waeren das rund 45 % zu viel.
     alle_trips = trip_repository.list_trips(user["id"], month_start, month_end)
+    if fahrzeug_id:
+        alle_trips = [t for t in alle_trips if t.get("vehicle_id") == fahrzeug_id]
     km_gesamt = sum(t.get("distance_km") or 0 for t in alle_trips)
 
     # ── Strom-Vergleich ───────────────────────────────────────────────────────
@@ -2109,6 +2119,22 @@ def api_vehicles_add():
             data.get("antrieb", "elektro"), bool(data.get("ist_standard")))
         if zusatz:
             vehicle_repository.setze_stammdaten(int(data["id"]), zusatz)
+        # RFID-Tag separat: auch ein leerer Wert muss ankommen (Ladekarte
+        # entfernt / auf Verbrenner umgestellt), die zusatz-Schleife oben
+        # ueberspringt leere Werte bewusst.
+        if "rfid_tag" in data:
+            vehicle_repository.setze_rfid_tag(int(data["id"]), data.get("rfid_tag"))
+            # Bestandsdaten sofort nachziehen: der Tag wird typischerweise
+            # erst NACH den ersten Ladevorgaengen hinterlegt -- ohne diesen
+            # Nachlauf blieben genau die Sessions unzugeordnet, die man
+            # sehen moechte.
+            try:
+                anzahl = session_repository.ordne_sessions_nachtraeglich_zu()
+                if anzahl:
+                    event_log_service.log_event("system", "info",
+                        f"RFID-Zuordnung: {anzahl} bestehende Ladevorgänge einem Fahrzeug zugeordnet")
+            except Exception:
+                pass
         return jsonify({"ok": True, "id": data["id"]})
 
     vid = vehicle_repository.insert_vehicle(
@@ -2116,6 +2142,12 @@ def api_vehicles_add():
         data.get("antrieb", "elektro"), bool(data.get("ist_standard")))
     if zusatz:
         vehicle_repository.setze_stammdaten(vid, zusatz)
+    if "rfid_tag" in data:
+        vehicle_repository.setze_rfid_tag(vid, data.get("rfid_tag"))
+        try:
+            session_repository.ordne_sessions_nachtraeglich_zu()
+        except Exception:
+            pass
     return jsonify({"ok": True, "id": vid})
 
 

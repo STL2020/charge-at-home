@@ -424,6 +424,27 @@ def _migrate_charging_location_column(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
+def _needs_session_vehicle_migration(conn: sqlite3.Connection) -> bool:
+    """Prueft, ob charging_sessions noch die Spalte 'vehicle_id' fehlt.
+
+    Ohne sie laesst sich ein Ladevorgang keinem Fahrzeug zuordnen -- die
+    Wallbox misst nur Strom und kennt kein Fahrzeug. Zugeordnet wird ueber
+    den RFID-Tag der Ladekarte (siehe vehicle_repository.rfid_zuordnung),
+    damit das Dashboard bei mehreren Fahrzeugen die richtigen Kennzahlen
+    zeigen kann."""
+    cols = [row[1] for row in conn.execute("PRAGMA table_info(charging_sessions)").fetchall()]
+    return "vehicle_id" not in cols
+
+
+def _migrate_session_vehicle_column(conn: sqlite3.Connection) -> None:
+    """Fuegt die Fahrzeug-Zuordnung hinzu. Bewusst ohne NOT NULL und ohne
+    Vorbelegung: Bestandsdaten bleiben unzugeordnet (NULL) statt einem
+    womoeglich falschen Fahrzeug zugeschlagen zu werden -- eine falsche
+    Zuordnung waere in einem Abrechnungsbeleg schlimmer als gar keine."""
+    conn.execute("ALTER TABLE charging_sessions ADD COLUMN vehicle_id INTEGER")
+    conn.commit()
+
+
 def _needs_manually_paused_migration(conn: sqlite3.Connection) -> bool:
     """Prueft, ob loxone_auth_backoff noch die Spalte 'manually_paused' fehlt
     (manueller Not-Aus-Schalter, siehe Modul-Docstring schema.sql § 5.16)."""
@@ -536,6 +557,8 @@ def init_db() -> None:
         _migrate_bmw_trips_nach_trips(conn)
         if _needs_charging_location_migration(conn):
             _migrate_charging_location_column(conn)
+        if _needs_session_vehicle_migration(conn):
+            _migrate_session_vehicle_column(conn)
         if _needs_manually_paused_migration(conn):
             _migrate_manually_paused_column(conn)
         if _needs_documents_doctype_migration(conn):

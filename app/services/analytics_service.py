@@ -57,11 +57,20 @@ def monthly_kwh_cost(user_id: int, months: int = 6, wallbox_id: int | None = Non
 
 
 def period_summary(user_id: int, period_start: str | None, period_end: str | None,
-                    wallbox_id: int | None = None, classification: str | None = None) -> dict:
-    """FA-DASH-04: Kennzahlentabelle."""
+                    wallbox_id: int | None = None, classification: str | None = None,
+                    vehicle_id: int | None = None) -> dict:
+    """FA-DASH-04: Kennzahlentabelle.
+
+    vehicle_id grenzt auf ein einzelnes Fahrzeug ein (Dashboard-Karussell).
+    Ladevorgaenge werden dabei ueber ihre RFID-Zuordnung gefiltert;
+    Sessions ohne Zuordnung (kein Tag hinterlegt) bleiben bewusst
+    aussen vor, statt einem willkuerlichen Fahrzeug zugeschlagen zu werden.
+    """
     sessions = _filter_sessions(
         session_repository.list_sessions(user_id, period_start, period_end, wallbox_id), classification,
     )
+    if vehicle_id is not None:
+        sessions = [s for s in sessions if s.get("vehicle_id") == vehicle_id]
     total_kwh = total_cost = 0.0
     session_count = 0
     for s in sessions:
@@ -75,6 +84,8 @@ def period_summary(user_id: int, period_start: str | None, period_end: str | Non
     # Nur Dienstfahrten: Private Fahrten gehoeren ins Fahrtenbuch, nicht in
     # die Kosten- und Erstattungsauswertung.
     trips = trip_repository.list_trips(user_id, period_start, period_end, nur_dienstlich=True)
+    if vehicle_id is not None:
+        trips = [t for t in trips if t.get("vehicle_id") == vehicle_id]
 
     return {
         "avg_price_per_kwh": avg_price,

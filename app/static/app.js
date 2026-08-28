@@ -110,21 +110,7 @@ function showView(name) {
     loadDashboardSummary();
     dashLeerPruefen();
   proKennzeichnungSetzen();
-    loadDashboardWallboxes().then(async () => {
-      const sel = document.getElementById('chart-wallbox-filter');
-      if (sel && sel.options.length <= 1) {
-        try {
-          const r = await hole('/api/wallboxes/full');
-          const d = await r.json();
-          d.wallboxes.forEach(wb => {
-            const opt = document.createElement('option');
-            opt.value = wb.name;
-            opt.textContent = wb.name;
-            sel.appendChild(opt);
-          });
-        } catch (e) {}
-      }
-    });
+    ladeWallboxFilterOptionen();
     loadRecentSessionsChart(true);  // animiert
   } else if (name === 'protokoll') {
     loadProtokoll();
@@ -3491,7 +3477,6 @@ if (!APP_STATE.user) {
   showView('setup');
 } else {
   loadDashboardSummary();
-  loadDashboardWallboxes();
   loadRecentSessionsChart(true);  // beim ersten Laden animieren
 }
 checkOcppStatus();
@@ -3505,7 +3490,6 @@ if (!window._dashboardRefreshInterval) {
     const dashboardView = document.getElementById('view-dashboard');
     if (dashboardView && dashboardView.classList.contains('active')) {
       loadDashboardSummary();
-      loadDashboardWallboxes();
       loadRecentSessionsChart();
     }
   }, 10000);
@@ -3781,7 +3765,12 @@ async function loadDashboardSummary() {
     // Zeitraum mitgeben — die Kacheln zeigen dann den gewählten Bereich
     // statt immer den laufenden Monat.
     const _z = _zeitraum();
-    const _q = _z ? `?von=${_z.von}&bis=${_z.bis}&label=${encodeURIComponent(_z.label)}` : '';
+    const _params = new URLSearchParams();
+    if (_z) { _params.set('von', _z.von); _params.set('bis', _z.bis); _params.set('label', _z.label); }
+    // Fahrzeug aus dem Karussell mitgeben, sofern eines gewaehlt ist --
+    // sonst gelten wie bisher alle Fahrzeuge zusammen.
+    if (window._fzgAktivId) _params.set('vehicle_id', window._fzgAktivId);
+    const _q = _params.toString() ? '?' + _params.toString() : '';
     const resp = await hole('/api/dashboard/summary' + _q);
     const d = await resp.json();
 
@@ -3910,160 +3899,26 @@ async function loadDashboardSummary() {
   }
 }
 
-async function loadDashboardWallboxes() {
-  // ─── Wallbox-Karten (neues Grid, Referenz-Screenshot) ───────────────────
-  const cardsContainer = document.getElementById('dashboard-wallbox-cards');
-  // ─── Wallbox-Liste (alte Kleinansicht bleibt als Fallback) ───────────────
-  const list = document.getElementById('dashboard-wallbox-list');
-
+// Fuellt nur noch das Wallbox-Filter-Dropdown am Energieverlauf --
+// die Wallbox-Kartenübersicht am Ende des Dashboards ist entfallen
+// (stand doppelt zur Statuspille oben, siehe Diskussion), diese
+// eigenstaendige Funktion ersetzt den Teil von loadDashboardWallboxes(),
+// der weiterhin gebraucht wird.
+async function ladeWallboxFilterOptionen() {
+  const sel = document.getElementById('chart-wallbox-filter');
+  if (!sel || sel.options.length > 1) return;
   try {
-    const resp = await hole('/api/wallboxes/full');
-    const data = await resp.json();
-
-    // ── Karten-Grid ─────────────────────────────────────────────────────────
-    if (cardsContainer) {
-      if (data.wallboxes.length === 0) {
-        cardsContainer.innerHTML = '<div class="hint">Noch keine Wallboxen angelegt — siehe Einstellungen.</div>';
-      } else {
-        cardsContainer.innerHTML = '';
-        data.wallboxes.forEach(wb => {
-          const statusRaw  = wb.live_status || '';
-          const openSess   = wb.open_session;
-          // "Lädt" = explizit 'charging' im live_status ODER offene Session vorhanden
-          const isCharging = statusRaw === 'charging' || (openSess !== null && openSess !== undefined);
-          const isOnline   = statusRaw === 'ready' || statusRaw === 'online';
-          const isPaused   = statusRaw.includes('pausiert');
-
-          const statusDot  = isCharging ? 'activity-dot-green'
-            : isOnline ? 'activity-dot-teal'
-            : 'activity-dot-amber';
-
-          const statusText = isCharging ? 'Lädt gerade'
-            : (wb.source_type === 'ocpp' && isOnline)     ? 'OCPP verbunden · Bereit'
-            : (wb.source_type === 'loxone_api' && isOnline) ? 'Loxone API verbunden · Bereit'
-            : isPaused ? 'Polling pausiert'
-            : 'Kein aktiver Ladevorgang';
-
-          const locationMeta = [wb.location, `${wb.session_count ?? 0} Sessions`].filter(Boolean).join(' · ');
-
-          const typeSvg = wb.source_type === 'loxone_api'
-            // Wallbox mit Ladekabel: Gehaeuse an der Wand, Blitz darin,
-            // Kabel nach unten. Zuvor stand hier eine Aktentasche
-            // beziehungsweise ein Haus — beides sagte nichts aus.
-            ? `<svg class="wb-card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="12" height="15" rx="2"/><path d="M13 6l-2.5 4H13l-2 4"/><path d="M12 17v3a2 2 0 0 0 2 2h3a2 2 0 0 0 2-2v-6"/></svg>`
-            : `<svg class="wb-card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="12" height="15" rx="2"/><path d="M13 6l-2.5 4H13l-2 4"/><path d="M12 17v3a2 2 0 0 0 2 2h3a2 2 0 0 0 2-2v-6"/></svg>`;
-
-          // Live-Block: für BEIDE Typen einheitlich — 2 Zeilen mit Platzhalter wenn keine Daten
-          let liveRow1Label = 'Lädt seit'; let liveRow1Val = '–';
-          let liveRow2Label = 'Geladen';   let liveRow2Val = '–';
-
-          if (isCharging && openSess) {
-            const elapsed = openSess.elapsed_min;
-            liveRow1Val = elapsed < 60
-              ? `vor ${elapsed} min`
-              : `vor ${Math.floor(elapsed/60)} h ${elapsed%60} min`;
-            liveRow2Val = `${openSess.kwh_so_far.toFixed(2)} kWh`;
-          }
-
-          // Für Loxone API: zusätzlich Leistung (kW) nachladen
-          const liveIdSuffix = `wb-card-live-${wb.id}`;
-
-          const card = document.createElement('div');
-          card.className = `wb-card${isCharging ? ' wb-card-active' : ''}`;
-          card.style.display = 'flex';
-          card.style.flexDirection = 'column';
-          card.innerHTML = `
-            <div class="wb-card-header">
-              <span class="wb-card-name">${wb.name}</span>
-              ${typeSvg}
-            </div>
-            <div class="wb-card-status${isCharging ? ' wb-card-status-charging' : ''}">
-              <span class="pill-dot ${statusDot}" style="flex-shrink:0;"></span>
-              ${statusText}
-            </div>
-            <div class="wb-card-live" id="${liveIdSuffix}" style="flex:1;">
-              <div class="wb-card-live-row">
-                <span>${liveRow1Label}</span>
-                <span class="wb-card-live-val" id="${liveIdSuffix}-r1">${liveRow1Val}</span>
-              </div>
-              <div class="wb-card-live-row">
-                <span>${liveRow2Label}</span>
-                <span class="wb-card-live-val" id="${liveIdSuffix}-r2">${liveRow2Val}</span>
-              </div>
-              ${_renderLiveMetrics(wb)}
-            </div>
-            <div class="wb-card-meta">${locationMeta}</div>
-            <button class="wb-card-open" onclick="showView('wallbox')">Öffnen</button>
-          `;
-          cardsContainer.appendChild(card);
-
-          // Live-Daten nachladen: Loxone API (kW + Ccc) und OCPP falls keine open_session
-          if (isCharging && wb.source_type === 'loxone_api') {
-            _updateWallboxCardLive(wb.id, liveIdSuffix);
-          }
-        });
-      }
-    }
-
-    // ── Alte Kleinliste (Sidebar-Bereich) ────────────────────────────────────
-    if (list) {
-      if (data.wallboxes.length === 0) {
-        list.innerHTML = '<div class="hint">Noch keine Wallboxen angelegt — siehe Einstellungen.</div>';
-        return;
-      }
-      list.innerHTML = '';
-      data.wallboxes.forEach(wb => {
-        const statusLabel = wb.live_status || 'unbekannt';
-        const pillClass = statusLabel === 'charging' ? 'pill-amber'
-          : (statusLabel === 'online' || statusLabel === 'ready' ? 'pill-teal' : 'pill-neutral');
-        const meta = wb.source_type === 'ocpp'
-          ? `OCPP · ${wb.ocpp_charge_point_id || ''}`
-          : `Loxone-API · ${wb.loxone_host || ''}`;
-        const row = document.createElement('div');
-        row.className = 'wb-row';
-        row.innerHTML = `
-          <div class="wb-row-left">
-            <div class="wb-ic">⎋</div>
-            <div><div class="wb-name">${wb.name}</div><div class="wb-meta">${meta}</div></div>
-          </div>
-          <span class="pill ${pillClass}"><span class="pill-dot"></span>${statusLabel}</span>
-        `;
-        list.appendChild(row);
-      });
-    }
-  } catch (e) {
-    if (cardsContainer) cardsContainer.innerHTML = '<div class="hint">Fehler beim Laden.</div>';
-    if (list) list.innerHTML = '<div class="hint">Fehler beim Laden.</div>';
-  }
+    const r = await hole('/api/wallboxes/full');
+    const d = await r.json();
+    d.wallboxes.forEach(wb => {
+      const opt = document.createElement('option');
+      opt.value = wb.name;
+      opt.textContent = wb.name;
+      sel.appendChild(opt);
+    });
+  } catch (e) {}
 }
 
-async function _updateWallboxCardLive(wallboxId, liveIdSuffix) {
-  const r1 = document.getElementById(`${liveIdSuffix}-r1`);
-  const r2 = document.getElementById(`${liveIdSuffix}-r2`);
-  if (!r1 && !r2) return;
-  try {
-    const resp = await fetch(`/api/wallboxes/${wallboxId}/live-metrics`);
-    const d = await resp.json();
-    if (!d.has_data) return;
-
-    // Die aktuelle Leistung steht bereits in der einheitlichen Zeile
-    // "Leistung" (siehe _renderLiveMetrics) — hier nicht noch einmal
-    // ausgeben, sonst erscheint derselbe Wert doppelt.
-
-    // Energie dieser Ladesession: Loxone Ccc (Consumption current charge in kWh)
-    // gehoert in die Zeile "Geladen" (r2), nicht in "Laedt seit" (r1).
-    if (d.raw_fields) {
-      const ccc = parseFloat(d.raw_fields.Ccc || 0);
-      if (r2 && ccc > 0) r2.textContent = `${ccc.toFixed(2)} kWh`;
-      // Ladezeit schätzen aus Sync-Zeitpunkt (approximativ)
-      if (r1 && ccc <= 0 && d.last_sync_at) {
-        const syncMs = new Date(d.last_sync_at.replace(' ', 'T')).getTime();
-        const diffMin = Math.round((Date.now() - syncMs) / 60000);
-        r1.textContent = diffMin < 2 ? 'gerade verbunden' : `sync vor ${diffMin} min`;
-      }
-    }
-  } catch (e) { /* optional */ }
-}
 
 async function loadRecentSessionsChart(animate = false) {
   const svg     = document.getElementById('recent-sessions-chart-svg');
@@ -5117,6 +4972,10 @@ function setVehicleAntrieb(btn, antrieb) {
       ? 'Verbrenner haben keinen Einfluss auf die Wallbox/Stromerstattung. Fahrtkosten werden aber berücksichtigt, wenn dieses Fahrzeug für eine Fahrt gewählt wird.'
       : 'Elektro-Fahrzeug: Stromerstattung über die Wallbox + Fahrtkosten.';
   }
+  // RFID-Tag nur bei Elektro -- ein Verbrenner laedt nicht und braucht
+  // daher keine Ladekarte.
+  const rfidBlock = document.getElementById('vehicle-rfid-block');
+  if (rfidBlock) rfidBlock.style.display = antrieb === 'elektro' ? 'block' : 'none';
 }
 
 // Fahrzeug aus der laufenden CarData-Verbindung anlegen. Nutzt die
@@ -5168,6 +5027,8 @@ async function openVehicleModal() {
   _vehicleAntrieb = 'elektro';
   const toggle = document.getElementById('vehicle-antrieb-toggle');
   toggle.querySelectorAll('button').forEach((b,i) => b.classList.toggle('on', i===0));
+  document.getElementById('vehicle-rfid').value = '';
+  document.getElementById('vehicle-rfid-block').style.display = 'block';
 
   // BMW-Block zuruecksetzen — jedes neue Fahrzeug startet ohne Verbindung.
   const anlageToggle = document.getElementById('vehicle-anlage-toggle');
@@ -5232,6 +5093,9 @@ async function editVehicle(id) {
   _vehicleAntrieb = v.antrieb;
   const toggle = document.getElementById('vehicle-antrieb-toggle');
   toggle.querySelectorAll('button').forEach((b,i) => b.classList.toggle('on', (i===0)===(v.antrieb==='elektro')));
+  document.getElementById('vehicle-rfid').value = v.rfid_tag || '';
+  document.getElementById('vehicle-rfid-block').style.display =
+    v.antrieb === 'elektro' ? 'block' : 'none';
 
   // Bestehende BMW-Verbindung dieses Fahrzeugs anzeigen, falls vorhanden.
   try {
@@ -5271,6 +5135,17 @@ async function saveVehicle() {
     fahrtenbuch_ab: holen('vehicle-fb-start'),
   };
   Object.entries(zusatz).forEach(([k, v]) => { if (v) body[k] = v; });
+
+  // RFID-Tag separat: die Schleife oben ueberspringt bewusst leere Werte,
+  // damit ein Teilupdate nichts loescht. Beim Tag ist das Leeren aber eine
+  // gewollte Aktion (Ladekarte entfernt) -- daher immer mitschicken, aber
+  // nur bei Elektro (bei Verbrenner ist das Feld ausgeblendet und soll
+  // keinen alten Wert stehen lassen).
+  if (_vehicleAntrieb === 'elektro') {
+    body.rfid_tag = holen('vehicle-rfid').toUpperCase();
+  } else {
+    body.rfid_tag = '';
+  }
 
   if (_editingVehicleId) body.id = _editingVehicleId;
   const antwort = await (await fetch('/api/vehicles', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) })).json();
@@ -6680,39 +6555,6 @@ function closeSteuerInfo() {
 // oder über die Loxone-API hereinkommen. Fehlt ein Wert bei einer Quelle,
 // steht dort "–" statt die Zeile wegzulassen: So sind die Karten vergleichbar
 // und man sieht sofort, welche Angabe die jeweilige Wallbox nicht liefert.
-function _renderLiveMetrics(wb) {
-  const m = wb.live_metrics || {};
-  const strich = '<span style="color:var(--text-tertiary);">–</span>';
-
-  // Leistung (+ Phasenströme, sofern die Quelle sie meldet)
-  let leistung = strich;
-  if (m.power_kw != null && m.power_kw > 0) {
-    const phasen = [m.current_l1_a, m.current_l2_a, m.current_l3_a].filter(a => a != null && a > 0);
-    const ampText = phasen.length ? ` (${phasen.map(a => fmtDe(a, 0)).join('/')} A)` : '';
-    leistung = `${fmtDe(m.power_kw, 2)} kW${ampText}`;
-  } else if (m.power_kw === 0) {
-    leistung = '0,00 kW';
-  }
-
-  const heute = (m.tagesenergie_kwh != null)
-    ? `${fmtDe(m.tagesenergie_kwh, 2)} kWh` : strich;
-  const peak = (m.peak_power_kw != null && m.peak_power_kw > 0)
-    ? `${fmtDe(m.peak_power_kw, 2)} kW` : strich;
-  const zaehler = (m.meter_total_wh != null && m.meter_total_wh > 0)
-    ? `${fmtDe(m.meter_total_wh / 1000, 2)} kWh`
-      + (m.meter_total_hergeleitet ? '<span style="color:var(--text-tertiary);" title="aus der letzten Session abgeleitet"> *</span>' : '')
-    : strich;
-
-  return [
-    ['Leistung', leistung],
-    ['Heute geladen', heute],
-    ['Peak', peak],
-    ['Zählerstand', zaehler],
-  ].map(([label, wert]) =>
-    `<div class="wb-card-live-row"><span>${label}</span>` +
-    `<span class="wb-card-live-val">${wert}</span></div>`).join('');
-}
-
 // ─── Unverarbeitete Fahrten: 1-Klick-Zuweisung ─────────────────────────────
 // ─── Hinweis auf noch nicht zugeordnete Fahrten (Dashboard) ────────────────
 // Die Bearbeitung erfolgt in der normalen Fahrtenliste; hier steht nur der
@@ -7023,6 +6865,10 @@ async function ladeFahrzeugStatusKachel(erzwingen = false) {
 
     if (kacheln.length === 1) {
       // Ein Fahrzeug: kein Karussell noetig, direkt die Kachel zeigen.
+      // Kein Fahrzeug-Filter -- die Kennzahlen gelten dann ohnehin fuer
+      // dieses eine Fahrzeug, und ein Filter wuerde Sessions ohne
+      // RFID-Zuordnung faelschlich ausblenden.
+      window._fzgAktivId = null;
       grid.innerHTML = kacheln[0];
     } else {
       // Mehrere Fahrzeuge: Reiterkarten oben, darunter ein horizontal
@@ -7030,7 +6876,7 @@ async function ladeFahrzeugStatusKachel(erzwingen = false) {
       // auf Touch-Geraeten, keine eigene Gesten-Logik noetig.
       window._fzgKarussellIndex = Math.min(window._fzgKarussellIndex || 0, kacheln.length - 1);
       const reiter = meta.map((m, i) => `
-        <button onclick="_fahrzeugKarussellGehe(${i})" data-fzg-reiter="${i}"
+        <button onclick="_fahrzeugKarussellGehe(${i})" data-fzg-reiter="${i}" data-fzg-id="${m.id}"
                 style="all:unset; cursor:pointer; display:flex; align-items:center; gap:7px; padding:7px 13px;
                        border-radius:20px; font-size:12px; font-weight:600; white-space:nowrap;
                        background:${i === window._fzgKarussellIndex ? 'var(--bg-input)' : 'transparent'};
@@ -7072,7 +6918,15 @@ function _fahrzeugKarussellGehe(index, animiert = true) {
     btn.style.background = aktiv ? 'var(--bg-input)' : 'transparent';
     btn.style.color = aktiv ? 'var(--text-primary)' : 'var(--text-tertiary)';
     btn.style.borderColor = aktiv ? 'var(--border-strong)' : 'transparent';
+    // Fahrzeug-ID des aktiven Reiters merken -- das Dashboard filtert
+    // seine Kennzahlen danach (Ladevorgaenge ueber die RFID-Zuordnung,
+    // Fahrten ueber vehicle_id).
+    if (aktiv) window._fzgAktivId = parseInt(btn.dataset.fzgId, 10) || null;
   });
+  // Kennzahlen zum gewaehlten Fahrzeug nachladen. Nur bei echtem Wechsel,
+  // nicht beim Wiederherstellen der Position nach einem Refresh -- sonst
+  // entstuende eine Endlosschleife (Refresh -> Gehe -> Refresh).
+  if (animiert && typeof loadDashboardSummary === 'function') loadDashboardSummary();
 }
 
 // Beim manuellen Wischen (nicht per Reiter-Klick) den aktiven Reiter

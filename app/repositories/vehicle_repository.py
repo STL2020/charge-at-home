@@ -60,7 +60,14 @@ def _ensure_tables(conn) -> None:
                         # data/fahrzeugfotos/. Rein privates Bild pro Nutzer
                         # -- kein Markenbild wird mit der Software
                         # ausgeliefert (siehe Diskussion zum Markenrecht).
-                        ("foto_dateiname", "TEXT")]:
+                        ("foto_dateiname", "TEXT"),
+                        # RFID-Tag der Ladekarte dieses Fahrzeugs. Ueber ihn
+                        # laesst sich ein Ladevorgang einem Fahrzeug
+                        # zuordnen -- die Wallbox misst nur Strom und kennt
+                        # kein Fahrzeug, aber der beim Anstecken
+                        # uebermittelte Tag identifiziert es eindeutig.
+                        # Nur bei Elektrofahrzeugen sinnvoll.
+                        ("rfid_tag", "TEXT")]:
         if spalte not in cols_v:
             try:
                 conn.execute(f"ALTER TABLE vehicles ADD COLUMN {spalte} {typ}")
@@ -130,7 +137,7 @@ def setze_stammdaten(vehicle_id: int, werte: dict) -> None:
     """
     erlaubt = {"vin", "km_stand", "km_stand_datum", "hu_faellig", "nutzungsart", "fahrtenbuch_ab",
                "service_faellig", "bremsfluessigkeit",
-               "reifen_vorne", "reifen_hinten", "foto_dateiname"}
+               "reifen_vorne", "reifen_hinten", "foto_dateiname", "rfid_tag"}
     felder = {k: v for k, v in werte.items() if k in erlaubt and v not in (None, "")}
     if not felder:
         return
@@ -141,6 +148,47 @@ def setze_stammdaten(vehicle_id: int, werte: dict) -> None:
         conn.execute(f"UPDATE vehicles SET {setz} WHERE id = ?",
                      list(felder.values()) + [vehicle_id])
         conn.commit()
+    finally:
+        conn.close()
+
+
+def setze_rfid_tag(vehicle_id: int, tag: str | None) -> None:
+    """Setzt oder loescht den RFID-Tag eines Fahrzeugs.
+
+    Eigene Funktion statt setze_stammdaten(): dort werden leere Werte
+    bewusst uebersprungen, damit ein Teilupdate nichts loescht. Beim Tag
+    ist das Leeren aber eine gewollte Aktion (Ladekarte entfernt oder
+    Fahrzeug auf Verbrenner umgestellt)."""
+    wert = (tag or "").strip().upper() or None
+    conn = get_connection()
+    try:
+        _ensure_tables(conn)
+        conn.execute("UPDATE vehicles SET rfid_tag = ? WHERE id = ?", (wert, vehicle_id))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def rfid_zuordnung() -> dict:
+    """Liefert {rfid_tag: vehicle_id} fuer alle Elektrofahrzeuge mit
+    hinterlegtem Tag.
+
+    Damit lassen sich Ladevorgaenge einem Fahrzeug zuordnen: Die Wallbox
+    misst nur Strom und kennt kein Fahrzeug, aber der beim Anstecken
+    uebermittelte RFID-Tag identifiziert es eindeutig. Nur Elektro --
+    ein Verbrenner laedt nicht und braucht daher keine Ladekarte.
+
+    Gross-/Kleinschreibung wird vereinheitlicht, weil Wallboxen denselben
+    Tag je nach Hersteller unterschiedlich schreiben.
+    """
+    conn = get_connection()
+    try:
+        _ensure_tables(conn)
+        zeilen = conn.execute(
+            """SELECT id, rfid_tag FROM vehicles
+               WHERE aktiv = 1 AND antrieb = 'elektro'
+                 AND rfid_tag IS NOT NULL AND TRIM(rfid_tag) != ''""").fetchall()
+        return {r["rfid_tag"].strip().upper(): r["id"] for r in zeilen}
     finally:
         conn.close()
 

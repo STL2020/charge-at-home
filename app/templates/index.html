@@ -795,8 +795,12 @@
       <div class="card trips-detail" id="new-trip-form" style="display:none;">
         <div class="section-title" id="trip-form-title">Neue Fahrt</div>
 
-        <!-- 2-Spalten-Layout: Felder links, Karte rechts -->
-        <div style="display:grid; grid-template-columns:1fr 280px; gap:16px; align-items:start;">
+        <!-- 2-Spalten-Layout: Felder links, Karte rechts.
+             "auto-fit + minmax" statt starrer "1fr 300px": bei genug Platz
+             stehen Felder und Karte nebeneinander, wird das Panel schmaler
+             (weil die Tabelle daneben Platz braucht), rutscht die Karte
+             automatisch unter die Felder statt beides zu quetschen. -->
+        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); gap:16px; align-items:start;">
           <!-- LINKE SEITE: Felder -->
           <div>
             <div class="form-row-2">
@@ -1167,6 +1171,21 @@
         <label style="display:flex; align-items:center; gap:8px; margin-top:12px; font-size:13px; cursor:pointer;">
           <input type="checkbox" id="vehicle-standard"> Als Standard-Fahrzeug für neue Fahrten
         </label>
+
+        <!-- RFID-Tag der Ladekarte: ordnet Ladevorgaenge diesem Fahrzeug zu.
+             Die Wallbox misst nur Strom und kennt kein Fahrzeug -- der beim
+             Anstecken uebermittelte Tag identifiziert es eindeutig. Nur bei
+             Elektro sichtbar (ein Verbrenner laedt nicht). -->
+        <div id="vehicle-rfid-block" style="margin-top:12px;">
+          <label class="field-label" for="vehicle-rfid">RFID-Tag der Ladekarte</label>
+          <input type="text" id="vehicle-rfid" style="width:100%"
+                 placeholder="z. B. 04A1B2C3D4 — optional">
+          <div class="hint" style="margin-top:5px;">
+            Ordnet Ladevorgänge automatisch diesem Fahrzeug zu. Den Tag zeigt
+            die Wallbox nach dem ersten Ladevorgang an — er steht auch in der
+            Spalte „RFID" beim CSV-Import.
+          </div>
+        </div>
 
         <!-- Nutzungsart: Der Unterschied zwischen einem Fahrtenbuch nach
              § 6 Abs. 1 Nr. 4 EStG und einer reinen Reisekostenabrechnung ist

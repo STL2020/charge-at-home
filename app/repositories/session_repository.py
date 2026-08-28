@@ -3,6 +3,27 @@
 from services.db_service import get_connection
 
 
+def _fahrzeug_aus_rfid(rfid_tag: str | None) -> int | None:
+    """Ermittelt das Fahrzeug zu einem RFID-Tag der Ladekarte.
+
+    Die Wallbox misst nur Strom und kennt kein Fahrzeug -- der beim
+    Anstecken uebermittelte Tag ist die einzige verlaessliche Bruecke.
+    Ohne Tag oder ohne hinterlegte Zuordnung bleibt die Session bewusst
+    unzugeordnet (None): eine falsche Zuordnung waere in einem
+    Abrechnungsbeleg schlimmer als gar keine.
+
+    Faellt nie hart aus -- eine fehlgeschlagene Zuordnung darf niemals das
+    Speichern eines Ladevorgangs verhindern.
+    """
+    if not rfid_tag or not str(rfid_tag).strip():
+        return None
+    try:
+        from repositories import vehicle_repository
+        return vehicle_repository.rfid_zuordnung().get(str(rfid_tag).strip().upper())
+    except Exception:
+        return None
+
+
 def insert_session(
     wallbox_id: int,
     user_id: int,
@@ -17,21 +38,64 @@ def insert_session(
     status: str = "closed",
     charging_location: str = "zuhause",
     charging_location_note: str | None = None,
+    vehicle_id: int | None = None,
 ) -> int:
+    # Fahrzeug automatisch ueber den RFID-Tag zuordnen, sofern nicht
+    # ausdruecklich eines uebergeben wurde. Zentral hier statt in jeder
+    # einzelnen Quelle (Loxone, OCPP, CSV, manuell) -- so gilt dieselbe
+    # Regel ueberall, ohne sie viermal zu pflegen.
+    if vehicle_id is None:
+        vehicle_id = _fahrzeug_aus_rfid(rfid_tag)
+
     conn = get_connection()
     try:
         cur = conn.execute(
             """INSERT INTO charging_sessions
                (wallbox_id, user_id, source, start_timestamp, end_timestamp,
                 meter_start_wh, meter_stop_wh, price_per_kwh, rfid_tag, classification, status,
-                charging_location, charging_location_note)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                charging_location, charging_location_note, vehicle_id)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (wallbox_id, user_id, source, start_timestamp, end_timestamp,
              meter_start_wh, meter_stop_wh, price_per_kwh, rfid_tag, classification, status,
-             charging_location, charging_location_note),
+             charging_location, charging_location_note, vehicle_id),
         )
         conn.commit()
         return cur.lastrowid
+    finally:
+        conn.close()
+
+
+def ordne_sessions_nachtraeglich_zu(user_id: int | None = None) -> int:
+    """Ordnet bereits gespeicherte Sessions nachtraeglich einem Fahrzeug zu.
+
+    Noetig, weil der RFID-Tag am Fahrzeug oft erst NACH den ersten
+    Ladevorgaengen hinterlegt wird -- ohne diesen Nachlauf blieben genau
+    die Bestandsdaten unzugeordnet, die man sehen moechte. Ruehrt nur
+    Sessions an, die noch KEIN Fahrzeug haben (vehicle_id IS NULL);
+    bereits gesetzte Zuordnungen bleiben unangetastet.
+
+    Liefert die Anzahl der neu zugeordneten Sessions.
+    """
+    from repositories import vehicle_repository
+    zuordnung = vehicle_repository.rfid_zuordnung()
+    if not zuordnung:
+        return 0
+
+    conn = get_connection()
+    try:
+        gesamt = 0
+        for tag, vid in zuordnung.items():
+            cur = conn.execute(
+                """UPDATE charging_sessions SET vehicle_id = ?
+                   WHERE vehicle_id IS NULL
+                     AND rfid_tag IS NOT NULL
+                     AND UPPER(TRIM(rfid_tag)) = ?"""
+                + (" AND user_id = ?" if user_id else ""),
+                ([vid, tag] + ([user_id] if user_id else [])),
+            )
+            gesamt += cur.rowcount
+        conn.commit()
+        return gesamt
     finally:
         conn.close()
 

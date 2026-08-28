@@ -1350,7 +1350,22 @@ input.feld-fehler { border-color: var(--danger); }
   overflow-x: auto;
 }
 
-.trips-detail,
+.trips-detail {
+  /* Fahrten braucht etwas mehr Breite als Ladesessions (internes Raster:
+     Felder + Routenkarte), aber die zuvor STARREN 620px erdrueckten die
+     Tabelle daneben -- deutlich staerker als die 400px bei Ladevorgaenge,
+     wo das Zusammenschieben gut funktioniert. Jetzt flexibel: 470px als
+     Wunschbreite, darf auf 380px schrumpfen, wenn die Tabelle Platz
+     braucht (flex-shrink erlaubt), und bis 620px wachsen, wenn Platz da
+     ist. Die interne Routenkarte ist ohnehin per minmax umbruchfaehig. */
+  flex: 0 1 470px;
+  min-width: 380px;
+  max-width: 620px;
+  position: sticky;
+  top: 16px;
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+}
 .sessions-detail {
   flex: 0 0 400px;
   position: sticky;
